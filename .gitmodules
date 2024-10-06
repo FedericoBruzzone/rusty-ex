@@ -1,0 +1,3 @@
+[submodule "rustc-instrument"]
+	path = rustc-instrument
+	url = git@github.com:FedericoBruzzone/rustc-instrument.git
