@@ -9,4 +9,4 @@
 ## Usage
 
 - `cd ast-visitor`
-- `CARGO_PRIMARY_PACKAGE=1 cargo run ../example-code/main.rs` (without the environment variable, the AST will not be printed)
+- `CARGO_PRIMARY_PACKAGE=1 cargo run -- --cfg="ciao"' ../example-code/src/main.rs` (specify all features) (without the environment variable, the AST will not be printed)
