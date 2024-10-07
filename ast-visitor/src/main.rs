@@ -10,16 +10,20 @@ extern crate rustc_span;
 // use rustc_middle::ty::TyCtxt;
 use rustc_ast::{
     ast::*,
-    visit::{self, *},
+    visit::*,
 };
-use rustc_middle::ty::ResolverAstLowering;
 use rustc_span::symbol::*;
 use rustc_span::Span;
 
 use clap::Parser;
 use rustc_instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, env, process::Command};
+use std::{borrow::Cow, env};
+
+fn main() {
+    env_logger::init();
+    rustc_instrument::driver_main(RustcEx);
+}
 
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
@@ -59,17 +63,6 @@ impl RustcPlugin for RustcEx {
         RustcPluginArgs { args, filter }
     }
 
-    // Pass Cargo arguments (like --feature) from the top-level CLI to Cargo.
-    fn modify_cargo(&self, cargo: &mut Command, args: &Self::Args) {
-        // Add --features test1 to the cargo command.
-        // cargo.arg("--features").arg("test2");
-
-        // Enable all features.
-        // cargo.arg("--all-features");
-
-        cargo.args(&args.cargo_args);
-    }
-
     // In the driver, we use the Rustc API to start a compiler session
     // for the arguments given to us by rustc_plugin.
     fn run(
@@ -96,17 +89,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         _compiler: &rustc_interface::interface::Compiler,
         _queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
-        // We extract a key data structure, the `TyCtxt`, which is all we need
-        // for our simple task of printing out item names.
-        // queries
-        //   .global_ctxt()
-        //   .unwrap()
-        //   .enter(|tcx| print_all_items(tcx, &self.args));
-
-        // Note that you should generally allow compilation to continue. If
-        // your plugin is being invoked on a dependency, then you need to ensure
-        // the dependency is type-checked (its .rmeta file is emitted into target/)
-        // so that its dependents can read the compiler outputs.
         rustc_driver::Compilation::Continue
     }
 
@@ -115,19 +97,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         _compiler: &rustc_interface::interface::Compiler,
         _queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
-        // let krate_res = _queries.parse().unwrap();
-        // let krate = &(*krate_res.borrow());
-        // if self._args.allcaps {
-        //     let krate = format!("{:#?}", krate);
-        //     let upper = krate.to_uppercase();
-        //     println!("{upper}");
-        // } else {
-        //     println!("{krate:#?}");
-        // }
-        //
-        // let collector = &mut CollectVisitor;
-        // let _ = visit::walk_crate(collector, krate);
-
         rustc_driver::Compilation::Continue
     }
 
@@ -140,22 +109,87 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .global_ctxt()
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
-                // let krate = tcx.resolver_for_lowering(()).steal(); // steal cause a compilation error
                 let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
                 let krate = &*resolver_and_krate.1;
-                println!("{:#?}", krate);
-                // let collector = &mut CollectVisitor;
-                // let _ = visit::walk_crate(collector, &krate.1);
+
+                let collector = &mut CollectVisitor{
+                    ident: String::new(),
+                    features: Vec::new(),
+                    item: None
+                };
+                collector.visit_crate(krate);
+
+                println!("\n\n{:#?}", krate);
             });
 
         rustc_driver::Compilation::Continue
     }
 }
 
-struct CollectVisitor;
+#[derive(Debug)]
+enum VisitedItem {
+    Function(String),
+    // scope, statement, ...
+}
 
-// Visit in pre-order
+struct CollectVisitor {
+    ident: String,
+    features: Vec<String>,
+    item: Option<VisitedItem>
+}
+
 impl<'ast> Visitor<'ast> for CollectVisitor {
+
+    fn visit_item(&mut self, i: &'ast Item) {
+
+        // FIXME: questo non deve avvenire all'inizio di un item, dato che l'ultimo viene perso
+
+        // new item, save and reset everything
+        println!("IDENT: {:?}", self.ident);
+        println!("FEATURES: {:?}", self.features);
+        println!("ITEM: {:?}", self.item);
+
+        self.ident = i.ident.to_string();
+        self.features = Vec::new();
+        self.item = None;
+
+        println!("\n---\n");
+
+        walk_item(self, i)
+    }
+
+    fn visit_attribute(&mut self, attr: &'ast Attribute) {
+
+        let meta = attr.meta().unwrap();
+
+        // check if the attribute is a `cfg` attribute
+        if meta.name_or_empty() == sym::cfg {
+
+            // check if the attribute has format (name = "value")
+            if let MetaItemKind::List(ref list) = meta.kind {
+                for nested_meta in list {
+
+                    // check if the attribute is a `feature` attribute
+                    if nested_meta.name_or_empty() == sym::feature {
+                        // println!("{:?}", nested_meta.value_str().unwrap());
+                        self.features.push(nested_meta.value_str().unwrap().to_string());
+                    }
+                }
+            }
+        }
+
+        walk_attribute(self, attr);
+    }
+
+    fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
+
+        self.item = Some(VisitedItem::Function(self.ident.to_string()));
+        walk_fn(self, fk)
+    }
+
+}
+
+/*
     fn visit_ident(&mut self, _ident: Ident) {}
     fn visit_foreign_item(&mut self, i: &'ast ForeignItem) {
         walk_foreign_item(self, i)
@@ -302,9 +336,4 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_capture_by(&mut self, _capture_by: &'ast CaptureBy) {
         // Nothing to do
     }
-}
-
-fn main() {
-    env_logger::init();
-    rustc_instrument::driver_main(RustcEx);
-}
+*/
