@@ -8,10 +8,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 // use rustc_middle::ty::TyCtxt;
-use rustc_ast::{
-    ast::*,
-    visit::*,
-};
+use rustc_ast::{ast::*, visit::*};
 use rustc_span::symbol::*;
 use rustc_span::Span;
 
@@ -112,67 +109,65 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
                 let krate = &*resolver_and_krate.1;
 
-                let collector = &mut CollectVisitor{
-                    ident: String::new(),
-                    features: Vec::new(),
-                    item: None
+                let collector = &mut CollectVisitor {
+                    idents: Vec::new(),
+                    cfgs: Vec::new(),
                 };
                 collector.visit_crate(krate);
 
                 println!("\n\n{:#?}", krate);
             });
 
-        rustc_driver::Compilation::Continue
+        rustc_driver::Compilation::Stop
     }
-}
-
-#[derive(Debug)]
-enum VisitedItem {
-    Function(String),
-    // scope, statement, ...
 }
 
 struct CollectVisitor {
-    ident: String,
-    features: Vec<String>,
-    item: Option<VisitedItem>
+    idents: Vec<String>,
+    cfgs: Vec<String>,
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
-
     fn visit_item(&mut self, i: &'ast Item) {
+        // TODO: rilevare il nesting (fn dentro fn)
+        // TODO: features combinate (all, any)
+        // FIXME: le feature devono essere tutte attive (cargo run -- --cfg 'feature="..."' --cfg 'feature="..."')
 
-        // FIXME: questo non deve avvenire all'inizio di un item, dato che l'ultimo viene perso
+        walk_item(self, i);
 
-        // new item, save and reset everything
-        println!("IDENT: {:?}", self.ident);
-        println!("FEATURES: {:?}", self.features);
-        println!("ITEM: {:?}", self.item);
-
-        self.ident = i.ident.to_string();
-        self.features = Vec::new();
-        self.item = None;
-
-        println!("\n---\n");
-
-        walk_item(self, i)
+        // println!(
+        //     "{:?}: {:?} {:?}",
+        //     i.ident.to_string(),
+        //     self.stack,
+        //     self.cfgs
+        // );
+        match (self.idents.pop(), self.cfgs.pop()) {
+            (Some(ident), Some(cfg)) => println!("{:?}: {:?}", ident, cfg),
+            (Some(ident), None) => println!("{:?}: -", ident),
+            _ => (),
+        }
     }
 
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-
         let meta = attr.meta().unwrap();
 
         // check if the attribute is a `cfg` attribute
         if meta.name_or_empty() == sym::cfg {
-
             // check if the attribute has format (name = "value")
             if let MetaItemKind::List(ref list) = meta.kind {
                 for nested_meta in list {
+                    // TODO: features combinate
+                    // println!("{:?}", list);
+                    if nested_meta.name_or_empty() == sym::all {
+                        // println!("{:?}", nested_meta.meta_item());
+                        // self.features.push(nested_meta.value_str().unwrap().to_string());
+                    }
 
                     // check if the attribute is a `feature` attribute
                     if nested_meta.name_or_empty() == sym::feature {
                         // println!("{:?}", nested_meta.value_str().unwrap());
-                        self.features.push(nested_meta.value_str().unwrap().to_string());
+                        self.cfgs.push(nested_meta.value_str().unwrap().to_string());
+                        // self.features.push(nested_meta.value_str().unwrap().to_string());
                     }
                 }
             }
@@ -182,11 +177,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     }
 
     fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
-
-        self.item = Some(VisitedItem::Function(self.ident.to_string()));
-        walk_fn(self, fk)
+        self.idents.push(fk.ident().unwrap().to_string());
+        walk_fn(self, fk);
     }
-
 }
 
 /*
