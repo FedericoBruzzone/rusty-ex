@@ -122,25 +122,26 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
+#[derive(Debug)]
+enum FeatureType {
+    Feat(String),
+    Not(Vec<FeatureType>),
+    All(Vec<FeatureType>),
+    Any(Vec<FeatureType>),
+}
+
 struct CollectVisitor {
     idents: Vec<String>,
-    cfgs: Vec<String>,
+    cfgs: Vec<FeatureType>,
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_item(&mut self, i: &'ast Item) {
         // TODO: rilevare il nesting (fn dentro fn)
-        // TODO: features combinate (all, any)
         // FIXME: le feature devono essere tutte attive (cargo run -- --cfg 'feature="..."' --cfg 'feature="..."')
 
         walk_item(self, i);
 
-        // println!(
-        //     "{:?}: {:?} {:?}",
-        //     i.ident.to_string(),
-        //     self.stack,
-        //     self.cfgs
-        // );
         match (self.idents.pop(), self.cfgs.pop()) {
             (Some(ident), Some(cfg)) => println!("{:?}: {:?}", ident, cfg),
             (Some(ident), None) => println!("{:?}: -", ident),
@@ -149,27 +150,34 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     }
 
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        let meta = attr.meta().unwrap();
+        fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
+            let mut cfgs = Vec::new();
 
-        // check if the attribute is a `cfg` attribute
-        if meta.name_or_empty() == sym::cfg {
-            // check if the attribute has format (name = "value")
-            if let MetaItemKind::List(ref list) = meta.kind {
-                for nested_meta in list {
-                    // TODO: features combinate
-                    // println!("{:?}", list);
-                    if nested_meta.name_or_empty() == sym::all {
-                        // println!("{:?}", nested_meta.meta_item());
-                        // self.features.push(nested_meta.value_str().unwrap().to_string());
+            for meta in nested_meta {
+                match meta.name_or_empty() {
+                    sym::feature => {
+                        cfgs.push(FeatureType::Feat(meta.value_str().unwrap().to_string()))
                     }
-
-                    // check if the attribute is a `feature` attribute
-                    if nested_meta.name_or_empty() == sym::feature {
-                        // println!("{:?}", nested_meta.value_str().unwrap());
-                        self.cfgs.push(nested_meta.value_str().unwrap().to_string());
-                        // self.features.push(nested_meta.value_str().unwrap().to_string());
-                    }
+                    sym::not => cfgs.push(FeatureType::Not(rec_expand(
+                        meta.meta_item_list().unwrap().to_vec(),
+                    ))),
+                    sym::all => cfgs.push(FeatureType::All(rec_expand(
+                        meta.meta_item_list().unwrap().to_vec(),
+                    ))),
+                    sym::any => cfgs.push(FeatureType::Any(rec_expand(
+                        meta.meta_item_list().unwrap().to_vec(),
+                    ))),
+                    _ => (),
                 }
+            }
+
+            cfgs
+        }
+
+        let meta = attr.meta().unwrap();
+        if meta.name_or_empty() == sym::cfg {
+            if let MetaItemKind::List(ref list) = meta.kind {
+                self.cfgs.extend(rec_expand(list.to_vec()));
             }
         }
 
