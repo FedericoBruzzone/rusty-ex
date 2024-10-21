@@ -7,8 +7,14 @@ fn two() {}
 
 #[cfg(feature = "bb")]
 fn three() {
+
     #[cfg(feature = "cc")]
-    fn four() {}
+    fn four() {
+
+        #[cfg(feature = "bb")]
+        fn five() {}
+
+    }
 }
 
 fn main() {}

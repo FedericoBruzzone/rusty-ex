@@ -106,6 +106,11 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .global_ctxt()
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
+
+                // TODO: rilevare il nesting (fn dentro fn)
+                // FIXME: le feature devono essere tutte attive (cargo run -- --cfg 'feature="..."' --cfg 'feature="..."')
+                // TODO: rilevare anche tutti i cfg sugli statement
+
                 let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
                 let krate = &*resolver_and_krate.1;
 
@@ -114,6 +119,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     cfgs: Vec::new(),
                 };
                 collector.visit_crate(krate);
+                assert_eq!(collector.idents.len(), collector.cfgs.len());
+
+                println!("{:?}", collector.idents);
+                println!("{:?}", collector.cfgs);
 
                 println!("\n\n{:#?}", krate);
             });
@@ -132,24 +141,12 @@ enum FeatureType {
 
 struct CollectVisitor {
     idents: Vec<String>,
-    cfgs: Vec<FeatureType>,
+    cfgs: Vec<Option<Vec<FeatureType>>>,
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
-    fn visit_item(&mut self, i: &'ast Item) {
-        // TODO: rilevare il nesting (fn dentro fn)
-        // FIXME: le feature devono essere tutte attive (cargo run -- --cfg 'feature="..."' --cfg 'feature="..."')
-
-        walk_item(self, i);
-
-        match (self.idents.pop(), self.cfgs.pop()) {
-            (Some(ident), Some(cfg)) => println!("{:?}: {:?}", ident, cfg),
-            (Some(ident), None) => println!("{:?}: -", ident),
-            _ => (),
-        }
-    }
-
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
+        // println!("attr {:?}", attr.ident());
         fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
@@ -177,16 +174,25 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let meta = attr.meta().unwrap();
         if meta.name_or_empty() == sym::cfg {
             if let MetaItemKind::List(ref list) = meta.kind {
-                self.cfgs.extend(rec_expand(list.to_vec()));
+                self.cfgs.pop();
+                self.cfgs.push(Some(rec_expand(list.to_vec())));
             }
         }
 
         walk_attribute(self, attr);
     }
 
+    fn visit_expr(&mut self, ex: &'ast Expr) {
+        walk_expr(self, ex);
+        // println!("expr {:?}", ex.id.to_string());
+        self.idents.push(ex.id.to_string());
+        self.cfgs.push(None);
+    }
     fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
-        self.idents.push(fk.ident().unwrap().to_string());
         walk_fn(self, fk);
+        // println!("fn {:?}", fk.ident().unwrap().to_string());
+        self.idents.push(fk.ident().unwrap().to_string());
+        self.cfgs.push(None);
     }
 }
 
