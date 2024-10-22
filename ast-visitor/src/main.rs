@@ -78,39 +78,34 @@ struct PrintAstCallbacks {
 }
 
 impl rustc_driver::Callbacks for PrintAstCallbacks {
-    // At the top-level, the Rustc API uses an event-based interface for
-    // accessing the compiler at different stages of compilation. In this callback,
-    // all the type-checking has completed.
-    fn after_analysis<'tcx>(
-        &mut self,
-        _compiler: &rustc_interface::interface::Compiler,
-        _queries: &'tcx rustc_interface::Queries<'tcx>,
-    ) -> rustc_driver::Compilation {
-        rustc_driver::Compilation::Continue
-    }
+    /// Called before creating the compiler instance
+    fn config(&mut self, _config: &mut rustc_interface::interface::Config) {}
 
+    /// Called after parsing the crate root. Submodules are not yet parsed when
+    /// this callback is called. Return value instructs the compiler whether to
+    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
     fn after_crate_root_parsing<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
         _queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
+        // println!("----- 1 - after_crate_root_parsing");
         rustc_driver::Compilation::Continue
     }
 
+    /// Called after expansion. Return value instructs the compiler whether to
+    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
     fn after_expansion<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
         queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
+        // println!("----- 2 - after_expansion");
+
         queries
             .global_ctxt()
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
-
-                // TODO: rilevare il nesting (fn dentro fn)
-                // FIXME: le feature devono essere tutte attive (cargo run -- --cfg 'feature="..."' --cfg 'feature="..."')
-                // TODO: rilevare anche tutti i cfg sugli statement
-
                 let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
                 let krate = &*resolver_and_krate.1;
 
@@ -119,16 +114,47 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     cfgs: Vec::new(),
                 };
                 collector.visit_crate(krate);
-                assert_eq!(collector.idents.len(), collector.cfgs.len());
 
-                println!("{:?}", collector.idents);
-                println!("{:?}", collector.cfgs);
+                print_results(&collector);
 
-                println!("\n\n{:#?}", krate);
+                println!("\n\n{:#?}\n\n", krate);
             });
 
         rustc_driver::Compilation::Stop
     }
+
+    /// Called after analysis. Return value instructs the compiler whether to
+    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
+    fn after_analysis<'tcx>(
+        &mut self,
+        _compiler: &rustc_interface::interface::Compiler,
+        queries: &'tcx rustc_interface::Queries<'tcx>,
+    ) -> rustc_driver::Compilation {
+        // Not executed, compilation stopped earlier
+        // println!("----- 3 - after_analysis");
+        rustc_driver::Compilation::Continue
+    }
+}
+
+fn print_results(collector: &CollectVisitor) {
+    assert_eq!(collector.idents.len(), collector.cfgs.len());
+
+    for (ident, cfg) in collector.idents.iter().zip(collector.cfgs.iter()) {
+        match ident {
+            AnnotatedType::FunctionDeclaration(ident) => {
+                println!("Fn {:?}:\t{:?}", ident, cfg);
+            }
+            AnnotatedType::Expression(id) => {
+                println!("Ex {:?}:\t{:?}", id, cfg);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+enum AnnotatedType {
+    FunctionDeclaration(String),
+    Expression(NodeId),
 }
 
 #[derive(Debug)]
@@ -140,7 +166,7 @@ enum FeatureType {
 }
 
 struct CollectVisitor {
-    idents: Vec<String>,
+    idents: Vec<AnnotatedType>,
     cfgs: Vec<Option<Vec<FeatureType>>>,
 }
 
@@ -183,15 +209,17 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     }
 
     fn visit_expr(&mut self, ex: &'ast Expr) {
-        walk_expr(self, ex);
-        // println!("expr {:?}", ex.id.to_string());
-        self.idents.push(ex.id.to_string());
+        self.idents.push(AnnotatedType::Expression(ex.id));
         self.cfgs.push(None);
+
+        walk_expr(self, ex);
     }
     fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
         walk_fn(self, fk);
-        // println!("fn {:?}", fk.ident().unwrap().to_string());
-        self.idents.push(fk.ident().unwrap().to_string());
+
+        self.idents.push(AnnotatedType::FunctionDeclaration(
+            fk.ident().unwrap().to_string(),
+        ));
         self.cfgs.push(None);
     }
 }

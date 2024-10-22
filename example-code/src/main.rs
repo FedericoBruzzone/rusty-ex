@@ -1,17 +1,17 @@
-// #[cfg(all(feature = "aa", feature = "bb"))]
-#[cfg(feature = "aa")]
-fn one() {}
+mod lib1;
 
-#[cfg(any(feature = "aa", all(feature = "bb", not(feature = "cc"))))]
-fn two() {}
-
-#[cfg(feature = "bb")]
+#[cfg(feature = "cc")]
 fn three() {
 
-    #[cfg(feature = "cc")]
+    // // #[cfg(not(feature = "aa"))]
+    // one();
+
+    // println!("Hello, world!");
+
+    #[cfg(feature = "dd")]
     fn four() {
 
-        #[cfg(feature = "bb")]
+        #[cfg(feature = "ee")]
         fn five() {}
 
     }
