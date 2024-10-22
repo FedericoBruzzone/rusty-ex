@@ -115,8 +115,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 };
                 collector.visit_crate(krate);
 
-                print_results(&collector);
-
                 println!("\n\n{:#?}\n\n", krate);
             });
 
@@ -133,21 +131,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         // Not executed, compilation stopped earlier
         // println!("----- 3 - after_analysis");
         rustc_driver::Compilation::Continue
-    }
-}
-
-fn print_results(collector: &CollectVisitor) {
-    assert_eq!(collector.idents.len(), collector.cfgs.len());
-
-    for (ident, cfg) in collector.idents.iter().zip(collector.cfgs.iter()) {
-        match ident {
-            AnnotatedType::FunctionDeclaration(ident) => {
-                println!("Fn {:?}:\t{:?}", ident, cfg);
-            }
-            AnnotatedType::Expression(id) => {
-                println!("Ex {:?}:\t{:?}", id, cfg);
-            }
-        }
     }
 }
 
@@ -172,7 +155,6 @@ struct CollectVisitor {
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        // println!("attr {:?}", attr.ident());
         fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
@@ -209,18 +191,56 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     }
 
     fn visit_expr(&mut self, ex: &'ast Expr) {
-        self.idents.push(AnnotatedType::Expression(ex.id));
-        self.cfgs.push(None);
+        // TODO: controllare tutti i tipi di expr che possono avere attributi cfg
+        // quelli che non possono, devono venir trattati qua altrimenti potrebbero rubare
+        // cfg alle funzioni
+        // TODO: provare a fare questa roba sempre, a prescindere dal tipo di expr
+        match ex.kind {
+            ExprKind::Call(_, _) | ExprKind::MethodCall(_) => {
+                self.idents.push(AnnotatedType::Expression(ex.id));
+                self.cfgs.push(None);
 
-        walk_expr(self, ex);
+                walk_expr(self, ex);
+
+                println!(
+                    "Ex {:?}\n{:?}\n{:?}\n",
+                    ex.id,
+                    self.idents.pop(),
+                    self.cfgs.pop()
+                );
+            }
+            _ => {
+                walk_expr(self, ex);
+            }
+        }
     }
-    fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
-        walk_fn(self, fk);
 
-        self.idents.push(AnnotatedType::FunctionDeclaration(
-            fk.ident().unwrap().to_string(),
-        ));
-        self.cfgs.push(None);
+    fn visit_item(&mut self, i: &'ast Item) {
+        // La dichiarazione di funzione è un item, `walk_item` visita sia la
+        // funzione `visit_fn` che gli attributi `visit_attribute`.
+        // Non conviene usare `visit_fn` dato che è completamente indipendente
+        // (ovvero `walk_fn` non visita gli attributi) dalla visita degli attributi.
+
+        // TODO: controllare tutti i tipi di item, altri potrebbero essere interessanti
+        // TODO: controllare quali altri tipi di item possono avere attributi
+        match i.kind {
+            ItemKind::Fn(..) => {
+                self.idents.push(AnnotatedType::FunctionDeclaration(i.ident.to_string()));
+                self.cfgs.push(None);
+
+                walk_item(self, i);
+
+                println!(
+                    "Item {:?}\n{:?}\n{:?}\n",
+                    i.id,
+                    self.idents.pop(),
+                    self.cfgs.pop()
+                );
+            }
+            _ => {
+                walk_item(self, i);
+            }
+        }
     }
 }
 

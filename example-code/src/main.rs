@@ -3,10 +3,10 @@ mod lib1;
 #[cfg(feature = "cc")]
 fn three() {
 
-    // // #[cfg(not(feature = "aa"))]
-    // one();
+    #[cfg(feature = "aa")]
+    lib1::one();
 
-    // println!("Hello, world!");
+    println!("Hello, world!");
 
     #[cfg(feature = "dd")]
     fn four() {
