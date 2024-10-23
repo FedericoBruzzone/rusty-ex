@@ -17,6 +17,11 @@ use rustc_instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, env};
 
+use rustworkx_core::petgraph::dot::{Config, Dot};
+use rustworkx_core::petgraph::graph::{self, NodeIndex};
+use rustworkx_core::Result;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 fn main() {
     env_logger::init();
     rustc_instrument::driver_main(RustcEx);
@@ -106,15 +111,48 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .global_ctxt()
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
+                // estrarre l'AST
                 let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
                 let krate = &*resolver_and_krate.1;
 
+                // visitare l'AST
                 let collector = &mut CollectVisitor {
                     idents: Vec::new(),
                     cfgs: Vec::new(),
+                    nodes: HashMap::new(),
+                    graph: graph::DiGraph::new(),
                 };
                 collector.visit_crate(krate);
 
+                let get_edge_attr =
+                    |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+                     edge: graph::EdgeReference<Edge>| {
+                        format!("label=\"{}\"", edge.weight().weight)
+                    };
+                let get_node_attr =
+                    |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+                     node: (graph::NodeIndex, &Rc<RefCell<Node>>)| {
+                        format!(
+                            "label=\"{} ({})\"",
+                            node.1.borrow().ident,
+                            CollectVisitor::features_to_string(&node.1.borrow().feature)
+                        )
+                    };
+
+                // stampare dot per graphviz
+                println!(
+                    "{:?}",
+                    Dot::with_attr_getters(
+                        &collector.graph,
+                        &[Config::EdgeNoLabel],
+                        &get_edge_attr,
+                        &get_node_attr
+                    )
+                );
+
+                // grafo "raw"
+                println!("\n\n{:#?}\n\n", collector.graph);
+                // AST "raw"
                 println!("\n\n{:#?}\n\n", krate);
             });
 
@@ -126,7 +164,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     fn after_analysis<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
-        queries: &'tcx rustc_interface::Queries<'tcx>,
+        _queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
         // Not executed, compilation stopped earlier
         // println!("----- 3 - after_analysis");
@@ -134,13 +172,13 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum AnnotatedType {
-    FunctionDeclaration(String),
+    FunctionDeclaration(NodeId, String),
     Expression(NodeId),
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum FeatureType {
     Feat(String),
     Not(Vec<FeatureType>),
@@ -148,9 +186,65 @@ enum FeatureType {
     Any(Vec<FeatureType>),
 }
 
+#[derive(Clone, Debug)]
+struct Node {
+    ident: String,
+    node_id: NodeId,
+    feature: Vec<FeatureType>,
+}
+
+#[derive(Clone, Debug)]
+struct Edge {
+    weight: f32,
+}
+
 struct CollectVisitor {
     idents: Vec<AnnotatedType>,
     cfgs: Vec<Option<Vec<FeatureType>>>,
+    nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Node>>)>,
+    graph: graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+}
+
+impl FeatureType {
+    fn to_string(&self) -> String {
+        match self {
+            FeatureType::Feat(name) => name.clone(),
+            FeatureType::Not(features) => format!(
+                "not({})",
+                features
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            FeatureType::All(features) => format!(
+                "all({})",
+                features
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            FeatureType::Any(features) => format!(
+                "any({})",
+                features
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+    }
+}
+
+impl CollectVisitor {
+    fn features_to_string(features: &[FeatureType]) -> String {
+        features
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
@@ -203,7 +297,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 walk_expr(self, ex);
 
                 println!(
-                    "Ex {:?}\n{:?}\n{:?}\n",
+                    "IGNORED Ex {:?}\n{:?}\n{:?}\n",
                     ex.id,
                     self.idents.pop(),
                     self.cfgs.pop()
@@ -225,17 +319,47 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         // TODO: controllare quali altri tipi di item possono avere attributi
         match i.kind {
             ItemKind::Fn(..) => {
-                self.idents.push(AnnotatedType::FunctionDeclaration(i.ident.to_string()));
+                // creazione nodo del grafo (e cella Rc)
+                let mem_node = Rc::new(RefCell::new(Node {
+                    ident: i.ident.to_string(),
+                    node_id: i.id,
+                    feature: Vec::new(),
+                }));
+                let graph_node = self.graph.add_node(Rc::clone(&mem_node));
+                self.nodes.insert(i.id, (graph_node, Rc::clone(&mem_node)));
+
+                // aggiornamento stack per trovare cfg
+                self.idents.push(AnnotatedType::FunctionDeclaration(
+                    i.id,
+                    i.ident.to_string(),
+                ));
                 self.cfgs.push(None);
 
+                // visitare (anche) gli attributi (quindi le cfg)
                 walk_item(self, i);
 
+                // estrarre dallo stack dati sulle cfg
+                let ident = self.idents.pop().unwrap();
+                let cfg = self.cfgs.pop().unwrap();
+
                 println!(
-                    "Item {:?}\n{:?}\n{:?}\n",
-                    i.id,
-                    self.idents.pop(),
-                    self.cfgs.pop()
+                    "Item {:?}\n{:?}\n{:?}\nPARENT: {:?}\n",
+                    i.id, ident, cfg, self.idents
                 );
+
+                // aggiornare il nodo con le cfg trovate
+                self.nodes.entry(i.id).and_modify(|e| {
+                    e.1.borrow_mut().feature = cfg.unwrap_or_default();
+                });
+
+                // creare eventuale arco del grafo
+                if let Some(AnnotatedType::FunctionDeclaration(id, ident)) = self.idents.last() {
+                    self.graph.add_edge(
+                        self.nodes.get(&id).unwrap().0,
+                        self.nodes.get(&i.id).unwrap().0,
+                        Edge { weight: 1.0 },
+                    );
+                }
             }
             _ => {
                 walk_item(self, i);
