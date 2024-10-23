@@ -7,19 +7,14 @@ extern crate rustc_middle;
 extern crate rustc_session;
 extern crate rustc_span;
 
-// use rustc_middle::ty::TyCtxt;
-use rustc_ast::{ast::*, visit::*};
-use rustc_span::symbol::*;
-use rustc_span::Span;
-
 use clap::Parser;
+use rustc_ast::{ast::*, visit::*};
 use rustc_instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
-use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, env};
-
+use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
-use rustworkx_core::Result;
+use serde::{Deserialize, Serialize};
+use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 fn main() {
@@ -83,21 +78,6 @@ struct PrintAstCallbacks {
 }
 
 impl rustc_driver::Callbacks for PrintAstCallbacks {
-    /// Called before creating the compiler instance
-    fn config(&mut self, _config: &mut rustc_interface::interface::Config) {}
-
-    /// Called after parsing the crate root. Submodules are not yet parsed when
-    /// this callback is called. Return value instructs the compiler whether to
-    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
-    fn after_crate_root_parsing<'tcx>(
-        &mut self,
-        _compiler: &rustc_interface::interface::Compiler,
-        _queries: &'tcx rustc_interface::Queries<'tcx>,
-    ) -> rustc_driver::Compilation {
-        // println!("----- 1 - after_crate_root_parsing");
-        rustc_driver::Compilation::Continue
-    }
-
     /// Called after expansion. Return value instructs the compiler whether to
     /// continue the compilation afterwards (defaults to `Compilation::Continue`)
     fn after_expansion<'tcx>(
@@ -105,8 +85,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         _compiler: &rustc_interface::interface::Compiler,
         queries: &'tcx rustc_interface::Queries<'tcx>,
     ) -> rustc_driver::Compilation {
-        // println!("----- 2 - after_expansion");
-
         queries
             .global_ctxt()
             .unwrap()
@@ -117,67 +95,33 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visitare l'AST
                 let collector = &mut CollectVisitor {
-                    idents: Vec::new(),
-                    cfgs: Vec::new(),
+                    log: false, // FIXME: toggle log in una maniera decente
+                    statements: Vec::new(),
+                    features: Vec::new(),
                     nodes: HashMap::new(),
                     graph: graph::DiGraph::new(),
                 };
                 collector.visit_crate(krate);
 
-                let get_edge_attr =
-                    |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
-                     edge: graph::EdgeReference<Edge>| {
-                        format!("label=\"{}\"", edge.weight().weight)
-                    };
-                let get_node_attr =
-                    |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
-                     node: (graph::NodeIndex, &Rc<RefCell<Node>>)| {
-                        format!(
-                            "label=\"{} ({})\"",
-                            node.1.borrow().ident,
-                            CollectVisitor::features_to_string(&node.1.borrow().feature)
-                        )
-                    };
+                collector.print_graph_dot();
 
-                // stampare dot per graphviz
-                println!(
-                    "{:?}",
-                    Dot::with_attr_getters(
-                        &collector.graph,
-                        &[Config::EdgeNoLabel],
-                        &get_edge_attr,
-                        &get_node_attr
-                    )
-                );
-
-                // grafo "raw"
-                println!("\n\n{:#?}\n\n", collector.graph);
-                // AST "raw"
-                println!("\n\n{:#?}\n\n", krate);
+                if collector.log {
+                    // grafo e AST "raw"
+                    println!("\n{:#?}", collector.graph);
+                    println!("\n{:#?}", krate);
+                }
             });
 
         rustc_driver::Compilation::Stop
     }
-
-    /// Called after analysis. Return value instructs the compiler whether to
-    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
-    fn after_analysis<'tcx>(
-        &mut self,
-        _compiler: &rustc_interface::interface::Compiler,
-        _queries: &'tcx rustc_interface::Queries<'tcx>,
-    ) -> rustc_driver::Compilation {
-        // Not executed, compilation stopped earlier
-        // println!("----- 3 - after_analysis");
-        rustc_driver::Compilation::Continue
-    }
 }
 
+/// Definizioni per l'estrazione delle feature dall'AST, lo statement annotato e la/le feature
 #[derive(Clone, Debug)]
 enum AnnotatedType {
     FunctionDeclaration(NodeId, String),
     Expression(NodeId),
 }
-
 #[derive(Clone, Debug)]
 enum FeatureType {
     Feat(String),
@@ -186,26 +130,31 @@ enum FeatureType {
     Any(Vec<FeatureType>),
 }
 
+/// Definizioni per il grafo
 #[derive(Clone, Debug)]
 struct Node {
     ident: String,
-    node_id: NodeId,
+    _node_id: NodeId,
     feature: Vec<FeatureType>,
 }
-
 #[derive(Clone, Debug)]
 struct Edge {
     weight: f32,
 }
 
+/// Visitor per la visita :) dell'AST
 struct CollectVisitor {
-    idents: Vec<AnnotatedType>,
-    cfgs: Vec<Option<Vec<FeatureType>>>,
+    log: bool,
+    // stack parallelo: statements con rispettive feature
+    statements: Vec<AnnotatedType>,
+    features: Vec<Option<Vec<FeatureType>>>,
+    // grafo delle dipendenze
     nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Node>>)>,
     graph: graph::DiGraph<Rc<RefCell<Node>>, Edge>,
 }
 
 impl FeatureType {
+    /// Feature a stringa
     fn to_string(&self) -> String {
         match self {
             FeatureType::Feat(name) => name.clone(),
@@ -238,6 +187,7 @@ impl FeatureType {
 }
 
 impl CollectVisitor {
+    /// Lista di features a Stringa
     fn features_to_string(features: &[FeatureType]) -> String {
         features
             .iter()
@@ -245,10 +195,40 @@ impl CollectVisitor {
             .collect::<Vec<_>>()
             .join(", ")
     }
+
+    /// Stampa il grafo in formato DOT (per Graphviz)
+    fn print_graph_dot(&self) {
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+                             edge: graph::EdgeReference<Edge>| {
+            format!("label=\"{}\"", edge.weight().weight)
+        };
+
+        let get_node_attr =
+            |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<Node>>)| {
+                format!(
+                    "label=\"{} ({})\"",
+                    node.1.borrow().ident,
+                    CollectVisitor::features_to_string(&node.1.borrow().feature)
+                )
+            };
+
+        println!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.graph,
+                &[Config::EdgeNoLabel],
+                &get_edge_attr,
+                &get_node_attr,
+            )
+        )
+    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
+    /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
+        /// Visita ricorsiva delle feature nestate (all, any, not)
         fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
@@ -276,14 +256,17 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let meta = attr.meta().unwrap();
         if meta.name_or_empty() == sym::cfg {
             if let MetaItemKind::List(ref list) = meta.kind {
-                self.cfgs.pop();
-                self.cfgs.push(Some(rec_expand(list.to_vec())));
+                self.features.pop();
+                self.features.push(Some(rec_expand(list.to_vec())));
             }
         }
 
         walk_attribute(self, attr);
     }
 
+    /// Visita espressione: (quasi) tutto può essere annotato e quindi va pushato sullo
+    /// stack degli statements per evitare di far crescere quello delle feature senza
+    /// che ci sia un corrispettivo statement
     fn visit_expr(&mut self, ex: &'ast Expr) {
         // TODO: controllare tutti i tipi di expr che possono avere attributi cfg
         // quelli che non possono, devono venir trattati qua altrimenti potrebbero rubare
@@ -291,17 +274,29 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         // TODO: provare a fare questa roba sempre, a prescindere dal tipo di expr
         match ex.kind {
             ExprKind::Call(_, _) | ExprKind::MethodCall(_) => {
-                self.idents.push(AnnotatedType::Expression(ex.id));
-                self.cfgs.push(None);
+                self.statements.push(AnnotatedType::Expression(ex.id));
+                self.features.push(None);
 
                 walk_expr(self, ex);
 
-                println!(
-                    "IGNORED Ex {:?}\n{:?}\n{:?}\n",
-                    ex.id,
-                    self.idents.pop(),
-                    self.cfgs.pop()
-                );
+                if let Some(AnnotatedType::Expression(id)) = self.statements.pop() {
+                    assert_eq!(
+                        id, ex.id,
+                        "Stack not synced. Expected Expression {:?}, found Expression {:?}",
+                        ex.id, id
+                    );
+                    let cfg = self.features.pop().unwrap();
+
+                    if self.log {
+                        println!("Expression {:?}\n{:?}\n", id, cfg);
+                    }
+                } else {
+                    panic!(
+                        "Stack not synced. Expected Expression {:?}, found {:?}",
+                        ex.id,
+                        self.statements.last()
+                    );
+                }
             }
             _ => {
                 walk_expr(self, ex);
@@ -309,12 +304,13 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         }
     }
 
+    /// Visita item: le dichiarazione di funzioni sono item, dentro `walk_item` vengono
+    /// visitati anche gli attributi, quindi è dopo la chiamata le feature sono già
+    /// nello stack.
+    /// Non viene utilizzato `visit_fn` per analizzare le funzioni dato che gli attributi
+    /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
+    /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, i: &'ast Item) {
-        // La dichiarazione di funzione è un item, `walk_item` visita sia la
-        // funzione `visit_fn` che gli attributi `visit_attribute`.
-        // Non conviene usare `visit_fn` dato che è completamente indipendente
-        // (ovvero `walk_fn` non visita gli attributi) dalla visita degli attributi.
-
         // TODO: controllare tutti i tipi di item, altri potrebbero essere interessanti
         // TODO: controllare quali altri tipi di item possono avere attributi
         match i.kind {
@@ -322,30 +318,32 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 // creazione nodo del grafo (e cella Rc)
                 let mem_node = Rc::new(RefCell::new(Node {
                     ident: i.ident.to_string(),
-                    node_id: i.id,
+                    _node_id: i.id,
                     feature: Vec::new(),
                 }));
                 let graph_node = self.graph.add_node(Rc::clone(&mem_node));
                 self.nodes.insert(i.id, (graph_node, Rc::clone(&mem_node)));
 
                 // aggiornamento stack per trovare cfg
-                self.idents.push(AnnotatedType::FunctionDeclaration(
+                self.statements.push(AnnotatedType::FunctionDeclaration(
                     i.id,
                     i.ident.to_string(),
                 ));
-                self.cfgs.push(None);
+                self.features.push(None);
 
                 // visitare (anche) gli attributi (quindi le cfg)
                 walk_item(self, i);
 
                 // estrarre dallo stack dati sulle cfg
-                let ident = self.idents.pop().unwrap();
-                let cfg = self.cfgs.pop().unwrap();
+                let ident = self.statements.pop().unwrap();
+                let cfg = self.features.pop().unwrap();
 
-                println!(
-                    "Item {:?}\n{:?}\n{:?}\nPARENT: {:?}\n",
-                    i.id, ident, cfg, self.idents
-                );
+                if self.log {
+                    println!(
+                        "Item {:?}\n{:?}\n{:?}\nPARENT: {:?}\n",
+                        i.id, ident, cfg, self.statements
+                    );
+                }
 
                 // aggiornare il nodo con le cfg trovate
                 self.nodes.entry(i.id).and_modify(|e| {
@@ -353,7 +351,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 });
 
                 // creare eventuale arco del grafo
-                if let Some(AnnotatedType::FunctionDeclaration(id, ident)) = self.idents.last() {
+                if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
+                {
                     self.graph.add_edge(
                         self.nodes.get(&id).unwrap().0,
                         self.nodes.get(&i.id).unwrap().0,
@@ -367,152 +366,3 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         }
     }
 }
-
-/*
-    fn visit_ident(&mut self, _ident: Ident) {}
-    fn visit_foreign_item(&mut self, i: &'ast ForeignItem) {
-        walk_foreign_item(self, i)
-    }
-    fn visit_item(&mut self, i: &'ast Item) {
-        walk_item(self, i)
-    }
-    fn visit_local(&mut self, l: &'ast Local) {
-        walk_local(self, l)
-    }
-    fn visit_block(&mut self, b: &'ast Block) {
-        walk_block(self, b)
-    }
-    fn visit_stmt(&mut self, s: &'ast Stmt) {
-        walk_stmt(self, s)
-    }
-    fn visit_param(&mut self, param: &'ast Param) {
-        walk_param(self, param)
-    }
-    fn visit_arm(&mut self, a: &'ast Arm) {
-        walk_arm(self, a)
-    }
-    fn visit_pat(&mut self, p: &'ast Pat) {
-        walk_pat(self, p)
-    }
-    fn visit_anon_const(&mut self, c: &'ast AnonConst) {
-        walk_anon_const(self, c)
-    }
-    fn visit_expr(&mut self, ex: &'ast Expr) {
-        walk_expr(self, ex)
-    }
-    /// This method is a hack to workaround unstable of `stmt_expr_attributes`.
-    /// It can be removed once that feature is stabilized.
-    fn visit_method_receiver_expr(&mut self, ex: &'ast Expr) {
-        self.visit_expr(ex)
-    }
-    fn visit_expr_post(&mut self, _ex: &'ast Expr) {}
-    fn visit_ty(&mut self, t: &'ast Ty) {
-        walk_ty(self, t)
-    }
-    fn visit_generic_param(&mut self, param: &'ast GenericParam) {
-        walk_generic_param(self, param)
-    }
-    fn visit_generics(&mut self, g: &'ast Generics) {
-        walk_generics(self, g)
-    }
-    fn visit_closure_binder(&mut self, b: &'ast ClosureBinder) {
-        walk_closure_binder(self, b)
-    }
-    fn visit_where_predicate(&mut self, p: &'ast WherePredicate) {
-        walk_where_predicate(self, p)
-    }
-    fn visit_fn(&mut self, fk: FnKind<'ast>, _: Span, _: NodeId) {
-        walk_fn(self, fk)
-    }
-    fn visit_assoc_item(&mut self, i: &'ast AssocItem, ctxt: AssocCtxt) {
-        walk_assoc_item(self, i, ctxt)
-    }
-    fn visit_trait_ref(&mut self, t: &'ast TraitRef) {
-        walk_trait_ref(self, t)
-    }
-    fn visit_param_bound(&mut self, bounds: &'ast GenericBound, _ctxt: BoundKind) {
-        walk_param_bound(self, bounds)
-    }
-    fn visit_poly_trait_ref(&mut self, t: &'ast PolyTraitRef) {
-        walk_poly_trait_ref(self, t)
-    }
-    fn visit_variant_data(&mut self, s: &'ast VariantData) {
-        walk_struct_def(self, s)
-    }
-    fn visit_field_def(&mut self, s: &'ast FieldDef) {
-        walk_field_def(self, s)
-    }
-    fn visit_enum_def(&mut self, enum_definition: &'ast EnumDef) {
-        walk_enum_def(self, enum_definition)
-    }
-    fn visit_variant(&mut self, v: &'ast Variant) {
-        walk_variant(self, v)
-    }
-    fn visit_variant_discr(&mut self, discr: &'ast AnonConst) {
-        self.visit_anon_const(discr);
-    }
-    fn visit_label(&mut self, label: &'ast Label) {
-        walk_label(self, label)
-    }
-    fn visit_lifetime(&mut self, lifetime: &'ast Lifetime, _: LifetimeCtxt) {
-        walk_lifetime(self, lifetime)
-    }
-    fn visit_mac_call(&mut self, mac: &'ast MacCall) {
-        walk_mac(self, mac)
-    }
-    fn visit_mac_def(&mut self, _mac: &'ast MacroDef, _id: NodeId) {
-        // Nothing to do
-    }
-    fn visit_path(&mut self, path: &'ast Path, _id: NodeId) {
-        walk_path(self, path)
-    }
-    fn visit_use_tree(&mut self, use_tree: &'ast UseTree, id: NodeId, _nested: bool) {
-        walk_use_tree(self, use_tree, id)
-    }
-    fn visit_path_segment(&mut self, path_segment: &'ast PathSegment) {
-        walk_path_segment(self, path_segment)
-    }
-    fn visit_generic_args(&mut self, generic_args: &'ast GenericArgs) {
-        walk_generic_args(self, generic_args)
-    }
-    fn visit_generic_arg(&mut self, generic_arg: &'ast GenericArg) {
-        walk_generic_arg(self, generic_arg)
-    }
-    fn visit_assoc_constraint(&mut self, constraint: &'ast AssocConstraint) {
-        walk_assoc_constraint(self, constraint)
-    }
-    fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        // Macro attributes are here
-        walk_attribute(self, attr)
-    }
-    fn visit_vis(&mut self, vis: &'ast Visibility) {
-        walk_vis(self, vis)
-    }
-    fn visit_fn_ret_ty(&mut self, ret_ty: &'ast FnRetTy) {
-        walk_fn_ret_ty(self, ret_ty)
-    }
-    fn visit_fn_header(&mut self, _header: &'ast FnHeader) {
-        // Nothing to do
-    }
-    fn visit_expr_field(&mut self, f: &'ast ExprField) {
-        walk_expr_field(self, f)
-    }
-    fn visit_pat_field(&mut self, fp: &'ast PatField) {
-        walk_pat_field(self, fp)
-    }
-    fn visit_crate(&mut self, krate: &'ast Crate) {
-        walk_crate(self, krate)
-    }
-    fn visit_inline_asm(&mut self, asm: &'ast InlineAsm) {
-        walk_inline_asm(self, asm)
-    }
-    fn visit_format_args(&mut self, fmt: &'ast FormatArgs) {
-        walk_format_args(self, fmt)
-    }
-    fn visit_inline_asm_sym(&mut self, sym: &'ast InlineAsmSym) {
-        walk_inline_asm_sym(self, sym)
-    }
-    fn visit_capture_by(&mut self, _capture_by: &'ast CaptureBy) {
-        // Nothing to do
-    }
-*/
