@@ -8,5 +8,8 @@
 
 ## Usage
 
+### Driver
+
 - `cd ast-visitor`
-- `CARGO_PRIMARY_PACKAGE=1 cargo run -- --cfg="ciao"' ../example-code/src/main.rs` (specify all features) (without the environment variable, the AST will not be printed)
+- `CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- --cfg 'feature="ciao"' ../example-code/src/main.rs 2>/dev/null` (specify all features) (without the environment variable, the AST will not be printed)
+

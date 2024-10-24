@@ -19,10 +19,6 @@ use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use std::{fs, io};
 
-fn main() {
-    env_logger::init();
-    rustc_instrument::driver_main(RustcEx);
-}
 
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
