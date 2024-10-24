@@ -1,5 +1,5 @@
 #[cfg(feature = "aa")]
 pub fn one() {}
 
-#[cfg(any(feature = "bb", all(feature = "bb")))]
+#[cfg(not(feature = "bb"))]
 pub fn two() {}

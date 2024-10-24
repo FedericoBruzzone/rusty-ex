@@ -14,8 +14,10 @@ use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{fs, io};
 
 fn main() {
     env_logger::init();
@@ -78,6 +80,31 @@ struct PrintAstCallbacks {
 }
 
 impl rustc_driver::Callbacks for PrintAstCallbacks {
+    /// Called before creating the compiler instance
+    fn config(&mut self, config: &mut rustc_interface::Config) {
+
+        /// Custom file loader to replace all `cfg` directives with `feat`
+        struct CustomFileLoader;
+        impl rustc_span::source_map::FileLoader for CustomFileLoader {
+            fn file_exists(&self, path: &std::path::Path) -> bool {
+                path.exists()
+            }
+
+            fn read_file(&self, path: &std::path::Path) -> io::Result<String> {
+                let content = fs::read_to_string(path)?;
+                let modified_content = content.replace("#[cfg(", "#[feat(");
+                Ok(modified_content)
+            }
+
+            fn read_binary_file(&self, _path: &std::path::Path) -> io::Result<Arc<[u8]>> {
+                // TODO: fare anche questo
+                todo!()
+            }
+        }
+
+        config.file_loader = Some(Box::new(CustomFileLoader));
+    }
+
     /// Called after expansion. Return value instructs the compiler whether to
     /// continue the compilation afterwards (defaults to `Compilation::Continue`)
     fn after_expansion<'tcx>(
@@ -254,7 +281,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         }
 
         let meta = attr.meta().unwrap();
-        if meta.name_or_empty() == sym::cfg {
+        if meta.name_or_empty() == Symbol::intern("feat") {
             if let MetaItemKind::List(ref list) = meta.kind {
                 self.features.pop();
                 self.features.push(Some(rec_expand(list.to_vec())));
@@ -354,7 +381,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
                 {
                     self.graph.add_edge(
-                        self.nodes.get(&id).unwrap().0,
+                        self.nodes.get(id).unwrap().0,
                         self.nodes.get(&i.id).unwrap().0,
                         Edge { weight: 1.0 },
                     );
