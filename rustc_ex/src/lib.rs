@@ -307,40 +307,29 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// stack degli statements per evitare di far crescere quello delle feature senza
     /// che ci sia un corrispettivo statement
     fn visit_expr(&mut self, ex: &'ast Expr) {
-        // TODO: controllare tutti i tipi di expr che possono avere attributi cfg
-        // quelli che non possono, devono venir trattati qua altrimenti potrebbero rubare
-        // cfg alle funzioni
-        // TODO: provare a fare questa roba sempre, a prescindere dal tipo di expr
-        match ex.kind {
-            ExprKind::Call(_, _) | ExprKind::MethodCall(_) => {
-                self.statements.push(AnnotatedType::Expression(ex.id));
-                self.features.push(None);
+        self.statements.push(AnnotatedType::Expression(ex.id));
+        self.features.push(None);
 
-                walk_expr(self, ex);
+        walk_expr(self, ex);
 
-                if let (Some(AnnotatedType::Expression(id)), Some(cfg)) =
-                    (self.statements.pop(), self.features.pop())
-                {
-                    assert_eq!(
-                        id, ex.id,
-                        "Stack not synced. Expected Expression {:?}, found Expression {:?}",
-                        ex.id, id
-                    );
+        if let (Some(AnnotatedType::Expression(id)), Some(cfg)) =
+            (self.statements.pop(), self.features.pop())
+        {
+            assert_eq!(
+                id, ex.id,
+                "Stack not synced. Expected Expression {:?}, found Expression {:?}",
+                ex.id, id
+            );
 
-                    if self.log {
-                        println!("Expression {:?}\n{:?}\n", id, cfg);
-                    }
-                } else {
-                    panic!(
-                        "Stack not synced. Expected Expression {:?}, found {:?}",
-                        ex.id,
-                        self.statements.last()
-                    );
-                }
+            if self.log {
+                println!("Expression {:?}\n{:?}\n", id, cfg);
             }
-            _ => {
-                walk_expr(self, ex);
-            }
+        } else {
+            panic!(
+                "Stack not synced. Expected Expression {:?}, found {:?}",
+                ex.id,
+                self.statements.last()
+            );
         }
     }
 
