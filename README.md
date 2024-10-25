@@ -24,7 +24,7 @@
 
 - `cd rustc_ex`
 
-- `CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- --cfg 'feature="test"' ../example-code/src/main.rs 2>/dev/null` (specify all features) (without the environment variable, the AST will not be printed)
+- `CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- --cfg 'feature="test"' ../example-code/src/main.rs 2>/dev/null` (without the environment variable, the driver will not work)
 
 Optionally:
 
