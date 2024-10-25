@@ -67,9 +67,11 @@ use pretty_assertions::assert_eq;
 
 #[test]
 fn test_first_same_output() -> Result<(), String> {
-    let (output, expected_output) =
-        run_with_cargo_bin("workspaces/first", "expected_output.stdout", &["--print-dot"])?;
+    let (output, expected_output) = run_with_cargo_bin(
+        "workspaces/first",
+        "expected_output.stdout",
+        &["--print-dot"],
+    )?;
     assert_eq!(output, expected_output);
     Ok(())
 }
-

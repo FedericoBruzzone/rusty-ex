@@ -318,13 +318,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                 walk_expr(self, ex);
 
-                if let Some(AnnotatedType::Expression(id)) = self.statements.pop() {
+                if let (Some(AnnotatedType::Expression(id)), Some(cfg)) =
+                    (self.statements.pop(), self.features.pop())
+                {
                     assert_eq!(
                         id, ex.id,
                         "Stack not synced. Expected Expression {:?}, found Expression {:?}",
                         ex.id, id
                     );
-                    let cfg = self.features.pop().unwrap();
 
                     if self.log {
                         println!("Expression {:?}\n{:?}\n", id, cfg);
