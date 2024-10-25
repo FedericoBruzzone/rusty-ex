@@ -19,7 +19,6 @@ use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use std::{fs, io};
 
-
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
 pub struct RustcEx;
@@ -28,9 +27,17 @@ pub struct RustcEx;
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Default)]
 pub struct PrintAstArgs {
-    /// Pass --allcaps to print all item names in uppercase.
+    /// Pass --print-dot to print the DOT graph
     #[clap(long)]
-    allcaps: bool,
+    print_dot: bool,
+
+    /// Pass --print-crate to print the crate
+    #[clap(long)]
+    print_crate: bool,
+
+    /// Pass --print-graph to print the graph
+    #[clap(long)]
+    print_graph: bool,
 
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
@@ -65,20 +72,34 @@ impl RustcPlugin for RustcEx {
         compiler_args: Vec<String>,
         plugin_args: Self::Args,
     ) -> rustc_interface::interface::Result<()> {
-        let mut callbacks = PrintAstCallbacks { _args: plugin_args };
+        let mut callbacks = PrintAstCallbacks { args: plugin_args };
         let compiler = rustc_driver::RunCompiler::new(&compiler_args, &mut callbacks);
         compiler.run()
     }
 }
 
 struct PrintAstCallbacks {
-    _args: PrintAstArgs,
+    args: PrintAstArgs,
+}
+
+impl PrintAstCallbacks {
+    // TODO: Consider to remove `&mut` from CollectVisitor
+    fn process_cli_args(&self, collector: &mut CollectVisitor, krate: &Crate) {
+        if self.args.print_crate {
+            println!("{:#?}", krate);
+        }
+        if self.args.print_graph {
+            println!("{:?}", collector.graph);
+        }
+        if self.args.print_dot {
+            collector.print_graph_dot();
+        }
+    }
 }
 
 impl rustc_driver::Callbacks for PrintAstCallbacks {
     /// Called before creating the compiler instance
     fn config(&mut self, config: &mut rustc_interface::Config) {
-
         /// Custom file loader to replace all `cfg` directives with `feat`
         struct CustomFileLoader;
         impl rustc_span::source_map::FileLoader for CustomFileLoader {
@@ -118,7 +139,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visitare l'AST
                 let collector = &mut CollectVisitor {
-                    log: false, // FIXME: toggle log in una maniera decente
+                    log: false,
                     statements: Vec::new(),
                     features: Vec::new(),
                     nodes: HashMap::new(),
@@ -126,13 +147,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 };
                 collector.visit_crate(krate);
 
-                collector.print_graph_dot();
-
-                if collector.log {
-                    // grafo e AST "raw"
-                    println!("\n{:#?}", collector.graph);
-                    println!("\n{:#?}", krate);
-                }
+                self.process_cli_args(collector, krate);
             });
 
         rustc_driver::Compilation::Stop
@@ -276,11 +291,12 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             cfgs
         }
 
-        let meta = attr.meta().unwrap();
-        if meta.name_or_empty() == Symbol::intern("feat") {
-            if let MetaItemKind::List(ref list) = meta.kind {
-                self.features.pop();
-                self.features.push(Some(rec_expand(list.to_vec())));
+        if let Some(meta) = attr.meta() {
+            if meta.name_or_empty() == Symbol::intern("feat") {
+                if let MetaItemKind::List(ref list) = meta.kind {
+                    self.features.pop();
+                    self.features.push(Some(rec_expand(list.to_vec())));
+                }
             }
         }
 

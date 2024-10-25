@@ -1,3 +1,5 @@
+mod lib1;
+
 #[cfg(feature = "cc")]
 fn three() {
 
