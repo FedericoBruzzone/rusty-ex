@@ -4,6 +4,7 @@ use std::sync::Once;
 use std::{env, path::Path};
 
 const PLUGIN_NAME: &str = "rustc-ex";
+const TEST_MODE_FEATURE: &str = "test-mode";
 static SETUP: Once = Once::new();
 
 /// Run the plugin with the `cargo` command
@@ -21,16 +22,18 @@ fn run_with_cargo_bin(
     plugin_args: &[&str],
 ) -> Result<(String, Option<String>), String> {
     // Install the plugin
-    let root_dir = env::temp_dir().join("ast-visitor");
+    let root_dir = env::temp_dir().join("rustc-ex");
     let current_dir = Path::new(".").canonicalize().unwrap();
     SETUP.call_once(|| {
         let mut cargo_cmd = Command::new("cargo");
         cargo_cmd.args(["install", "--path", ".", "--debug", "--locked", "--root"]);
         cargo_cmd.arg(&root_dir);
         cargo_cmd.current_dir(&current_dir);
+        // See the `args` function on `impl RustcPlugin for RustcEx` for the explanation of why we need to pass the `--features test-mode` argument.
+        cargo_cmd.args(["--features", TEST_MODE_FEATURE]);
         let status = cargo_cmd.status().unwrap();
         if !status.success() {
-            panic!("Failed to install ast-visitor");
+            panic!("Failed to install the plugin");
         }
     });
 
@@ -70,6 +73,22 @@ fn run_with_cargo_bin(
 
 #[cfg(test)]
 use pretty_assertions::assert_eq;
+
+#[test]
+fn test_version_output() -> Result<(), String> {
+    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["-V"])?;
+    assert_eq!(output, "0.1.0\n");
+    Ok(())
+}
+
+#[test]
+fn test_help_output() -> Result<(), String> {
+    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
+    for options in &["--print-dot", "--print-crate", "--print-graph"] {
+        assert!(output.contains(options));
+    }
+    Ok(())
+}
 
 #[test]
 fn test_first_dotfile_same_output() -> Result<(), String> {

@@ -25,7 +25,7 @@ pub struct RustcEx;
 
 // To parse CLI arguments, we use Clap for this example. But that
 // detail is up to you.
-#[derive(Parser, Serialize, Deserialize, Default)]
+#[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
     /// Pass --print-dot to print the DOT graph
     #[clap(long)]
@@ -60,7 +60,26 @@ impl RustcPlugin for RustcEx {
     // If one of the CLI arguments was a specific file to analyze, then you
     // could provide a different filter.
     fn args(&self, _target_dir: &Utf8Path) -> RustcPluginArgs<Self::Args> {
+        // We cannot use `#[cfg(test)]` here because the test suite installs the plugin.
+        // In other words, in the test suite we need to compile (install) the plugin with
+        // `--features test-mode` to skip the first argument that is the `cargo` command.
+        //
+        // # Explanation:
+        //
+        // ## Test
+        //
+        // In tests we run something like `cargo rustc-ex --print-dot` because the plugin is installed as a binary in a temporary directory.
+        // It is expanded to `/tmp/rustc-ex/bin/cargo-rustc-ex rustc-ex --print-dot`, so we need to skip the first argument because it is the `cargo` command.
+        //
+        // ## Cli
+        // In the CLI we run something like `cargo run --bin rustc-ex -- --print-dot` or `./target/debug/cargo-rustc-ex --print-dot`.
+        // It is expanded to `.target/debug/cargo-rustc-ex --print-dot`, so we don't need to skip the first argument.
+        #[cfg(feature = "test-mode")]
         let args = PrintAstArgs::parse_from(env::args().skip(1));
+
+        #[cfg(not(feature = "test-mode"))]
+        let args = PrintAstArgs::parse_from(env::args());
+
         let filter = CrateFilter::AllCrates;
         RustcPluginArgs { args, filter }
     }
