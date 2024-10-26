@@ -17,9 +17,9 @@ static SETUP: Once = Once::new();
 /// * `plugin_args` - The arguments to pass to the plugin
 fn run_with_cargo_bin(
     cargo_project_name: &str,
-    expected_outout_name: &str,
+    expected_outout_name: Option<&str>,
     plugin_args: &[&str],
-) -> Result<(String, String), String> {
+) -> Result<(String, Option<String>), String> {
     // Install the plugin
     let root_dir = env::temp_dir().join("ast-visitor");
     let current_dir = Path::new(".").canonicalize().unwrap();
@@ -56,22 +56,39 @@ fn run_with_cargo_bin(
     let output = cargo_cmd.output().unwrap();
     // assert!(output.status.success());  This cannot be true because the plugin is change all `#[cfg(` to `#[my_cfg(` in order to process all the features
 
-    let expected_output_path = workspace_path.join(expected_outout_name);
-    let expected_output = fs::read_to_string(expected_output_path).unwrap();
-
-    Ok((String::from_utf8(output.stdout).unwrap(), expected_output))
+    if let Some(expected_outout_name) = expected_outout_name {
+        let expected_output_path = workspace_path.join(expected_outout_name);
+        let expected_output = fs::read_to_string(expected_output_path).unwrap();
+        Ok((
+            String::from_utf8(output.stdout).unwrap(),
+            Some(expected_output),
+        ))
+    } else {
+        Ok((String::from_utf8(output.stdout).unwrap(), None))
+    }
 }
 
 #[cfg(test)]
 use pretty_assertions::assert_eq;
 
 #[test]
-fn test_first_same_output() -> Result<(), String> {
+fn test_first_dotfile_same_output() -> Result<(), String> {
     let (output, expected_output) = run_with_cargo_bin(
         "workspaces/first",
-        "expected_output.stdout",
+        Some("expected_output.stdout"),
         &["--print-dot"],
     )?;
-    assert_eq!(output, expected_output);
+    assert_eq!(output, expected_output.unwrap()); // Here, unwrap is "safe" because we want to panic if the expected output file is not present
+    Ok(())
+}
+
+#[test]
+fn test_first_dot_file_contains_features() -> Result<(), String> {
+    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--print-dot"])?;
+
+    for feature in &["aa", "bb", "bb", "cc", "dd", "ee", "ff"] {
+        assert!(output.contains(feature));
+    }
+
     Ok(())
 }
