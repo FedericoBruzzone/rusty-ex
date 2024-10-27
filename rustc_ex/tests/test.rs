@@ -77,7 +77,7 @@ use pretty_assertions::assert_eq;
 #[test]
 fn test_version_output() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin("workspaces/first", None, &["-V"])?;
-    assert_eq!(output, "0.1.0\n");
+    assert_eq!(output, "0.1.0-nightly-2024-10-18\n");
     Ok(())
 }
 
