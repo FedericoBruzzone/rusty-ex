@@ -1,5 +1,7 @@
 #![feature(rustc_private)]
 
+pub mod instrument;
+
 extern crate rustc_ast;
 extern crate rustc_driver;
 extern crate rustc_errors;
@@ -10,7 +12,7 @@ extern crate rustc_span;
 
 use clap::Parser;
 use rustc_ast::{ast::*, visit::*};
-use rustc_instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
+use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
