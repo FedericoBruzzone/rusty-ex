@@ -10,7 +10,7 @@
 
 - `cd rustc_ex`
 
-- `cargo test -- --test-threads=1 --nocapture`
+- `cargo test -- --test-threads=0 --nocapture`
 
 ### Cli (`cargo` wrapper)
 

@@ -2,6 +2,7 @@
 
 extern crate rustc_ast;
 extern crate rustc_driver;
+extern crate rustc_errors;
 extern crate rustc_interface;
 extern crate rustc_middle;
 extern crate rustc_session;
@@ -139,6 +140,18 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         }
 
         config.file_loader = Some(Box::new(CustomFileLoader));
+
+        // Set the session creation callback to initialize the Fluent bundle.
+        // It will make the compiler silent and use the fallback bundle.
+        // Errors will not be printed in the `stderr`.
+        config.psess_created = Some(Box::new(|sess| {
+            let fallback_bundle = rustc_errors::fallback_fluent_bundle(
+                rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(),
+                false,
+            );
+
+            sess.dcx.make_silent(fallback_bundle, None, false);
+        }));
     }
 
     /// Called after expansion. Return value instructs the compiler whether to
@@ -153,7 +166,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
                 // estrarre l'AST
-                let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
+                let resolver_and_krate = tcx.resolver_for_lowering().borrow();
                 let krate = &*resolver_and_krate.1;
 
                 // visitare l'AST
