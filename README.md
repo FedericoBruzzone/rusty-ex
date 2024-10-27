@@ -20,7 +20,7 @@ rustup component add --toolchain nightly-2024-10-18 rust-analyzer clippy
 
 - `cd rustc_ex`
 
-- `cargo test -- --test-threads=0 --nocapture`
+- `cargo test -- --test-threads=1 --nocapture`
 
 ### Cli (`cargo` wrapper)
 
