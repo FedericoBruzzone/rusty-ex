@@ -2,6 +2,7 @@
 
 extern crate rustc_ast;
 extern crate rustc_driver;
+extern crate rustc_errors;
 extern crate rustc_interface;
 extern crate rustc_middle;
 extern crate rustc_session;
@@ -25,7 +26,7 @@ pub struct RustcEx;
 
 // To parse CLI arguments, we use Clap for this example. But that
 // detail is up to you.
-#[derive(Parser, Serialize, Deserialize, Default)]
+#[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
     /// Pass --print-dot to print the DOT graph
     #[clap(long)]
@@ -56,11 +57,34 @@ impl RustcPlugin for RustcEx {
         "rustc-ex-driver".into()
     }
 
+    fn modify_cargo(&self, cargo: &mut std::process::Command, args: &Self::Args) {
+        cargo.args(&args.cargo_args);
+    }
+
     // In the CLI, we ask Clap to parse arguments and also specify a CrateFilter.
     // If one of the CLI arguments was a specific file to analyze, then you
     // could provide a different filter.
     fn args(&self, _target_dir: &Utf8Path) -> RustcPluginArgs<Self::Args> {
+        // We cannot use `#[cfg(test)]` here because the test suite installs the plugin.
+        // In other words, in the test suite we need to compile (install) the plugin with
+        // `--features test-mode` to skip the first argument that is the `cargo` command.
+        //
+        // # Explanation:
+        //
+        // ## Test
+        //
+        // In tests we run something like `cargo rustc-ex --print-dot` because the plugin is installed as a binary in a temporary directory.
+        // It is expanded to `/tmp/rustc-ex/bin/cargo-rustc-ex rustc-ex --print-dot`, so we need to skip the first argument because it is the `cargo` command.
+        //
+        // ## Cli
+        // In the CLI we run something like `cargo run --bin rustc-ex -- --print-dot` or `./target/debug/cargo-rustc-ex --print-dot`.
+        // It is expanded to `.target/debug/cargo-rustc-ex --print-dot`, so we don't need to skip the first argument.
+        #[cfg(feature = "test-mode")]
         let args = PrintAstArgs::parse_from(env::args().skip(1));
+
+        #[cfg(not(feature = "test-mode"))]
+        let args = PrintAstArgs::parse_from(env::args());
+
         let filter = CrateFilter::AllCrates;
         RustcPluginArgs { args, filter }
     }
@@ -120,6 +144,18 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         }
 
         config.file_loader = Some(Box::new(CustomFileLoader));
+
+        // Set the session creation callback to initialize the Fluent bundle.
+        // It will make the compiler silent and use the fallback bundle.
+        // Errors will not be printed in the `stderr`.
+        config.psess_created = Some(Box::new(|sess| {
+            let fallback_bundle = rustc_errors::fallback_fluent_bundle(
+                rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(),
+                false,
+            );
+
+            sess.dcx().make_silent(fallback_bundle, None, false);
+        }));
     }
 
     /// Called after expansion. Return value instructs the compiler whether to
@@ -134,7 +170,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
                 // estrarre l'AST
-                let resolver_and_krate = tcx.resolver_for_lowering(()).borrow();
+                let resolver_and_krate = tcx.resolver_for_lowering().borrow();
                 let krate = &*resolver_and_krate.1;
 
                 // visitare l'AST
@@ -267,7 +303,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         /// Visita ricorsiva delle feature nestate (all, any, not)
-        fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
+        fn rec_expand(nested_meta: Vec<MetaItemInner>) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
             for meta in nested_meta {
