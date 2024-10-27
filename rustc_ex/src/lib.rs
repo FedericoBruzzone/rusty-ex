@@ -57,6 +57,10 @@ impl RustcPlugin for RustcEx {
         "rustc-ex-driver".into()
     }
 
+    fn modify_cargo(&self, cargo: &mut std::process::Command, args: &Self::Args) {
+        cargo.args(&args.cargo_args);
+    }
+
     // In the CLI, we ask Clap to parse arguments and also specify a CrateFilter.
     // If one of the CLI arguments was a specific file to analyze, then you
     // could provide a different filter.

@@ -16,11 +16,11 @@
 
 - `cd rustc_ex/tests/workspaces/first`
 
-- `RUST_LOG=debug cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex` (`-- --help`)
+- `RUST_LOG=debug cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex` (`[--CARGO_ARG] -- [--PLUGIN_ARG]`)
 
 Optionally:
 
-- `LD_LIBRARY_PATH=$(rustc --print sysroot)/lib RUST_LOG=debug ../../../target/debug/cargo-rustc-ex` (`--help`)
+- `LD_LIBRARY_PATH=$(rustc --print sysroot)/lib RUST_LOG=debug ../../../target/debug/cargo-rustc-ex` (`--PLUGIN_ARG` -- `--CARGO_ARG`)
 
 ### Driver (`rustc` wrapper)
 
