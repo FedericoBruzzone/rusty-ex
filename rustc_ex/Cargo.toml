@@ -8,6 +8,12 @@ edition = "2021"
 [package.metadata.rust-analyzer]
 rustc_private = true
 
+[[bin]]
+name = "cargo-rustc-ex"
+
+[[bin]]
+name = "rustc-ex-driver"
+
 [features]
 default = []
 test-mode = []

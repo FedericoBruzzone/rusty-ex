@@ -154,7 +154,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 false,
             );
 
-            sess.dcx.make_silent(fallback_bundle, None, false);
+            sess.dcx().make_silent(fallback_bundle, None, false);
         }));
     }
 
@@ -303,7 +303,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         /// Visita ricorsiva delle feature nestate (all, any, not)
-        fn rec_expand(nested_meta: Vec<NestedMetaItem>) -> Vec<FeatureType> {
+        fn rec_expand(nested_meta: Vec<MetaItemInner>) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
             for meta in nested_meta {

@@ -4,6 +4,16 @@
 
 - `rustc_ex`: uses `rustc-instrument` to visit the AST of a Rust program, _from an example in [rustc-instrument](https://github.com/FedericoBruzzone/rustc-instrument)_
 
+## Contributing
+
+### Setup the nightly toolchain
+
+```bash
+rustup toolchain install nightly-2024-10-18
+rustup component add --toolchain nightly-2024-10-18 rustc-src rustc-dev llvm-tools-preview
+rustup component add --toolchain nightly-2024-10-18 rust-analyzer clippy
+```
+
 ## Usage
 
 ### Test
