@@ -4,44 +4,69 @@
 
 - `rustc_ex`: uses `rustc-instrument` to visit the AST of a Rust program, _from an example in [rustc-instrument](https://github.com/FedericoBruzzone/rustc-instrument)_
 
-## Contributing
+## Usage
 
-### Setup the nightly toolchain
+### Setup
+
+Setup the nightly toolchain:
 
 ```bash
 rustup toolchain install nightly-2024-10-18
-rustup component add --toolchain nightly-2024-10-18 rustc-src rustc-dev llvm-tools-preview
-rustup component add --toolchain nightly-2024-10-18 rust-analyzer clippy
+rustup component add --toolchain nightly-2024-10-18 rust-src rustc-dev llvm-tools-preview rust-analyzer clippy
 ```
-
-## Usage
 
 ### Test
 
-- `cd rustc_ex`
+Run tests on all example workspaces:
 
-- `cargo test -- --test-threads=1 --nocapture`
+```bash
+cd rustc_ex
+cargo test -- --test-threads=1 --nocapture
+```
 
 ### Cli (`cargo` wrapper)
 
-- `cd rustc_ex/tests/workspaces/first`
+Available plugin args:
 
-- `RUST_LOG=debug cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex` (`[--CARGO_ARG] -- [--PLUGIN_ARG]`)
+- `--print-dot`: print the DOT graph
+- `--print-crate`: print the crate AST
+- `--print-graph`: print the graph
 
-Optionally:
+Use the cargo plugin:
 
-- `LD_LIBRARY_PATH=$(rustc --print sysroot)/lib RUST_LOG=debug ../../../target/debug/cargo-rustc-ex` (`--PLUGIN_ARG` -- `--CARGO_ARG`)
+```bash
+cd rustc_ex/tests/workspaces/[example_crate_name]
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG] -- [--PLUGIN_ARG]
+```
+
+> [!NOTE]
+> Additional logs can be enabled by setting the `RUST_LOG` environment variable to `debug`.
+
+> [!TIP]
+> Example:
+> ```bash
+> cd rustc_ex/tests/workspaces/first
+> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-dot
+> ```
+
+> [!NOTE]
+> The compilation of the example crates is going to fail. `error: could not compile [example_crate_name]` is expected.
 
 ### Driver (`rustc` wrapper)
 
-*Find a way to pass to the driver the plugin args using "PLUGIN_ARGS" environment variable*
+> [!CAUTION]
+> It is not currently possible to pass the plugin args to the driver without using an environment variable. Using the CLI is advised.
 
-- `cd rustc_ex`
+TODO: Find a way to pass to the driver the plugin args using "PLUGIN_ARGS" environment variable
 
-- `CARGO_PRIMARY_PACKAGE=1 RUST_LOG=debug cargo run --bin rustc-ex-driver -- ../example-code/src/main.rs  --cfg 'feature="test"'` (without the environment variable, the driver will not work)
+```bash
+cd rustc_ex
+CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- ./tests/workspaces/first/src/main.rs --cfg 'feature="test"'
+```
 
-Optionally:
+Or:
 
-- `cd rustc_ex/tests/workspaces/first`
-
-- `CARGO_PRIMARY_PACKAGE=1 RUST_LOG=debug cargo run --manifest-path ../../../Cargo.toml --bin rustc-ex-driver -- ./src/main.rs`
+```bash
+cd rustc_ex/tests/workspaces/first
+CARGO_PRIMARY_PACKAGE=1 cargo run --manifest-path ../../../Cargo.toml --bin rustc-ex-driver -- ./src/main.rs
+```
