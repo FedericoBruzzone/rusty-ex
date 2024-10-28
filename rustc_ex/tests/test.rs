@@ -118,3 +118,28 @@ fn test_first_features_dot_same_output() -> Result<(), String> {
     assert_eq!(output, expected_output.unwrap());
     Ok(())
 }
+
+#[test]
+fn test_simple_feature_weigths_artifacts_dot_same_output() -> Result<(), String> {
+    let (output, expected_output) = run_with_cargo_bin(
+        "workspaces/simple_feature_weights",
+        Some("expected_artifacts_dot.stdout"),
+        &["--print-artifacts-dot"],
+    )?;
+    // UNWRAP: if output is not present, the panic is expected
+    assert_eq!(output, expected_output.unwrap());
+    Ok(())
+}
+
+#[test]
+fn test_simple_feature_weigths_features_dot_same_output() -> Result<(), String> {
+    let (output, expected_output) = run_with_cargo_bin(
+        "workspaces/simple_feature_weights",
+        Some("expected_features_dot.stdout"),
+        &["--print-features-dot"],
+    )?;
+    // FIXME: l'ordine degli archi non è deterministico
+    // UNWRAP: if output is not present, the panic is expected
+    assert_eq!(output, expected_output.unwrap());
+    Ok(())
+}

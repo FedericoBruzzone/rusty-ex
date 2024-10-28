@@ -1,0 +1,19 @@
+digraph {
+    0 [ label = "RefCell { value: Feature { name: \"aa\", not: false } }" label="aa"]
+    1 [ label = "RefCell { value: Feature { name: \"aa\", not: true } }" label="!aa"]
+    2 [ label = "RefCell { value: Feature { name: \"bb\", not: false } }" label="bb"]
+    3 [ label = "RefCell { value: Feature { name: \"bb\", not: true } }" label="!bb"]
+    4 [ label = "RefCell { value: Feature { name: \"cc\", not: false } }" label="cc"]
+    5 [ label = "RefCell { value: Feature { name: \"cc\", not: true } }" label="!cc"]
+    6 [ label = "RefCell { value: Feature { name: \"dd\", not: false } }" label="dd"]
+    7 [ label = "RefCell { value: Feature { name: \"dd\", not: true } }" label="!dd"]
+    8 [ label = "RefCell { value: Feature { name: \"ee\", not: false } }" label="ee"]
+    9 [ label = "RefCell { value: Feature { name: \"ee\", not: true } }" label="!ee"]
+    10 [ label = "RefCell { value: Feature { name: \"ff\", not: false } }" label="ff"]
+    11 [ label = "RefCell { value: Feature { name: \"ff\", not: true } }" label="!ff"]
+    0 -> 2 [ label="1.00"]
+    0 -> 4 [ label="1.00"]
+    6 -> 8 [ label="0.50"]
+    6 -> 10 [ label="0.50"]
+}
+
