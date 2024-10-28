@@ -177,8 +177,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visitare l'AST
                 let collector = &mut CollectVisitor {
-                    log: false,
-
                     fnodes: HashMap::new(),
                     fgraph: graph::DiGraph::new(),
 
@@ -230,8 +228,6 @@ struct Edge {
 
 /// Visitor per la visita :) dell'AST
 struct CollectVisitor {
-    log: bool,
-
     // stack parallelo: statements con rispettive feature
     statements: Vec<AnnotatedType>,
     features: Vec<Option<Vec<FeatureType>>>,
@@ -414,10 +410,6 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 "Stack not synced. Expected Expression {:?}, found Expression {:?}",
                 ex.id, id
             );
-
-            if self.log {
-                println!("Expression ({:?}) {:?}\n{:?}\n", ex.kind, id, cfg);
-            }
         } else {
             panic!(
                 "Stack not synced. Expected Expression {:?}, found {:?}",
@@ -510,18 +502,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                 // estrarre dallo stack dati sulle cfg
                 let ident = self.statements.pop().unwrap();
-                let cfg = self.features.pop().unwrap();
-
-                if self.log {
-                    println!(
-                        "Item {:?}\n{:?}\n{:?}\nPARENT: {:?}\n",
-                        i.id, ident, cfg, self.statements
-                    );
-                }
+                let cfg = self.features.pop().unwrap().unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate
                 self.nodes.entry(i.id).and_modify(|e| {
-                    e.1.borrow_mut().feature = cfg.unwrap_or_default();
+                    e.1.borrow_mut().feature = cfg.clone();
                 });
 
                 // creare eventuale arco del grafo
