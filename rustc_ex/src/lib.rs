@@ -223,10 +223,15 @@ struct Feature {
     not: bool,
 }
 #[derive(Clone, Debug)]
+struct WeightedFeature {
+    feature: Feature,
+    weight: f32,
+}
+#[derive(Clone, Debug)]
 struct Artifact {
     ident: String,
     _node_id: NodeId,
-    features: Vec<FeatureType>,
+    features: (Vec<FeatureType>, Vec<WeightedFeature>),
 }
 #[derive(Clone, Debug)]
 struct Edge {
@@ -281,9 +286,36 @@ impl FeatureType {
     }
 }
 
+impl WeightedFeature {
+    /// Feature pesata a stringa
+    fn to_string(&self) -> String {
+        format!(
+            "{} -> {}",
+            self.feature.to_string(),
+            self.weight.to_string()
+        )
+    }
+}
+
+impl Feature {
+    /// Feature a stringa
+    fn to_string(&self) -> String {
+        format!("{}{}", if self.not { "!" } else { "" }, self.name)
+    }
+}
+
 impl CollectVisitor {
     /// Lista di features a Stringa
     fn features_to_string(features: &[FeatureType]) -> String {
+        features
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// Lista di feature pesate a Stringa
+    fn w_features_to_string(features: &[WeightedFeature]) -> String {
         features
             .iter()
             .map(|f| f.to_string())
@@ -302,9 +334,12 @@ impl CollectVisitor {
             |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
                 format!(
-                    "label=\"{} ({})\"",
+                    "label=\"{}\n({})\"",
                     node.1.borrow().ident,
-                    CollectVisitor::features_to_string(&node.1.borrow().features)
+                    CollectVisitor::features_to_string(&node.1.borrow().features.0)
+                        + "\n{"
+                        + &CollectVisitor::w_features_to_string(&node.1.borrow().features.1)
+                        + "}"
                 )
             };
 
@@ -484,6 +519,43 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, i: &'ast Item) {
+        fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
+            let mut weights = Vec::new();
+
+            for feat in features {
+                match feat {
+                    FeatureType::Feat(name) => weights.push(WeightedFeature {
+                        feature: Feature { name, not: false },
+                        weight: 1.0,
+                    }),
+                    FeatureType::Not(nested) => {
+                        weights.extend(rec_weight_feature(nested).into_iter().map(
+                            |WeightedFeature { feature, weight }| WeightedFeature {
+                                feature: Feature {
+                                    name: feature.name,
+                                    not: !feature.not,
+                                },
+                                weight,
+                            },
+                        ))
+                    }
+                    FeatureType::All(nested) => {
+                        let size: f32 = nested.len() as f32;
+                        let rec = rec_weight_feature(nested);
+                        weights.extend(rec.into_iter().map(
+                            |WeightedFeature { feature, weight }| WeightedFeature {
+                                feature,
+                                weight: weight / size as f32,
+                            },
+                        ))
+                    }
+                    FeatureType::Any(nested) => weights.extend(rec_weight_feature(nested)),
+                }
+            }
+
+            weights
+        }
+
         // TODO: controllare tutti i tipi di item, altri potrebbero essere interessanti
         // TODO: controllare quali altri tipi di item possono avere attributi
         match i.kind {
@@ -492,10 +564,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 let mem_node = Rc::new(RefCell::new(Artifact {
                     ident: i.ident.to_string(),
                     _node_id: i.id,
-                    features: Vec::new(),
+                    features: (Vec::new(), Vec::new()),
                 }));
                 let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
-                self.a_nodes.insert(i.id, (graph_node, Rc::clone(&mem_node)));
+                self.a_nodes
+                    .insert(i.id, (graph_node, Rc::clone(&mem_node)));
 
                 // aggiornamento stack per trovare cfg
                 self.statements.push(AnnotatedType::FunctionDeclaration(
@@ -511,10 +584,19 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 let ident = self.statements.pop().unwrap();
                 let cfg = self.features.pop().unwrap().unwrap_or_default();
 
-                // aggiornare il nodo con le cfg trovate
+                // aggiornare il nodo con le cfg trovate e pesate
                 self.a_nodes.entry(i.id).and_modify(|e| {
-                    e.1.borrow_mut().features = cfg.clone();
+                    e.1.borrow_mut().features = (cfg.clone(), rec_weight_feature(cfg.clone()));
                 });
+
+                {
+                    // FIXME: togliere
+                    println!("CFG: {:?}:", cfg.clone());
+                    for WeightedFeature { feature, weight } in rec_weight_feature(cfg.clone()) {
+                        println!("  {:?} -> {:?}", feature, weight);
+                    }
+                    println!();
+                }
 
                 // creare eventuale arco del grafo
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
