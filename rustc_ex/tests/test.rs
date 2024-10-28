@@ -84,30 +84,35 @@ fn test_version_output() -> Result<(), String> {
 #[test]
 fn test_help_output() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
-    for options in &["--print-crate", "--print-artifacts-dot", "--print-features-dot"] {
+    for options in &[
+        "--print-crate",
+        "--print-artifacts-dot",
+        "--print-features-dot",
+    ] {
         assert!(output.contains(options));
     }
     Ok(())
 }
 
 #[test]
-fn test_first_dotfile_same_output() -> Result<(), String> {
+fn test_first_artifacts_dot_same_output() -> Result<(), String> {
     let (output, expected_output) = run_with_cargo_bin(
         "workspaces/first",
-        Some("expected_output.stdout"),
-        &["--print-dot"],
+        Some("expected_artifacts_dot.stdout"),
+        &["--print-artifacts-dot"],
     )?;
     assert_eq!(output, expected_output.unwrap()); // Here, unwrap is "safe" because we want to panic if the expected output file is not present
     Ok(())
 }
 
 #[test]
-fn test_first_dot_file_contains_features() -> Result<(), String> {
-    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--print-dot"])?;
-
-    for feature in &["aa", "bb", "bb", "cc", "dd", "ee", "ff"] {
-        assert!(output.contains(feature));
-    }
-
+fn test_first_features_dot_same_output() -> Result<(), String> {
+    let (output, expected_output) = run_with_cargo_bin(
+        "workspaces/first",
+        Some("expected_features_dot.stdout"),
+        &["--print-features-dot"],
+    )?;
+    // FIXME: l'ordine degli archi non è deterministico
+    assert_eq!(output, expected_output.unwrap()); // Here, unwrap is "safe" because we want to panic if the expected output file is not present
     Ok(())
 }

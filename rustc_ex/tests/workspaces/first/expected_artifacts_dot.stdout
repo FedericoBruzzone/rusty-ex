@@ -1,0 +1,20 @@
+digraph {
+    0 [ label = "RefCell { value: Artifact { ident: \"one\", _node_id: NodeId(65), features: ([Feat(\"aa\")], [WeightedFeature { feature: Feature { name: \"aa\", not: false }, weight: 1.0 }]) } }" label="one
+(aa)"]
+    1 [ label = "RefCell { value: Artifact { ident: \"two\", _node_id: NodeId(62), features: ([Not([Feat(\"bb\")])], [WeightedFeature { feature: Feature { name: \"bb\", not: true }, weight: 1.0 }]) } }" label="two
+(not(bb))"]
+    2 [ label = "RefCell { value: Artifact { ident: \"three\", _node_id: NodeId(17), features: ([Feat(\"cc\")], [WeightedFeature { feature: Feature { name: \"cc\", not: false }, weight: 1.0 }]) } }" label="three
+(cc)"]
+    3 [ label = "RefCell { value: Artifact { ident: \"four\", _node_id: NodeId(37), features: ([Feat(\"dd\")], [WeightedFeature { feature: Feature { name: \"dd\", not: false }, weight: 1.0 }]) } }" label="four
+(dd)"]
+    4 [ label = "RefCell { value: Artifact { ident: \"five\", _node_id: NodeId(41), features: ([Feat(\"ee\")], [WeightedFeature { feature: Feature { name: \"ee\", not: false }, weight: 1.0 }]) } }" label="five
+(ee)"]
+    5 [ label = "RefCell { value: Artifact { ident: \"six\", _node_id: NodeId(45), features: ([Not([Feat(\"ff\")])], [WeightedFeature { feature: Feature { name: \"ff\", not: true }, weight: 1.0 }]) } }" label="six
+(not(ff))"]
+    6 [ label = "RefCell { value: Artifact { ident: \"main\", _node_id: NodeId(9), features: ([Feat(\"aa\")], [WeightedFeature { feature: Feature { name: \"aa\", not: false }, weight: 1.0 }]) } }" label="main
+(aa)"]
+    3 -> 4 [ label="0"]
+    3 -> 5 [ label="0"]
+    2 -> 3 [ label="0"]
+}
+
