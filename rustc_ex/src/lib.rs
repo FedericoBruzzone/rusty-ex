@@ -203,7 +203,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 }
 
 /// Definizioni per l'estrazione delle feature dall'AST, lo statement annotato e la/le feature
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum AnnotatedType {
     FunctionDeclaration(NodeId, String),
     Expression(NodeId),
@@ -325,7 +325,7 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
-        for (from_node_id, (from_node_index, from_artifact)) in self.a_nodes.iter() {
+        for (_from_node_id, (from_node_index, from_artifact)) in self.a_nodes.iter() {
             let from_features = from_artifact.borrow().features.1.clone();
 
             for to_node_index in self.a_graph.neighbors(*from_node_index) {
@@ -342,7 +342,7 @@ impl CollectVisitor {
 
                 for WeightedFeature {
                     feature: f_feat,
-                    weight: f_weight,
+                    weight: _f_weight,
                 } in &from_features
                 {
                     for WeightedFeature {
@@ -509,7 +509,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
         walk_expr(self, ex);
 
-        if let (Some(AnnotatedType::Expression(id)), Some(cfg)) =
+        if let (Some(AnnotatedType::Expression(id)), Some(_cfg)) =
             (self.statements.pop(), self.features.pop())
         {
             assert_eq!(
@@ -645,6 +645,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                 // estrarre dallo stack dati sulle cfg
                 let ident = self.statements.pop().unwrap();
+                assert_eq!(ident, AnnotatedType::FunctionDeclaration(
+                    i.id,
+                    i.ident.to_string(),
+                ));
                 let cfg = self.features.pop().unwrap().unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate e pesate
