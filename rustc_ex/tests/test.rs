@@ -84,7 +84,7 @@ fn test_version_output() -> Result<(), String> {
 #[test]
 fn test_help_output() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
-    for options in &["--print-dot", "--print-crate", "--print-graph"] {
+    for options in &["--print-crate", "--print-artifacts-dot", "--print-features-dot"] {
         assert!(output.contains(options));
     }
     Ok(())

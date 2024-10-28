@@ -42,10 +42,6 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_crate: bool,
 
-    /// Pass --print-graph to print the graph
-    #[clap(long)]
-    print_graph: bool,
-
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
     //                     ^^^^^^^^^^^^^^^^^^^^ these are cargo args
@@ -116,9 +112,6 @@ impl PrintAstCallbacks {
     fn process_cli_args(&self, collector: &CollectVisitor, krate: &Crate) {
         if self.args.print_crate {
             println!("{:#?}", krate);
-        }
-        if self.args.print_graph {
-            println!("{:?}", collector.a_graph);
         }
         if self.args.print_artifacts_dot {
             collector.print_a_graph_dot();
