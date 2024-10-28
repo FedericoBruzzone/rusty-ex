@@ -28,9 +28,9 @@ cargo test -- --test-threads=1 --nocapture
 
 Available plugin args:
 
-- `--print-dot`: print the DOT graph
+- `--print-artifacts-dot`: print the artifacts graph in DOT format
+- `--print-features-dot`: print the features graph in DOT format
 - `--print-crate`: print the crate AST
-- `--print-graph`: print the graph
 
 Use the cargo plugin:
 
@@ -46,7 +46,7 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG]
 > Example:
 > ```bash
 > cd rustc_ex/tests/workspaces/first
-> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-dot
+> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-dot
 > ```
 
 > [!NOTE]
