@@ -11,8 +11,8 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use rustc_ast::{ast::*, visit::*};
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
+use rustc_ast::{ast::*, visit::*};
 use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
@@ -360,7 +360,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             );
 
             if self.log {
-                println!("Expression {:?}\n{:?}\n", id, cfg);
+                println!("Expression ({:?}) {:?}\n{:?}\n", ex.kind, id, cfg);
             }
         } else {
             panic!(
@@ -368,6 +368,57 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 ex.id,
                 self.statements.last()
             );
+        }
+
+        // TODO: tenere tutte le espressioni che possono avere features
+        match ex.kind {
+            // ExprKind::Array(thin_vec) => todo!(),
+            // ExprKind::ConstBlock(anon_const) => todo!(),
+            // ExprKind::Call(p, thin_vec) => todo!(),
+            // ExprKind::MethodCall(method_call) => todo!(),
+            // ExprKind::Tup(thin_vec) => todo!(),
+            // ExprKind::Binary(spanned, p, p1) => todo!(),
+            // ExprKind::Unary(un_op, p) => todo!(),
+            // ExprKind::Lit(lit) => todo!(),
+            // ExprKind::Cast(p, p1) => todo!(),
+            // ExprKind::Type(p, p1) => todo!(),
+            // ExprKind::Let(p, p1, span, recovered) => todo!(),
+            // ExprKind::If(p, p1, p2) => todo!(),
+            // ExprKind::While(p, p1, label) => todo!(),
+            // ExprKind::ForLoop { pat, iter, body, label, kind } => todo!(),
+            // ExprKind::Loop(p, label, span) => todo!(),
+            // ExprKind::Match(p, thin_vec, match_kind) => todo!(),
+            // ExprKind::Closure(closure) => todo!(),
+            // ExprKind::Block(p, label) => todo!(),
+            // ExprKind::Gen(capture_by, p, gen_block_kind, span) => todo!(),
+            // ExprKind::Await(p, span) => todo!(),
+            // ExprKind::TryBlock(p) => todo!(),
+            // ExprKind::Assign(p, p1, span) => todo!(),
+            // ExprKind::AssignOp(spanned, p, p1) => todo!(),
+            // ExprKind::Field(p, ident) => todo!(),
+            // ExprKind::Index(p, p1, span) => todo!(),
+            // ExprKind::Range(p, p1, range_limits) => todo!(),
+            // ExprKind::Underscore => todo!(),
+            // ExprKind::Path(p, path) => todo!(),
+            // ExprKind::AddrOf(borrow_kind, mutability, p) => todo!(),
+            // ExprKind::Break(label, p) => todo!(),
+            // ExprKind::Continue(label) => todo!(),
+            // ExprKind::Ret(p) => todo!(),
+            // ExprKind::InlineAsm(p) => todo!(),
+            // ExprKind::OffsetOf(p, p1) => todo!(),
+            // ExprKind::MacCall(p) => todo!(),
+            // ExprKind::Struct(p) => todo!(),
+            // ExprKind::Repeat(p, anon_const) => todo!(),
+            // ExprKind::Paren(p) => todo!(),
+            // ExprKind::Try(p) => todo!(),
+            // ExprKind::Yield(p) => todo!(),
+            // ExprKind::Yeet(p) => todo!(),
+            // ExprKind::Become(p) => todo!(),
+            // ExprKind::IncludedBytes(rc) => todo!(),
+            // ExprKind::FormatArgs(p) => todo!(),
+            // ExprKind::Err(error_guaranteed) => todo!(),
+            // ExprKind::Dummy => todo!(),
+            _ => (),
         }
     }
 
@@ -427,9 +478,27 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     );
                 }
             }
-            _ => {
-                walk_item(self, i);
-            }
+
+            // TODO: tenere tutti gli item che possono avere features
+            // ItemKind::ExternCrate(symbol) => walk_item(self, i),
+            // ItemKind::Use(use_tree) => walk_item(self, i),
+            // ItemKind::Static(static_item) => walk_item(self, i),
+            // ItemKind::Const(const_item) => walk_item(self, i),
+            // ItemKind::Mod(safety, mod_kind) => walk_item(self, i),
+            // ItemKind::ForeignMod(foreign_mod) => walk_item(self, i),
+            // ItemKind::GlobalAsm(inline_asm) => walk_item(self, i),
+            // ItemKind::TyAlias(ty_alias) => walk_item(self, i),
+            // ItemKind::Enum(enum_def, generics) => walk_item(self, i),
+            // ItemKind::Struct(variant_data, generics) => walk_item(self, i),
+            // ItemKind::Union(variant_data, generics) => walk_item(self, i),
+            // ItemKind::Trait(_) => walk_item(self, i),
+            // ItemKind::TraitAlias(generics, vec) => walk_item(self, i),
+            // ItemKind::Impl(_) => walk_item(self, i),
+            // ItemKind::MacCall(p) => walk_item(self, i),
+            // ItemKind::MacroDef(macro_def) => walk_item(self, i),
+            // ItemKind::Delegation(delegation) => walk_item(self, i),
+            // ItemKind::DelegationMac(delegation_mac) => walk_item(self, i),
+            _ => walk_item(self, i),
         }
     }
 }
