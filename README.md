@@ -1,8 +1,9 @@
-## What is what
+## What is this?
 
-- [`rustc-instrument`](https://github.com/FedericoBruzzone/rustc-instrument): rustc instrumented with a plugin to extract the AST of a Rust program _(full repository, with examples, the important part is `rustc-instrument/rustc-instrument` crate)_
+A `cargo` plugin to analyze and extract a dependency graph (between `cfg` features) from a Rust program.
 
-- `rustc_ex`: uses `rustc-instrument` to visit the AST of a Rust program, _from an example in [rustc-instrument](https://github.com/FedericoBruzzone/rustc-instrument)_
+> [!NOTE]
+> `rustc_ex` uses [`rustc-instrument`](https://github.com/FedericoBruzzone/rustc-instrument) to extract and analyze the AST of the Rust program.
 
 ## Usage
 
