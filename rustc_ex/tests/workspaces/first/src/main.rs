@@ -1,5 +1,17 @@
 mod lib1;
 
+#[cfg(feature = "aa")]
+struct X {
+    #[cfg(feature = "bb")]
+    x: i32,
+
+    #[cfg(not(feature = "cc"))]
+    y: i32,
+
+    #[cfg(feature = "dd")]
+    z: i32,
+}
+
 #[cfg(feature = "cc")]
 fn three() {
 
@@ -20,4 +32,7 @@ fn three() {
     }
 }
 
-fn main() {}
+fn main() {
+    #[cfg(feature = "aa")]
+    let xx = X;
+}
