@@ -30,9 +30,13 @@ pub struct RustcEx;
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
-    /// Pass --print-dot to print the DOT graph
+    /// Pass --print-artifacts-dot to print the DOT graph
     #[clap(long)]
-    print_dot: bool,
+    print_artifacts_dot: bool,
+
+    /// Pass --print-features-dot to print the DOT graph
+    #[clap(long)]
+    print_features_dot: bool,
 
     /// Pass --print-crate to print the crate
     #[clap(long)]
@@ -109,16 +113,19 @@ struct PrintAstCallbacks {
 }
 
 impl PrintAstCallbacks {
-    // TODO: Consider to remove `&mut` from CollectVisitor
-    fn process_cli_args(&self, collector: &mut CollectVisitor, krate: &Crate) {
+    fn process_cli_args(&self, collector: &CollectVisitor, krate: &Crate) {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
         if self.args.print_graph {
-            println!("{:?}", collector.graph);
+            println!("{:?}", collector.a_graph);
         }
-        if self.args.print_dot {
-            collector.print_graph_dot();
+        if self.args.print_artifacts_dot {
+            collector.print_a_graph_dot();
+        }
+        if self.args.print_features_dot {
+            // TODO: aggiungere stampa grafo delle features
+            // collector.print_f_graph_dot();
         }
     }
 }
@@ -177,14 +184,14 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visitare l'AST
                 let collector = &mut CollectVisitor {
-                    fnodes: HashMap::new(),
-                    fgraph: graph::DiGraph::new(),
+                    f_nodes: HashMap::new(),
+                    f_graph: graph::DiGraph::new(),
 
                     statements: Vec::new(),
                     features: Vec::new(),
 
-                    nodes: HashMap::new(),
-                    graph: graph::DiGraph::new(),
+                    a_nodes: HashMap::new(),
+                    a_graph: graph::DiGraph::new(),
                 };
                 collector.visit_crate(krate);
 
@@ -216,10 +223,10 @@ struct Feature {
     not: bool,
 }
 #[derive(Clone, Debug)]
-struct Node {
+struct Artifact {
     ident: String,
     _node_id: NodeId,
-    feature: Vec<FeatureType>,
+    features: Vec<FeatureType>,
 }
 #[derive(Clone, Debug)]
 struct Edge {
@@ -233,12 +240,12 @@ struct CollectVisitor {
     features: Vec<Option<Vec<FeatureType>>>,
 
     // grafo delle features
-    fnodes: HashMap<Feature, Rc<RefCell<Feature>>>,
-    fgraph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+    f_nodes: HashMap<Feature, (NodeIndex, Rc<RefCell<Feature>>)>,
+    f_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
 
     // grafo delle dipendenze
-    nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Node>>)>,
-    graph: graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Artifact>>)>,
+    a_graph: graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
 }
 
 impl FeatureType {
@@ -285,26 +292,26 @@ impl CollectVisitor {
     }
 
     /// Stampa il grafo in formato DOT (per Graphviz)
-    fn print_graph_dot(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
+    fn print_a_graph_dot(&self) {
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)
         };
 
         let get_node_attr =
-            |_g: &graph::DiGraph<Rc<RefCell<Node>>, Edge>,
-             node: (graph::NodeIndex, &Rc<RefCell<Node>>)| {
+            |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
                 format!(
                     "label=\"{} ({})\"",
                     node.1.borrow().ident,
-                    CollectVisitor::features_to_string(&node.1.borrow().feature)
+                    CollectVisitor::features_to_string(&node.1.borrow().features)
                 )
             };
 
         println!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.graph,
+                &self.a_graph,
                 &[Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
@@ -338,26 +345,26 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         };
 
                         // creazione nodi feature e not feature se non esistono già
-                        if let None = visitor.fnodes.get(&feature) {
-                            assert_eq!(None, visitor.fnodes.get(&not_feature));
+                        if let None = visitor.f_nodes.get(&feature) {
+                            assert_eq!(None, visitor.f_nodes.get(&not_feature));
 
                             // feature
                             let feat_node = Rc::new(RefCell::new(feature.clone()));
-                            let graph_node = visitor.fgraph.add_node(Rc::clone(&feat_node));
+                            let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
                             visitor
-                                .fnodes
-                                .insert(feature.clone(), Rc::clone(&feat_node));
+                                .f_nodes
+                                .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
 
                             // not feature
                             let feat_node = Rc::new(RefCell::new(not_feature.clone()));
-                            let graph_node = visitor.fgraph.add_node(Rc::clone(&feat_node));
+                            let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
                             visitor
-                                .fnodes
-                                .insert(not_feature.clone(), Rc::clone(&feat_node));
+                                .f_nodes
+                                .insert(not_feature.clone(), (graph_node, Rc::clone(&feat_node)));
                         }
 
-                        assert!(visitor.fnodes.contains_key(&feature));
-                        assert!(visitor.fnodes.contains_key(&not_feature));
+                        assert!(visitor.f_nodes.contains_key(&feature));
+                        assert!(visitor.f_nodes.contains_key(&not_feature));
 
                         cfgs.push(FeatureType::Feat(meta.value_str().unwrap().to_string()))
                     }
@@ -482,13 +489,13 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         match i.kind {
             ItemKind::Fn(..) => {
                 // creazione nodo del grafo (e cella Rc)
-                let mem_node = Rc::new(RefCell::new(Node {
+                let mem_node = Rc::new(RefCell::new(Artifact {
                     ident: i.ident.to_string(),
                     _node_id: i.id,
-                    feature: Vec::new(),
+                    features: Vec::new(),
                 }));
-                let graph_node = self.graph.add_node(Rc::clone(&mem_node));
-                self.nodes.insert(i.id, (graph_node, Rc::clone(&mem_node)));
+                let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
+                self.a_nodes.insert(i.id, (graph_node, Rc::clone(&mem_node)));
 
                 // aggiornamento stack per trovare cfg
                 self.statements.push(AnnotatedType::FunctionDeclaration(
@@ -505,16 +512,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 let cfg = self.features.pop().unwrap().unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate
-                self.nodes.entry(i.id).and_modify(|e| {
-                    e.1.borrow_mut().feature = cfg.clone();
+                self.a_nodes.entry(i.id).and_modify(|e| {
+                    e.1.borrow_mut().features = cfg.clone();
                 });
 
                 // creare eventuale arco del grafo
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
                 {
-                    self.graph.add_edge(
-                        self.nodes.get(id).unwrap().0,
-                        self.nodes.get(&i.id).unwrap().0,
+                    self.a_graph.add_edge(
+                        self.a_nodes.get(id).unwrap().0,
+                        self.a_nodes.get(&i.id).unwrap().0,
                         Edge { weight: 1.0 },
                     );
                 }
