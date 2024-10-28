@@ -178,8 +178,13 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 // visitare l'AST
                 let collector = &mut CollectVisitor {
                     log: false,
+
+                    fnodes: HashMap::new(),
+                    fgraph: graph::DiGraph::new(),
+
                     statements: Vec::new(),
                     features: Vec::new(),
+
                     nodes: HashMap::new(),
                     graph: graph::DiGraph::new(),
                 };
@@ -206,7 +211,12 @@ enum FeatureType {
     Any(Vec<FeatureType>),
 }
 
-/// Definizioni per il grafo
+/// Definizioni per i grafi
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Feature {
+    name: String,
+    not: bool,
+}
 #[derive(Clone, Debug)]
 struct Node {
     ident: String,
@@ -221,9 +231,15 @@ struct Edge {
 /// Visitor per la visita :) dell'AST
 struct CollectVisitor {
     log: bool,
+
     // stack parallelo: statements con rispettive feature
     statements: Vec<AnnotatedType>,
     features: Vec<Option<Vec<FeatureType>>>,
+
+    // grafo delle features
+    fnodes: HashMap<Feature, Rc<RefCell<Feature>>>,
+    fgraph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+
     // grafo delle dipendenze
     nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Node>>)>,
     graph: graph::DiGraph<Rc<RefCell<Node>>, Edge>,
@@ -305,21 +321,60 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         /// Visita ricorsiva delle feature nestate (all, any, not)
-        fn rec_expand(nested_meta: Vec<MetaItemInner>) -> Vec<FeatureType> {
+        fn rec_expand(
+            visitor: &mut CollectVisitor,
+            nested_meta: Vec<MetaItemInner>,
+        ) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
             for meta in nested_meta {
                 match meta.name_or_empty() {
                     sym::feature => {
+                        let name = meta.value_str().unwrap().to_string();
+
+                        let feature = Feature {
+                            name: name.clone(),
+                            not: false,
+                        };
+                        let not_feature = Feature {
+                            name: name.clone(),
+                            not: true,
+                        };
+
+                        // creazione nodi feature e not feature se non esistono già
+                        if let None = visitor.fnodes.get(&feature) {
+                            assert_eq!(None, visitor.fnodes.get(&not_feature));
+
+                            // feature
+                            let feat_node = Rc::new(RefCell::new(feature.clone()));
+                            let graph_node = visitor.fgraph.add_node(Rc::clone(&feat_node));
+                            visitor
+                                .fnodes
+                                .insert(feature.clone(), Rc::clone(&feat_node));
+
+                            // not feature
+                            let feat_node = Rc::new(RefCell::new(not_feature.clone()));
+                            let graph_node = visitor.fgraph.add_node(Rc::clone(&feat_node));
+                            visitor
+                                .fnodes
+                                .insert(not_feature.clone(), Rc::clone(&feat_node));
+                        }
+
+                        assert!(visitor.fnodes.contains_key(&feature));
+                        assert!(visitor.fnodes.contains_key(&not_feature));
+
                         cfgs.push(FeatureType::Feat(meta.value_str().unwrap().to_string()))
                     }
                     sym::not => cfgs.push(FeatureType::Not(rec_expand(
+                        visitor,
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     sym::all => cfgs.push(FeatureType::All(rec_expand(
+                        visitor,
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     sym::any => cfgs.push(FeatureType::Any(rec_expand(
+                        visitor,
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     _ => (),
@@ -333,7 +388,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             if meta.name_or_empty() == Symbol::intern("feat") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     self.features.pop();
-                    self.features.push(Some(rec_expand(list.to_vec())));
+                    let feat = Some(rec_expand(self, list.to_vec()));
+                    self.features.push(feat);
                 }
             }
         }
