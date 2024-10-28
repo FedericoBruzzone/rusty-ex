@@ -286,36 +286,9 @@ impl FeatureType {
     }
 }
 
-impl WeightedFeature {
-    /// Feature pesata a stringa
-    fn to_string(&self) -> String {
-        format!(
-            "{} -> {}",
-            self.feature.to_string(),
-            self.weight.to_string()
-        )
-    }
-}
-
-impl Feature {
-    /// Feature a stringa
-    fn to_string(&self) -> String {
-        format!("{}{}", if self.not { "!" } else { "" }, self.name)
-    }
-}
-
 impl CollectVisitor {
     /// Lista di features a Stringa
     fn features_to_string(features: &[FeatureType]) -> String {
-        features
-            .iter()
-            .map(|f| f.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// Lista di feature pesate a Stringa
-    fn w_features_to_string(features: &[WeightedFeature]) -> String {
         features
             .iter()
             .map(|f| f.to_string())
@@ -402,9 +375,6 @@ impl CollectVisitor {
                     "label=\"{}\n({})\"",
                     node.1.borrow().ident,
                     CollectVisitor::features_to_string(&node.1.borrow().features.0)
-                        + "\n{"
-                        + &CollectVisitor::w_features_to_string(&node.1.borrow().features.1)
-                        + "}"
                 )
             };
 
@@ -662,7 +632,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     self.a_graph.add_edge(
                         self.a_nodes.get(id).unwrap().0,
                         self.a_nodes.get(&i.id).unwrap().0,
-                        Edge { weight: 1.0 },
+                        Edge { weight: 0.0 },
                     );
                 }
             }
