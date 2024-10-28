@@ -124,8 +124,7 @@ impl PrintAstCallbacks {
             collector.print_a_graph_dot();
         }
         if self.args.print_features_dot {
-            // TODO: aggiungere stampa grafo delle features
-            // collector.print_f_graph_dot();
+            collector.print_f_graph_dot();
         }
     }
 }
@@ -194,6 +193,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     a_graph: graph::DiGraph::new(),
                 };
                 collector.visit_crate(krate);
+                collector.build_f_graph();
 
                 self.process_cli_args(collector, krate);
             });
@@ -323,7 +323,72 @@ impl CollectVisitor {
             .join(", ")
     }
 
-    /// Stampa il grafo in formato DOT (per Graphviz)
+    /// Costruisce il grafo delle features dal grafo degli artefatti
+    fn build_f_graph(&mut self) {
+        for (from_node_id, (from_node_index, from_artifact)) in self.a_nodes.iter() {
+            let from_features = from_artifact.borrow().features.1.clone();
+
+            for to_node_index in self.a_graph.neighbors(*from_node_index) {
+                let to_node_id = self.a_graph[to_node_index].borrow()._node_id;
+                let to_features = self
+                    .a_nodes
+                    .get(&to_node_id)
+                    .unwrap()
+                    .1
+                    .borrow()
+                    .features
+                    .1
+                    .clone();
+
+                for WeightedFeature {
+                    feature: f_feat,
+                    weight: f_weight,
+                } in &from_features
+                {
+                    for WeightedFeature {
+                        feature: t_feat,
+                        weight: t_weight,
+                    } in &to_features
+                    {
+                        self.f_graph.add_edge(
+                            self.f_nodes.get(&f_feat).unwrap().0,
+                            self.f_nodes.get(&t_feat).unwrap().0,
+                            Edge { weight: *t_weight },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Stampa il grafo degli artefatti in formato DOT (per Graphviz)
+    fn print_f_graph_dot(&self) {
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+                             edge: graph::EdgeReference<Edge>| {
+            format!("label=\"{:.2}\"", edge.weight().weight)
+        };
+
+        let get_node_attr =
+            |_g: &graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<Feature>>)| {
+                match node.1.borrow().not {
+                    true => format!("label=\"!{}\"", node.1.borrow().name),
+                    false => format!("label=\"{}\"", node.1.borrow().name),
+                }
+            };
+
+        println!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.f_graph,
+                &[Config::EdgeNoLabel],
+                &get_edge_attr,
+                &get_node_attr,
+            )
+        )
+    }
+
+    /// Stampa il grafo delle features in formato DOT (per Graphviz)
     fn print_a_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
@@ -556,8 +621,6 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             weights
         }
 
-        // TODO: controllare tutti i tipi di item, altri potrebbero essere interessanti
-        // TODO: controllare quali altri tipi di item possono avere attributi
         match i.kind {
             ItemKind::Fn(..) => {
                 // creazione nodo del grafo (e cella Rc)
@@ -588,15 +651,6 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 self.a_nodes.entry(i.id).and_modify(|e| {
                     e.1.borrow_mut().features = (cfg.clone(), rec_weight_feature(cfg.clone()));
                 });
-
-                {
-                    // FIXME: togliere
-                    println!("CFG: {:?}:", cfg.clone());
-                    for WeightedFeature { feature, weight } in rec_weight_feature(cfg.clone()) {
-                        println!("  {:?} -> {:?}", feature, weight);
-                    }
-                    println!();
-                }
 
                 // creare eventuale arco del grafo
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
