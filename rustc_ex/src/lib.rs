@@ -168,6 +168,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     ) -> rustc_driver::Compilation {
         queries
             .global_ctxt()
+            // UNWRAP: without context out analysis is impossible
             .unwrap()
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
                 // estrarre l'AST
@@ -299,6 +300,7 @@ impl CollectVisitor {
                 let to_features = self
                     .a_nodes
                     .get(&to_node_id)
+                    // UNWRAP: it is impossible that a feature is not in the hashmap
                     .unwrap()
                     .1
                     .borrow()
@@ -317,7 +319,9 @@ impl CollectVisitor {
                     } in &to_features
                     {
                         self.f_graph.add_edge(
+                            // UNWRAP: it is impossible that a feature is not in the hashmap
                             self.f_nodes.get(&f_feat).unwrap().0,
+                            // UNWRAP: it is impossible that a feature is not in the hashmap
                             self.f_nodes.get(&t_feat).unwrap().0,
                             Edge { weight: *t_weight },
                         );
@@ -396,6 +400,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             for meta in nested_meta {
                 match meta.name_or_empty() {
                     sym::feature => {
+                        // FIXME: esistono meta con `value_str` a None?
                         let name = meta.value_str().unwrap().to_string();
 
                         let feature = Feature {
@@ -429,18 +434,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         assert!(visitor.f_nodes.contains_key(&feature));
                         assert!(visitor.f_nodes.contains_key(&not_feature));
 
-                        cfgs.push(FeatureType::Feat(meta.value_str().unwrap().to_string()))
+                        cfgs.push(FeatureType::Feat(name))
                     }
                     sym::not => cfgs.push(FeatureType::Not(rec_expand(
                         visitor,
+                        // UNWRAP: if the features is a not, it must contain something
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     sym::all => cfgs.push(FeatureType::All(rec_expand(
                         visitor,
+                        // UNWRAP: if the features is a all, it must contain something
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     sym::any => cfgs.push(FeatureType::Any(rec_expand(
                         visitor,
+                        // UNWRAP: if the features is a any, it must contain something
                         meta.meta_item_list().unwrap().to_vec(),
                     ))),
                     _ => (),
@@ -607,11 +615,13 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 walk_item(self, i);
 
                 // estrarre dallo stack dati sulle cfg
+                // UNWRAP: popping the identifier pushed before the walk
                 let ident = self.statements.pop().unwrap();
-                assert_eq!(ident, AnnotatedType::FunctionDeclaration(
-                    i.id,
-                    i.ident.to_string(),
-                ));
+                assert_eq!(
+                    ident,
+                    AnnotatedType::FunctionDeclaration(i.id, i.ident.to_string(),)
+                );
+                // UNWRAP: popping the features pushed before the walk
                 let cfg = self.features.pop().unwrap().unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate e pesate
@@ -623,7 +633,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
                 {
                     self.a_graph.add_edge(
+                        // UNWRAP: it is impossible that a node is not in the hashmap
                         self.a_nodes.get(id).unwrap().0,
+                        // UNWRAP: it is impossible that a node is not in the hashmap
                         self.a_nodes.get(&i.id).unwrap().0,
                         Edge { weight: 0.0 },
                     );

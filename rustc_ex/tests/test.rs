@@ -101,7 +101,8 @@ fn test_first_artifacts_dot_same_output() -> Result<(), String> {
         Some("expected_artifacts_dot.stdout"),
         &["--print-artifacts-dot"],
     )?;
-    assert_eq!(output, expected_output.unwrap()); // Here, unwrap is "safe" because we want to panic if the expected output file is not present
+    // UNWRAP: if output is not present, the panic is expected
+    assert_eq!(output, expected_output.unwrap());
     Ok(())
 }
 
@@ -113,6 +114,7 @@ fn test_first_features_dot_same_output() -> Result<(), String> {
         &["--print-features-dot"],
     )?;
     // FIXME: l'ordine degli archi non è deterministico
-    assert_eq!(output, expected_output.unwrap()); // Here, unwrap is "safe" because we want to panic if the expected output file is not present
+    // UNWRAP: if output is not present, the panic is expected
+    assert_eq!(output, expected_output.unwrap());
     Ok(())
 }
