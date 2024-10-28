@@ -5,8 +5,9 @@ use std::{env, path::Path};
 
 const PLUGIN_NAME: &str = "rustc-ex";
 const TEST_MODE_FEATURE: &str = "test-mode";
-static SETUP: Once = Once::new();
+static INSTALL_PLUGIN: Once = Once::new();
 
+#[cfg(test)]
 /// Run the plugin with the `cargo` command
 ///
 /// This function will install the plugin (cargo-rustc-ex binary) in a temporary directory and run it with the `cargo` command.
@@ -24,7 +25,7 @@ fn run_with_cargo_bin(
     // Install the plugin
     let root_dir = env::temp_dir().join("rustc-ex");
     let current_dir = Path::new(".").canonicalize().unwrap();
-    SETUP.call_once(|| {
+    INSTALL_PLUGIN.call_once(|| {
         let mut cargo_cmd = Command::new("cargo");
         cargo_cmd.args(["install", "--path", ".", "--debug", "--locked", "--root"]);
         cargo_cmd.arg(&root_dir);
@@ -72,74 +73,465 @@ fn run_with_cargo_bin(
 }
 
 #[cfg(test)]
-use pretty_assertions::assert_eq;
+mod test_using_workspace_folders {
 
-#[test]
-fn test_version_output() -> Result<(), String> {
-    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["-V"])?;
-    assert_eq!(output, "0.1.0-nightly-2024-10-18\n");
-    Ok(())
-}
+    use crate::run_with_cargo_bin;
+    use pretty_assertions::assert_eq;
 
-#[test]
-fn test_help_output() -> Result<(), String> {
-    let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
-    for options in &[
-        "--print-crate",
-        "--print-artifacts-dot",
-        "--print-features-dot",
-    ] {
-        assert!(output.contains(options));
+    #[test]
+    fn test_version_output() -> Result<(), String> {
+        let (output, _) = run_with_cargo_bin("workspaces/first", None, &["-V"])?;
+        assert_eq!(output, "0.1.0-nightly-2024-10-18\n");
+        Ok(())
     }
-    Ok(())
+
+    #[test]
+    fn test_help_output() -> Result<(), String> {
+        let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
+        for options in &[
+            "--print-crate",
+            "--print-artifacts-dot",
+            "--print-features-dot",
+        ] {
+            assert!(output.contains(options));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn test_first_artifacts_dot_same_output() -> Result<(), String> {
+        let (output, expected_output) = run_with_cargo_bin(
+            "workspaces/first",
+            Some("expected_artifacts_dot.stdout"),
+            &["--print-artifacts-dot"],
+        )?;
+        // UNWRAP: if output is not present, the panic is expected
+        assert_eq!(output, expected_output.unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_first_features_dot_same_output() -> Result<(), String> {
+        let (output, expected_output) = run_with_cargo_bin(
+            "workspaces/first",
+            Some("expected_features_dot.stdout"),
+            &["--print-features-dot"],
+        )?;
+        // FIXME: l'ordine degli archi non è deterministico
+        // UNWRAP: if output is not present, the panic is expected
+        assert_eq!(output, expected_output.unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_simple_feature_weigths_artifacts_dot_same_output() -> Result<(), String> {
+        let (output, expected_output) = run_with_cargo_bin(
+            "workspaces/simple_feature_weights",
+            Some("expected_artifacts_dot.stdout"),
+            &["--print-artifacts-dot"],
+        )?;
+        // UNWRAP: if output is not present, the panic is expected
+        assert_eq!(output, expected_output.unwrap());
+        Ok(())
+    }
+
+    #[test]
+    fn test_simple_feature_weigths_features_dot_same_output() -> Result<(), String> {
+        let (output, expected_output) = run_with_cargo_bin(
+            "workspaces/simple_feature_weights",
+            Some("expected_features_dot.stdout"),
+            &["--print-features-dot"],
+        )?;
+        // FIXME: l'ordine degli archi non è deterministico
+        // UNWRAP: if output is not present, the panic is expected
+        assert_eq!(output, expected_output.unwrap());
+        Ok(())
+    }
 }
 
-#[test]
-fn test_first_artifacts_dot_same_output() -> Result<(), String> {
-    let (output, expected_output) = run_with_cargo_bin(
-        "workspaces/first",
-        Some("expected_artifacts_dot.stdout"),
-        &["--print-artifacts-dot"],
-    )?;
-    // UNWRAP: if output is not present, the panic is expected
-    assert_eq!(output, expected_output.unwrap());
-    Ok(())
-}
+#[cfg(test)]
+mod test_using_snippets {
 
-#[test]
-fn test_first_features_dot_same_output() -> Result<(), String> {
-    let (output, expected_output) = run_with_cargo_bin(
-        "workspaces/first",
-        Some("expected_features_dot.stdout"),
-        &["--print-features-dot"],
-    )?;
-    // FIXME: l'ordine degli archi non è deterministico
-    // UNWRAP: if output is not present, the panic is expected
-    assert_eq!(output, expected_output.unwrap());
-    Ok(())
-}
+    // use pretty_assertions::assert_eq;
+    use crate::run_with_cargo_bin;
+    use std::fs;
+    use std::path::Path;
 
-#[test]
-fn test_simple_feature_weigths_artifacts_dot_same_output() -> Result<(), String> {
-    let (output, expected_output) = run_with_cargo_bin(
-        "workspaces/simple_feature_weights",
-        Some("expected_artifacts_dot.stdout"),
-        &["--print-artifacts-dot"],
-    )?;
-    // UNWRAP: if output is not present, the panic is expected
-    assert_eq!(output, expected_output.unwrap());
-    Ok(())
-}
+    fn create_cargo_project_with_snippet(snippet: &str) -> Result<(), String> {
+        let current_dir = Path::new(".").canonicalize().unwrap();
+        let workspace_path = current_dir.join("tests").join("workspaces").join("temp");
+        fs::create_dir_all(&workspace_path).unwrap();
+        let lib_rs_path = workspace_path.join("src").join("lib.rs");
+        fs::create_dir_all(lib_rs_path.parent().unwrap()).unwrap();
+        fs::write(lib_rs_path, snippet).unwrap();
+        let manifest_path = workspace_path.join("Cargo.toml");
+        fs::write(
+            manifest_path,
+            r#"
+[package]
+name = "temp"
+version = "0.1.0"
+edition = "2018"
 
-#[test]
-fn test_simple_feature_weigths_features_dot_same_output() -> Result<(), String> {
-    let (output, expected_output) = run_with_cargo_bin(
-        "workspaces/simple_feature_weights",
-        Some("expected_features_dot.stdout"),
-        &["--print-features-dot"],
-    )?;
-    // FIXME: l'ordine degli archi non è deterministico
-    // UNWRAP: if output is not present, the panic is expected
-    assert_eq!(output, expected_output.unwrap());
-    Ok(())
+[dependencies]
+"#,
+        )
+        .unwrap();
+        Ok(())
+    }
+
+    fn remove_cargo_project_with_snippet() -> Result<(), String> {
+        let current_dir = Path::new(".").canonicalize().unwrap();
+        let workspace_path = current_dir.join("tests").join("workspaces").join("temp");
+        fs::remove_dir_all(workspace_path).unwrap();
+        Ok(())
+    }
+
+    fn run_with_cargo_bin_and_snippet(
+        snippet: &str,
+        plugin_args: &[&str],
+    ) -> Result<(String, Option<String>), String> {
+        create_cargo_project_with_snippet(snippet).unwrap();
+        let result = run_with_cargo_bin("workspaces/temp", None, plugin_args);
+        remove_cargo_project_with_snippet().unwrap();
+        result
+    }
+
+    #[test]
+    fn test_snippets_example() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(feature = "a")]
+fn a() {}
+
+#[cfg(all(feature = "b", feature = "c"))]
+fn all_b_c() {}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        assert!(output.contains("a"));
+        assert!(output.contains("b"));
+        assert!(output.contains("c"));
+
+        Ok(())
+    }
+
+    // =============================================
+
+    // Basic tests for the different combinations of cfg attributes
+    //
+    //     one not any all
+    // one  x   x   x   x
+    // not  x   x   x   x
+    // any  x   x   x   x
+    // all  x   x   x   x
+
+    // =============================================
+    // ==================== ONE ====================
+    // =============================================
+
+    #[test]
+    fn test_one_in_one() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(feature = "a")]
+fn a() {
+
+    #[cfg(feature = "b")]
+    fn b() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_one_in_not() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(not(feature = "a"))]
+fn not_a() {
+
+    #[cfg(feature = "b")]
+    fn b() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_one_in_any() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(any(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(feature = "c")]
+    fn c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_one_in_all() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(all(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(feature = "c")]
+    fn c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    // =============================================
+    // ==================== NOT ====================
+    // =============================================
+
+    #[test]
+    fn test_not_in_one() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(feature = "a")]
+fn a() {
+
+    #[cfg(not(feature = "b"))]
+    fn not_b() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_in_not() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(not(feature = "a"))]
+fn not_a() {
+
+    #[cfg(not(feature = "b"))]
+    fn not_b() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_in_any() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(any(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(not(feature = "c"))]
+    fn not_c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_not_in_all() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(all(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(not(feature = "c"))]
+    fn not_c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    // =============================================
+    // ==================== ALL ====================
+    // =============================================
+
+    #[test]
+    fn test_all_in_one() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(feature = "a")]
+fn a() {
+
+    #[cfg(all(feature = "b", feature = "c"))]
+    fn all_b_c() {}
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_all_in_not() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(not(feature = "a"))]
+fn not_a() {
+
+    #[cfg(all(feature = "b", feature = "c"))]
+    fn all_b_c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+        Ok(())
+    }
+
+    #[test]
+    fn test_all_in_any() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(any(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(all(feature = "c", feature = "d"))]
+    fn c_d() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_all_in_all() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(all(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(all(feature = "c", feature = "d"))]
+    fn c_d() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    // =============================================
+    // ==================== ANY ====================
+    // =============================================
+
+    #[test]
+    fn test_any_in_one() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(feature = "a")]
+fn a() {
+
+    #[cfg(any(feature = "b", feature = "c"))]
+    fn all_b_c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_any_in_not() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(not(feature = "a"))]
+fn not_a() {
+
+    #[cfg(any(feature = "b", feature = "c"))]
+    fn all_b_c() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+        Ok(())
+    }
+
+    #[test]
+    fn test_any_in_any() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(any(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(any(feature = "c", feature = "d"))]
+    fn c_d() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_any_in_all() -> Result<(), String> {
+        let snippet = r#"
+#[cfg(all(feature = "a", feature = "b"))]
+fn a_b() {
+
+    #[cfg(any(feature = "c", feature = "d"))]
+    fn c_d() {}
+
+}
+"#;
+        let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+        unimplemented!();
+
+        Ok(())
+    }
+
+    // =============================================
+
+    // Advanced tests for the different combinations of cfg attributes
+    //
+    //          all(any(one not) one) any(all(one not) one)
+    // one/not
+    // any
+    // all
 }
