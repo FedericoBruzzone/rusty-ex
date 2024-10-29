@@ -309,7 +309,11 @@ fn a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -327,7 +331,11 @@ fn not_a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"!a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -345,7 +353,14 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -363,7 +378,14 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
 
         Ok(())
     }
@@ -385,7 +407,11 @@ fn a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"!b\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -403,7 +429,11 @@ fn not_a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"!a\"]"));
+        assert!(output.contains("2 [ label=\"!b\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -421,7 +451,14 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"!c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -439,7 +476,14 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"!c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
 
         Ok(())
     }
@@ -460,7 +504,13 @@ fn a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"0.50\"]"));
 
         Ok(())
     }
@@ -478,7 +528,14 @@ fn not_a() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"!a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"0.50\"]"));
+
         Ok(())
     }
 
@@ -495,7 +552,17 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("4 [ label=\"d\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"0.50\"]"));
+        assert!(output.contains("4 -> 1 [ label=\"0.50\"]"));
+        assert!(output.contains("4 -> 2 [ label=\"0.50\"]"));
 
         Ok(())
     }
@@ -513,7 +580,17 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("4 [ label=\"d\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+        assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -529,13 +606,19 @@ fn a_b() {
 fn a() {
 
     #[cfg(any(feature = "b", feature = "c"))]
-    fn all_b_c() {}
+    fn any_b_c() {}
 
 }
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -547,13 +630,20 @@ fn a() {
 fn not_a() {
 
     #[cfg(any(feature = "b", feature = "c"))]
-    fn all_b_c() {}
+    fn any_b_c() {}
 
 }
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"!a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+
         Ok(())
     }
 
@@ -570,7 +660,17 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("4 [ label=\"d\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+        assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
+        assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
         Ok(())
     }
@@ -588,7 +688,17 @@ fn a_b() {
 "#;
         let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
-        unimplemented!();
+        assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+        assert!(output.contains("1 [ label=\"a\"]"));
+        assert!(output.contains("2 [ label=\"b\"]"));
+        assert!(output.contains("3 [ label=\"c\"]"));
+        assert!(output.contains("4 [ label=\"d\"]"));
+        assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+        assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
+        assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
+        assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+        assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
 
         Ok(())
     }
@@ -598,7 +708,8 @@ fn a_b() {
     // Advanced tests for the different combinations of cfg attributes
     //
     //          all(any(one not) one) any(all(one not) one)
-    // one/not
+    // one
+    // not
     // any
     // all
 }
