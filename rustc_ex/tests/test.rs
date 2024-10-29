@@ -80,14 +80,16 @@ mod test_using_workspace_folders {
 
     #[test]
     fn test_version_output() -> Result<(), String> {
-        let (output, _) = run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["-V"])?;
+        let (output, _) =
+            run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["-V"])?;
         assert_eq!(output, "0.1.0-nightly-2024-10-18\n");
         Ok(())
     }
 
     #[test]
     fn test_help_output() -> Result<(), String> {
-        let (output, _) = run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["--help"])?;
+        let (output, _) =
+            run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["--help"])?;
         for options in &[
             "--print-crate",
             "--print-artifacts-dot",

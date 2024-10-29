@@ -6,10 +6,10 @@ fn one() {
 
 }
 
-#[cfg(feature = "dd")]
+#[cfg(all(feature = "ee", not(feature = "ff")))]
 fn three() {
 
-    #[cfg(all(feature = "ee", feature = "ff"))]
+    #[cfg(feature = "dd")]
     fn four() {}
 
 }
