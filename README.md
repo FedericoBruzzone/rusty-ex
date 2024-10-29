@@ -46,7 +46,7 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG]
 > [!TIP]
 > Example:
 > ```bash
-> cd rustc_ex/tests/workspaces/first
+> cd rustc_ex/tests/workspaces/simple_feature_no_weights
 > cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-dot
 > ```
 
@@ -62,12 +62,12 @@ TODO: Find a way to pass to the driver the plugin args using "PLUGIN_ARGS" envir
 
 ```bash
 cd rustc_ex
-CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- ./tests/workspaces/first/src/main.rs --cfg 'feature="test"'
+CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- ./tests/workspaces/simple_feature_no_weights/src/main.rs --cfg 'feature="test"'
 ```
 
 Or:
 
 ```bash
-cd rustc_ex/tests/workspaces/first
+cd rustc_ex/tests/workspaces/simple_feature_no_weights
 CARGO_PRIMARY_PACKAGE=1 cargo run --manifest-path ../../../Cargo.toml --bin rustc-ex-driver -- ./src/main.rs
 ```

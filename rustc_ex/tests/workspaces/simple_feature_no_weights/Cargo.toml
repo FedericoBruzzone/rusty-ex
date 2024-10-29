@@ -1,5 +1,5 @@
 [package]
-name = "first"
+name = "simple_feature_no_weights"
 version = "0.1.0"
 edition = "2021"
 

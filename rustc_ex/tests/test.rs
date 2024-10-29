@@ -14,7 +14,7 @@ static INSTALL_PLUGIN: Once = Once::new();
 /// The plugin will be installed only once.
 ///
 /// # Arguments
-/// * `cargo_project_name` - The name of the cargo project in the `tests` directory. E.g. `workspaces/first`
+/// * `cargo_project_name` - The name of the cargo project in the `tests` directory. E.g. `workspaces/simple_feature_no_weights`
 /// * `expected_outout_name` - The name of the file containing the expected output in the cargo project directory. E.g. `expected_output.stdout`
 /// * `plugin_args` - The arguments to pass to the plugin
 fn run_with_cargo_bin(
@@ -80,14 +80,14 @@ mod test_using_workspace_folders {
 
     #[test]
     fn test_version_output() -> Result<(), String> {
-        let (output, _) = run_with_cargo_bin("workspaces/first", None, &["-V"])?;
+        let (output, _) = run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["-V"])?;
         assert_eq!(output, "0.1.0-nightly-2024-10-18\n");
         Ok(())
     }
 
     #[test]
     fn test_help_output() -> Result<(), String> {
-        let (output, _) = run_with_cargo_bin("workspaces/first", None, &["--help"])?;
+        let (output, _) = run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["--help"])?;
         for options in &[
             "--print-crate",
             "--print-artifacts-dot",
@@ -99,9 +99,9 @@ mod test_using_workspace_folders {
     }
 
     #[test]
-    fn test_first_artifacts_dot_same_output() -> Result<(), String> {
+    fn test_simple_feature_no_weigths_artifacts_dot_same_output() -> Result<(), String> {
         let (output, expected_output) = run_with_cargo_bin(
-            "workspaces/first",
+            "workspaces/simple_feature_no_weights",
             Some("expected_artifacts_dot.stdout"),
             &["--print-artifacts-dot"],
         )?;
@@ -111,9 +111,9 @@ mod test_using_workspace_folders {
     }
 
     #[test]
-    fn test_first_features_dot_same_output() -> Result<(), String> {
+    fn test_simple_feature_no_weigths_features_dot_same_output() -> Result<(), String> {
         let (output, expected_output) = run_with_cargo_bin(
-            "workspaces/first",
+            "workspaces/simple_feature_no_weights",
             Some("expected_features_dot.stdout"),
             &["--print-features-dot"],
         )?;
