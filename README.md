@@ -22,7 +22,7 @@ Run tests on all example workspaces:
 
 ```bash
 cd rustc_ex
-cargo test -- --test-threads=1 --nocapture
+cargo test -- --test-threads=1
 ```
 
 ### Cli (`cargo` wrapper)
@@ -32,6 +32,7 @@ Available plugin args:
 - `--print-artifacts-dot`: print the artifacts graph in DOT format
 - `--print-features-dot`: print the features graph in DOT format
 - `--print-crate`: print the crate AST
+- `--print-centrality`: print the (some) centrality of the features graph
 
 Use the cargo plugin:
 
