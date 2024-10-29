@@ -411,7 +411,7 @@ impl CollectVisitor {
             "{:?}",
             Dot::with_attr_getters(
                 &self.f_graph,
-                &[Config::EdgeNoLabel],
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
             )
@@ -429,7 +429,7 @@ impl CollectVisitor {
             |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
                 format!(
-                    "label=\"{}\n({})\"",
+                    "label=\"{} #[{}]\"",
                     node.1.borrow().ident,
                     CollectVisitor::features_to_string(&node.1.borrow().features.0)
                 )
@@ -439,7 +439,7 @@ impl CollectVisitor {
             "{:?}",
             Dot::with_attr_getters(
                 &self.a_graph,
-                &[Config::EdgeNoLabel],
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
             )
