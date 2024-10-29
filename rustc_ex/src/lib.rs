@@ -341,14 +341,14 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
-        for (_from_node_id, (from_node_index, from_artifact)) in self.a_nodes.iter() {
-            let from_features = from_artifact.borrow().features.1.clone();
+        for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
+            let child_features = child_artifact.borrow().features.1.clone();
 
-            for to_node_index in self.a_graph.neighbors(*from_node_index) {
-                let to_node_id = self.a_graph[to_node_index].borrow()._node_id;
-                let to_features = self
+            for parent_node_index in self.a_graph.neighbors(*child_node_index) {
+                let parent_node_id = self.a_graph[parent_node_index].borrow()._node_id;
+                let parent_features = self
                     .a_nodes
-                    .get(&to_node_id)
+                    .get(&parent_node_id)
                     .expect("Error: cannot find artifact node creating edge")
                     .1
                     .borrow()
@@ -357,30 +357,30 @@ impl CollectVisitor {
                     .clone();
 
                 for WeightedFeature {
-                    feature: f_feat,
-                    weight: f_weight,
-                } in &from_features
+                    feature: child_feat,
+                    weight: child_weight,
+                } in &child_features
                 {
                     for WeightedFeature {
-                        feature: t_feat,
-                        weight: t_weight,
-                    } in &to_features
+                        feature: parent_feat,
+                        weight: parent_weight,
+                    } in &parent_features
                     {
                         // TODO: scegliere se mantenere il raddoppio del peso se tutti il padre è `all`
                         let double_if_all_parent = true;
 
-                        let weight = if double_if_all_parent && *f_weight < 1.0 {
-                            *t_weight * 2.0
+                        let weight = if double_if_all_parent && *parent_weight < 1.0 {
+                            *child_weight * 2.0
                         } else {
-                            *t_weight
+                            *child_weight
                         };
                         self.f_graph.add_edge(
                             self.f_nodes
-                                .get(&f_feat)
+                                .get(child_feat)
                                 .expect("Error: cannot find feature node creating features graph")
                                 .0,
                             self.f_nodes
-                                .get(&t_feat)
+                                .get(parent_feat)
                                 .expect("Error: cannot find feature node creating features graph")
                                 .0,
                             Edge { weight },
@@ -529,7 +529,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         }
 
         fn create_feature_node(visitor: &mut CollectVisitor, feature: Feature) {
-            if let None = visitor.f_nodes.get(&feature) {
+            if !visitor.f_nodes.contains_key(&feature) {
                 let feat_node = Rc::new(RefCell::new(feature.clone()));
                 let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
                 visitor
@@ -634,7 +634,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Non viene utilizzato `visit_fn` per analizzare le funzioni dato che gli attributi
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
-    fn visit_item(&mut self, i: &'ast Item) {
+    fn visit_item(&mut self, cur_item: &'ast Item) {
         fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
             let mut weights = Vec::new();
 
@@ -672,27 +672,27 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             weights
         }
 
-        match i.kind {
+        match cur_item.kind {
             ItemKind::Fn(..) => {
                 // creazione nodo del grafo (e cella Rc)
                 let mem_node = Rc::new(RefCell::new(Artifact {
-                    ident: i.ident.to_string(),
-                    _node_id: i.id,
+                    ident: cur_item.ident.to_string(),
+                    _node_id: cur_item.id,
                     features: (Vec::new(), Vec::new()),
                 }));
                 let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
                 self.a_nodes
-                    .insert(i.id, (graph_node, Rc::clone(&mem_node)));
+                    .insert(cur_item.id, (graph_node, Rc::clone(&mem_node)));
 
                 // aggiornamento stack per trovare cfg
                 self.statements.push(AnnotatedType::FunctionDeclaration(
-                    i.id,
-                    i.ident.to_string(),
+                    cur_item.id,
+                    cur_item.ident.to_string(),
                 ));
                 self.features.push(None); // dobbiamo ancora visitare gli attributes, quindi la feature è None
 
                 // visitare (anche) gli attributi (quindi le cfg)
-                walk_item(self, i);
+                walk_item(self, cur_item);
 
                 // estrarre dallo stack dati sulle cfg
                 let ident = self
@@ -701,7 +701,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     .expect("Error: stack is empty while in item");
                 assert_eq!(
                     ident,
-                    AnnotatedType::FunctionDeclaration(i.id, i.ident.to_string(),)
+                    AnnotatedType::FunctionDeclaration(cur_item.id, cur_item.ident.to_string(),)
                 );
                 let cfg = self
                     .features
@@ -710,20 +710,20 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     .unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate e pesate
-                self.a_nodes.entry(i.id).and_modify(|e| {
+                self.a_nodes.entry(cur_item.id).and_modify(|e| {
                     e.1.borrow_mut().features = (cfg.clone(), rec_weight_feature(cfg.clone()));
                 });
 
                 // creare arco del grafo, al padre o allo scope global
                 match self.statements.last() {
-                    Some(AnnotatedType::FunctionDeclaration(id, _ident)) => {
+                    Some(AnnotatedType::FunctionDeclaration(parent_id, _ident)) => {
                         self.a_graph.add_edge(
                             self.a_nodes
-                                .get(&i.id)
+                                .get(&cur_item.id)
                                 .expect("Error: cannot find artifact node creating artifacts graph")
                                 .0,
                             self.a_nodes
-                                .get(id)
+                                .get(parent_id)
                                 .expect("Error: cannot find artifact node creating artifacts graph")
                                 .0,
                             Edge { weight: 0.0 },
@@ -732,7 +732,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     None => {
                         self.a_graph.add_edge(
                             self.a_nodes
-                                .get(&i.id)
+                                .get(&cur_item.id)
                                 .expect("Error: cannot find artifact node creating artifacts graph")
                                 .0,
                             self.a_nodes
@@ -766,7 +766,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             // ItemKind::MacroDef(macro_def) => walk_item(self, i),
             // ItemKind::Delegation(delegation) => walk_item(self, i),
             // ItemKind::DelegationMac(delegation_mac) => walk_item(self, i),
-            _ => walk_item(self, i),
+            _ => walk_item(self, cur_item),
         }
     }
 }
