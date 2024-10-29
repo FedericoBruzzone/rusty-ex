@@ -236,7 +236,7 @@ struct WeightedFeature {
 struct Artifact {
     ident: String,
     _node_id: NodeId,
-    features: (Vec<FeatureType>, Vec<WeightedFeature>),
+    features: Vec<FeatureType>,
 }
 #[derive(Clone, Debug)]
 struct Edge {
@@ -298,16 +298,7 @@ impl CollectVisitor {
         let global_node = Rc::new(RefCell::new(Artifact {
             ident: GLOBAL_FEATURE_NAME.to_string(),
             _node_id: NodeId::from_u32(GLOBAL_NODE_ID),
-            features: (
-                Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
-                Vec::from([WeightedFeature {
-                    feature: Feature {
-                        name: GLOBAL_FEATURE_NAME.to_string(),
-                        not: false,
-                    },
-                    weight: 1.0,
-                }]),
-            ),
+            features: Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
         }));
         let graph_node = self.a_graph.add_node(Rc::clone(&global_node));
         self.a_nodes.insert(
@@ -341,20 +332,57 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
+        fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
+            let mut weights = Vec::new();
+
+            for feat in features {
+                match feat {
+                    FeatureType::Feat(name) => weights.push(WeightedFeature {
+                        feature: Feature { name, not: false },
+                        weight: 1.0,
+                    }),
+                    FeatureType::Not(nested) => {
+                        weights.extend(rec_weight_feature(nested).into_iter().map(
+                            |WeightedFeature { feature, weight }| WeightedFeature {
+                                feature: Feature {
+                                    name: feature.name,
+                                    not: !feature.not,
+                                },
+                                weight,
+                            },
+                        ))
+                    }
+                    FeatureType::All(nested) => {
+                        let size = nested.len() as f64;
+                        let rec = rec_weight_feature(nested);
+                        weights.extend(rec.into_iter().map(
+                            |WeightedFeature { feature, weight }| WeightedFeature {
+                                feature,
+                                weight: weight / size,
+                            },
+                        ))
+                    }
+                    FeatureType::Any(nested) => weights.extend(rec_weight_feature(nested)),
+                }
+            }
+
+            weights
+        }
+
         for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
-            let child_features = child_artifact.borrow().features.1.clone();
+            let child_features = rec_weight_feature(child_artifact.borrow().features.clone());
 
             for parent_node_index in self.a_graph.neighbors(*child_node_index) {
                 let parent_node_id = self.a_graph[parent_node_index].borrow()._node_id;
-                let parent_features = self
-                    .a_nodes
-                    .get(&parent_node_id)
-                    .expect("Error: cannot find artifact node creating edge")
-                    .1
-                    .borrow()
-                    .features
-                    .1
-                    .clone();
+                let parent_features = rec_weight_feature(
+                    self.a_nodes
+                        .get(&parent_node_id)
+                        .expect("Error: cannot find artifact node creating edge")
+                        .1
+                        .borrow()
+                        .features
+                        .clone(),
+                );
 
                 for WeightedFeature {
                     feature: child_feat,
@@ -431,7 +459,7 @@ impl CollectVisitor {
                 format!(
                     "label=\"{} #[{}]\"",
                     node.1.borrow().ident,
-                    CollectVisitor::features_to_string(&node.1.borrow().features.0)
+                    CollectVisitor::features_to_string(&node.1.borrow().features)
                 )
             };
 
@@ -635,50 +663,13 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, cur_item: &'ast Item) {
-        fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
-            let mut weights = Vec::new();
-
-            for feat in features {
-                match feat {
-                    FeatureType::Feat(name) => weights.push(WeightedFeature {
-                        feature: Feature { name, not: false },
-                        weight: 1.0,
-                    }),
-                    FeatureType::Not(nested) => {
-                        weights.extend(rec_weight_feature(nested).into_iter().map(
-                            |WeightedFeature { feature, weight }| WeightedFeature {
-                                feature: Feature {
-                                    name: feature.name,
-                                    not: !feature.not,
-                                },
-                                weight,
-                            },
-                        ))
-                    }
-                    FeatureType::All(nested) => {
-                        let size = nested.len() as f64;
-                        let rec = rec_weight_feature(nested);
-                        weights.extend(rec.into_iter().map(
-                            |WeightedFeature { feature, weight }| WeightedFeature {
-                                feature,
-                                weight: weight / size,
-                            },
-                        ))
-                    }
-                    FeatureType::Any(nested) => weights.extend(rec_weight_feature(nested)),
-                }
-            }
-
-            weights
-        }
-
         match cur_item.kind {
             ItemKind::Fn(..) => {
                 // creazione nodo del grafo (e cella Rc)
                 let mem_node = Rc::new(RefCell::new(Artifact {
                     ident: cur_item.ident.to_string(),
                     _node_id: cur_item.id,
-                    features: (Vec::new(), Vec::new()),
+                    features: Vec::new(),
                 }));
                 let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
                 self.a_nodes
@@ -711,7 +702,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                 // aggiornare il nodo con le cfg trovate e pesate
                 self.a_nodes.entry(cur_item.id).and_modify(|e| {
-                    e.1.borrow_mut().features = (cfg.clone(), rec_weight_feature(cfg.clone()));
+                    e.1.borrow_mut().features = cfg.clone();
                 });
 
                 // creare arco del grafo, al padre o allo scope global
