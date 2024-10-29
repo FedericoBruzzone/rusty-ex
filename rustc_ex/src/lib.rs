@@ -45,6 +45,10 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_crate: bool,
 
+    /// Pass --print-centrality to print some feature graph centrality
+    #[clap(long)]
+    print_centrality: bool,
+
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
     //                     ^^^^^^^^^^^^^^^^^^^^ these are cargo args
@@ -121,6 +125,9 @@ impl PrintAstCallbacks {
         }
         if self.args.print_features_dot {
             collector.print_f_graph_dot();
+        }
+        if self.args.print_centrality {
+            collector.print_centrality();
         }
     }
 }
@@ -437,6 +444,33 @@ impl CollectVisitor {
                 &get_node_attr,
             )
         )
+    }
+
+    fn print_centrality(&self) {
+        let katz: rustworkx_core::Result<Option<Vec<f64>>> =
+            rustworkx_core::centrality::katz_centrality(
+                &self.f_graph,
+                |e| Ok(e.weight().weight),
+                None,
+                None,
+                None,
+                None,
+                None,
+            );
+
+        let closeness = rustworkx_core::centrality::closeness_centrality(&self.f_graph, false);
+
+        let eigenvector: rustworkx_core::Result<Option<Vec<f64>>> =
+            rustworkx_core::centrality::eigenvector_centrality(
+                &self.f_graph,
+                |e| Ok(e.weight().weight),
+                None,
+                Some(1e-2),
+            );
+
+        println!("katz {:?}", katz.unwrap().unwrap());
+        println!("clos {:?}", closeness);
+        println!("eige {:?}", eigenvector);
     }
 }
 
