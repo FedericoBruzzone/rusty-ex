@@ -26,6 +26,9 @@ use std::{fs, io};
 // and it must be exported for use by the CLI/driver binaries.
 pub struct RustcEx;
 
+const GLOBAL_NODE_ID: u32 = 4294967040;
+const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
+
 // To parse CLI arguments, we use Clap for this example. But that
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Debug, Default)]
@@ -185,6 +188,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     a_nodes: HashMap::new(),
                     a_graph: graph::DiGraph::new(),
                 };
+
+                collector.init_global_scope();
                 collector.visit_crate(krate);
                 collector.build_f_graph();
 
@@ -218,7 +223,7 @@ struct Feature {
 #[derive(Clone, Debug)]
 struct WeightedFeature {
     feature: Feature,
-    weight: f32,
+    weight: f64,
 }
 #[derive(Clone, Debug)]
 struct Artifact {
@@ -228,7 +233,7 @@ struct Artifact {
 }
 #[derive(Clone, Debug)]
 struct Edge {
-    weight: f32,
+    weight: f64,
 }
 
 /// Visitor per la visita :) dell'AST
@@ -280,6 +285,44 @@ impl FeatureType {
 }
 
 impl CollectVisitor {
+    /// Inizializza lo scope globale (feature e artefatto padre di tutti)
+    fn init_global_scope(&mut self) {
+        // Scope globale per gli artefatti
+        let global_node = Rc::new(RefCell::new(Artifact {
+            ident: GLOBAL_FEATURE_NAME.to_string(),
+            _node_id: NodeId::from_u32(GLOBAL_NODE_ID),
+            features: (
+                Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
+                Vec::from([WeightedFeature {
+                    feature: Feature {
+                        name: GLOBAL_FEATURE_NAME.to_string(),
+                        not: false,
+                    },
+                    weight: 1.0,
+                }]),
+            ),
+        }));
+        let graph_node = self.a_graph.add_node(Rc::clone(&global_node));
+        self.a_nodes.insert(
+            NodeId::from_u32(GLOBAL_NODE_ID),
+            (graph_node, Rc::clone(&global_node)),
+        );
+
+        // Scope globale per le features
+        let global_node = Rc::new(RefCell::new(Feature {
+            name: GLOBAL_FEATURE_NAME.to_string(),
+            not: false,
+        }));
+        let graph_node = self.f_graph.add_node(Rc::clone(&global_node));
+        self.f_nodes.insert(
+            Feature {
+                name: GLOBAL_FEATURE_NAME.to_string(),
+                not: false,
+            },
+            (graph_node, Rc::clone(&global_node)),
+        );
+    }
+
     /// Lista di features a Stringa
     fn features_to_string(features: &[FeatureType]) -> String {
         features
@@ -581,12 +624,12 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         ))
                     }
                     FeatureType::All(nested) => {
-                        let size: f32 = nested.len() as f32;
+                        let size = nested.len() as f64;
                         let rec = rec_weight_feature(nested);
                         weights.extend(rec.into_iter().map(
                             |WeightedFeature { feature, weight }| WeightedFeature {
                                 feature,
-                                weight: weight / size as f32,
+                                weight: weight / size,
                             },
                         ))
                     }
@@ -614,7 +657,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     i.id,
                     i.ident.to_string(),
                 ));
-                self.features.push(None);
+                self.features.push(None); // dobbiamo ancora visitare gli attributes, quindi la feature è None
 
                 // visitare (anche) gli attributi (quindi le cfg)
                 walk_item(self, i);
@@ -639,20 +682,36 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     e.1.borrow_mut().features = (cfg.clone(), rec_weight_feature(cfg.clone()));
                 });
 
-                // creare eventuale arco del grafo
-                if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
-                {
-                    self.a_graph.add_edge(
-                        self.a_nodes
-                            .get(id)
-                            .expect("Error: cannot find artifact node creating artifacts graph")
-                            .0,
-                        self.a_nodes
-                            .get(&i.id)
-                            .expect("Error: cannot find artifact node creating artifacts graph")
-                            .0,
-                        Edge { weight: 0.0 },
-                    );
+                // creare arco del grafo, al padre o allo scope global
+                match self.statements.last() {
+                    Some(AnnotatedType::FunctionDeclaration(id, _ident)) => {
+                        self.a_graph.add_edge(
+                            self.a_nodes
+                                .get(&i.id)
+                                .expect("Error: cannot find artifact node creating artifacts graph")
+                                .0,
+                            self.a_nodes
+                                .get(id)
+                                .expect("Error: cannot find artifact node creating artifacts graph")
+                                .0,
+                            Edge { weight: 0.0 },
+                        );
+                    }
+                    None => {
+                        self.a_graph.add_edge(
+                            self.a_nodes
+                                .get(&i.id)
+                                .expect("Error: cannot find artifact node creating artifacts graph")
+                                .0,
+                            self.a_nodes
+                                .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+                                .expect("Error: cannot find artifact node creating artifacts graph")
+                                .0,
+                            Edge { weight: 0.0 },
+                        );
+                    }
+                    // TODO: è possibile arrivare in questo caso? forse va fatta la stessa cosa che con Some(...)
+                    _ => (),
                 }
             }
 
