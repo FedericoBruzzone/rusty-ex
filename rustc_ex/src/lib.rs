@@ -168,8 +168,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     ) -> rustc_driver::Compilation {
         queries
             .global_ctxt()
-            // UNWRAP: without context out analysis is impossible
-            .unwrap()
+            .expect("Error: global context not found")
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
                 // estrarre l'AST
                 let resolver_and_krate = tcx.resolver_for_lowering().borrow();
@@ -300,8 +299,7 @@ impl CollectVisitor {
                 let to_features = self
                     .a_nodes
                     .get(&to_node_id)
-                    // UNWRAP: it is impossible that a feature is not in the hashmap
-                    .unwrap()
+                    .expect("Error: cannot find artifact node creating edge")
                     .1
                     .borrow()
                     .features
@@ -319,10 +317,14 @@ impl CollectVisitor {
                     } in &to_features
                     {
                         self.f_graph.add_edge(
-                            // UNWRAP: it is impossible that a feature is not in the hashmap
-                            self.f_nodes.get(&f_feat).unwrap().0,
-                            // UNWRAP: it is impossible that a feature is not in the hashmap
-                            self.f_nodes.get(&t_feat).unwrap().0,
+                            self.f_nodes
+                                .get(&f_feat)
+                                .expect("Error: cannot find feature node creating features graph")
+                                .0,
+                            self.f_nodes
+                                .get(&t_feat)
+                                .expect("Error: cannot find feature node creating features graph")
+                                .0,
                             Edge { weight: *t_weight },
                         );
                     }
@@ -438,18 +440,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     }
                     sym::not => cfgs.push(FeatureType::Not(rec_expand(
                         visitor,
-                        // UNWRAP: if the features is a not, it must contain something
-                        meta.meta_item_list().unwrap().to_vec(),
+                        meta.meta_item_list()
+                            .expect("Error: empty `not` feature attribute")
+                            .to_vec(),
                     ))),
                     sym::all => cfgs.push(FeatureType::All(rec_expand(
                         visitor,
-                        // UNWRAP: if the features is a all, it must contain something
-                        meta.meta_item_list().unwrap().to_vec(),
+                        meta.meta_item_list()
+                            .expect("Error: empty `all` feature attribute")
+                            .to_vec(),
                     ))),
                     sym::any => cfgs.push(FeatureType::Any(rec_expand(
                         visitor,
-                        // UNWRAP: if the features is a any, it must contain something
-                        meta.meta_item_list().unwrap().to_vec(),
+                        meta.meta_item_list()
+                            .expect("Error: empty `any` feature attribute")
+                            .to_vec(),
                     ))),
                     _ => (),
                 }
@@ -615,14 +620,19 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 walk_item(self, i);
 
                 // estrarre dallo stack dati sulle cfg
-                // UNWRAP: popping the identifier pushed before the walk
-                let ident = self.statements.pop().unwrap();
+                let ident = self
+                    .statements
+                    .pop()
+                    .expect("Error: stack is empty while in item");
                 assert_eq!(
                     ident,
                     AnnotatedType::FunctionDeclaration(i.id, i.ident.to_string(),)
                 );
-                // UNWRAP: popping the features pushed before the walk
-                let cfg = self.features.pop().unwrap().unwrap_or_default();
+                let cfg = self
+                    .features
+                    .pop()
+                    .expect("Error: stack is empty while in item")
+                    .unwrap_or_default();
 
                 // aggiornare il nodo con le cfg trovate e pesate
                 self.a_nodes.entry(i.id).and_modify(|e| {
@@ -633,10 +643,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 if let Some(AnnotatedType::FunctionDeclaration(id, _ident)) = self.statements.last()
                 {
                     self.a_graph.add_edge(
-                        // UNWRAP: it is impossible that a node is not in the hashmap
-                        self.a_nodes.get(id).unwrap().0,
-                        // UNWRAP: it is impossible that a node is not in the hashmap
-                        self.a_nodes.get(&i.id).unwrap().0,
+                        self.a_nodes
+                            .get(id)
+                            .expect("Error: cannot find artifact node creating artifacts graph")
+                            .0,
+                        self.a_nodes
+                            .get(&i.id)
+                            .expect("Error: cannot find artifact node creating artifacts graph")
+                            .0,
                         Edge { weight: 0.0 },
                     );
                 }
