@@ -481,6 +481,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         fn rec_expand(
             visitor: &mut CollectVisitor,
             nested_meta: Vec<MetaItemInner>,
+            not: bool,
         ) -> Vec<FeatureType> {
             let mut cfgs = Vec::new();
 
@@ -492,34 +493,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                         let feature = Feature {
                             name: name.clone(),
-                            not: false,
+                            not,
                         };
-                        let not_feature = Feature {
-                            name: name.clone(),
-                            not: true,
-                        };
-
-                        // creazione nodi feature e not feature se non esistono già
-                        if let None = visitor.f_nodes.get(&feature) {
-                            assert_eq!(None, visitor.f_nodes.get(&not_feature));
-
-                            // feature
-                            let feat_node = Rc::new(RefCell::new(feature.clone()));
-                            let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
-                            visitor
-                                .f_nodes
-                                .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
-
-                            // not feature
-                            let feat_node = Rc::new(RefCell::new(not_feature.clone()));
-                            let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
-                            visitor
-                                .f_nodes
-                                .insert(not_feature.clone(), (graph_node, Rc::clone(&feat_node)));
-                        }
-
+                        create_feature_node(visitor, feature.clone());
                         assert!(visitor.f_nodes.contains_key(&feature));
-                        assert!(visitor.f_nodes.contains_key(&not_feature));
 
                         cfgs.push(FeatureType::Feat(name))
                     }
@@ -528,18 +505,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         meta.meta_item_list()
                             .expect("Error: empty `not` feature attribute")
                             .to_vec(),
+                        !not,
                     ))),
                     sym::all => cfgs.push(FeatureType::All(rec_expand(
                         visitor,
                         meta.meta_item_list()
                             .expect("Error: empty `all` feature attribute")
                             .to_vec(),
+                        not,
                     ))),
                     sym::any => cfgs.push(FeatureType::Any(rec_expand(
                         visitor,
                         meta.meta_item_list()
                             .expect("Error: empty `any` feature attribute")
                             .to_vec(),
+                        not,
                     ))),
                     _ => (),
                 }
@@ -548,11 +528,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             cfgs
         }
 
+        fn create_feature_node(visitor: &mut CollectVisitor, feature: Feature) {
+            if let None = visitor.f_nodes.get(&feature) {
+                let feat_node = Rc::new(RefCell::new(feature.clone()));
+                let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
+                visitor
+                    .f_nodes
+                    .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
+            }
+        }
+
         if let Some(meta) = attr.meta() {
             if meta.name_or_empty() == Symbol::intern("feat") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     self.features.pop();
-                    let feat = Some(rec_expand(self, list.to_vec()));
+                    let feat = Some(rec_expand(self, list.to_vec(), false));
                     self.features.push(feat);
                 }
             }
