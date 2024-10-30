@@ -323,6 +323,84 @@ impl CollectVisitor {
         );
     }
 
+    /// Crea l'artefatto (nodo) e lo aggiunge al grafo degli artefatti e alla hashmap dei nodi degli artefatti
+    fn create_artifact(&mut self, ident: String, node_id: NodeId, features: Vec<FeatureType>) {
+        // creazione nodo del grafo (e cella Rc)
+        let mem_node = Rc::new(RefCell::new(Artifact {
+            ident,
+            _node_id: node_id,
+            features,
+        }));
+        let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
+        self.a_nodes
+            .insert(node_id, (graph_node, Rc::clone(&mem_node)));
+    }
+
+    /// Aggiorna l'artefatto con le feature trovate
+    fn update_artifact_features(&mut self, node_id: NodeId, features: Vec<FeatureType>) {
+        // aggiornare il nodo con le cfg trovate e pesate
+        self.a_nodes.entry(node_id).and_modify(|e| {
+            e.1.try_borrow_mut()
+                .expect("Error: borrow mut failed on artifacts nodes update")
+                .features = features.clone();
+        });
+
+        // creare arco del grafo, al padre o allo scope global
+        match self.statements.last() {
+            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
+            | Some(AnnotatedType::Expression(parent_id)) => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&node_id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(parent_id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
+                );
+            }
+            None => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&node_id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
+                );
+            }
+        }
+    }
+
+    /// Inizializza un nuovo artefatto e aggiorna gli stack degli statement e delle feature
+    fn pre_walk(&mut self, ident: String, node_id: NodeId, stmt: AnnotatedType) {
+        self.create_artifact(ident, node_id, Vec::new());
+        self.statements.push(stmt);
+        self.features.push(None);
+    }
+
+    /// Estrae le feature dell'artefatto dagli stack e aggiorna il grafo degli artefatti
+    fn post_walk(&mut self, node_id: NodeId, stmt: AnnotatedType) {
+        // estrarre dallo stack dati sulle cfg
+        let ident = self
+            .statements
+            .pop()
+            .expect("Error: stack is empty while in expression");
+        assert_eq!(ident, stmt);
+        let cfg = self
+            .features
+            .pop()
+            .expect("Error: stack is empty while in expression")
+            .unwrap_or_default();
+
+        self.update_artifact_features(node_id, cfg);
+    }
+
     /// Lista di features a Stringa
     fn features_to_string(features: &[FeatureType]) -> String {
         features
@@ -529,18 +607,6 @@ impl CollectVisitor {
         println!("clos {:?}", closeness);
         println!("eige {:?}", eigenvector);
     }
-
-    fn create_artifact(&mut self, ident: String, node_id: NodeId, features: Vec<FeatureType>) {
-        // creazione nodo del grafo (e cella Rc)
-        let mem_node = Rc::new(RefCell::new(Artifact {
-            ident,
-            _node_id: node_id,
-            features,
-        }));
-        let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
-        self.a_nodes
-            .insert(node_id, (graph_node, Rc::clone(&mem_node)));
-    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
@@ -624,62 +690,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// stack degli statements per evitare di far crescere quello delle feature senza
     /// che ci sia un corrispettivo statement
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
-        self.create_artifact("__EXPRESSION__".to_string(), cur_ex.id, Vec::new());
+        // FIXME: usare un Optional al posto di __EXPRESSION__
+        let ident = "__EXPRESSION__".to_string();
+        let node_id = cur_ex.id;
+        let stmt = AnnotatedType::Expression(node_id);
 
-        self.statements.push(AnnotatedType::Expression(cur_ex.id));
-        self.features.push(None);
-
+        self.pre_walk(ident, node_id, stmt.clone());
         walk_expr(self, cur_ex);
-
-        // estrarre dallo stack dati sulle cfg
-        let ident = self
-            .statements
-            .pop()
-            .expect("Error: stack is empty while in expression");
-        assert_eq!(ident, AnnotatedType::Expression(cur_ex.id));
-        let cfg = self
-            .features
-            .pop()
-            .expect("Error: stack is empty while in expression")
-            .unwrap_or_default();
-
-        // aggiornare il nodo con le cfg trovate e pesate
-        self.a_nodes.entry(cur_ex.id).and_modify(|e| {
-            e.1.try_borrow_mut()
-                .expect("Error: borrow mut failed on artifacts nodes update")
-                .features = cfg.clone();
-        });
-
-        // creare arco del grafo, al padre o allo scope global
-        match self.statements.last() {
-            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
-            | Some(AnnotatedType::Expression(parent_id)) => {
-                self.a_graph.add_edge(
-                    self.a_nodes
-                        .get(&cur_ex.id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    self.a_nodes
-                        .get(parent_id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    Edge { weight: 0.0 },
-                );
-            }
-            None => {
-                self.a_graph.add_edge(
-                    self.a_nodes
-                        .get(&cur_ex.id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    self.a_nodes
-                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    Edge { weight: 0.0 },
-                );
-            }
-        }
+        self.post_walk(node_id, stmt);
     }
 
     /// Visita item: le dichiarazione di funzioni sono item, dentro `walk_item` vengono
@@ -689,69 +707,12 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, cur_item: &'ast Item) {
-        self.create_artifact(cur_item.ident.to_string(), cur_item.id, Vec::new());
+        let ident = cur_item.ident.to_string();
+        let node_id = cur_item.id;
+        let stmt = AnnotatedType::FunctionDeclaration(node_id, ident.clone());
 
-        // aggiornamento stack per trovare cfg
-        self.statements.push(AnnotatedType::FunctionDeclaration(
-            cur_item.id,
-            cur_item.ident.to_string(),
-        ));
-        self.features.push(None); // dobbiamo ancora visitare gli attributes, quindi la feature è None
-
-        // visitare (anche) gli attributi (quindi le cfg)
+        self.pre_walk(ident, node_id, stmt.clone());
         walk_item(self, cur_item);
-
-        // estrarre dallo stack dati sulle cfg
-        let ident = self
-            .statements
-            .pop()
-            .expect("Error: stack is empty while in item");
-        assert_eq!(
-            ident,
-            AnnotatedType::FunctionDeclaration(cur_item.id, cur_item.ident.to_string(),)
-        );
-        let cfg = self
-            .features
-            .pop()
-            .expect("Error: stack is empty while in item")
-            .unwrap_or_default();
-
-        // aggiornare il nodo con le cfg trovate e pesate
-        self.a_nodes.entry(cur_item.id).and_modify(|e| {
-            e.1.try_borrow_mut()
-                .expect("Error: borrow mut failed on artifacts nodes update")
-                .features = cfg.clone();
-        });
-
-        // creare arco del grafo, al padre o allo scope global
-        match self.statements.last() {
-            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
-            | Some(AnnotatedType::Expression(parent_id)) => {
-                self.a_graph.add_edge(
-                    self.a_nodes
-                        .get(&cur_item.id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    self.a_nodes
-                        .get(parent_id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    Edge { weight: 0.0 },
-                );
-            }
-            None => {
-                self.a_graph.add_edge(
-                    self.a_nodes
-                        .get(&cur_item.id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    self.a_nodes
-                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
-                        .expect("Error: cannot find artifact node creating artifacts graph")
-                        .0,
-                    Edge { weight: 0.0 },
-                );
-            }
-        }
+        self.post_walk(node_id, stmt);
     }
 }
