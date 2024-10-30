@@ -413,17 +413,9 @@ impl CollectVisitor {
                 {
                     for WeightedFeature {
                         feature: parent_feat,
-                        weight: parent_weight,
+                        weight: _parent_weight,
                     } in &parent_features
                     {
-                        // TODO: scegliere se mantenere il raddoppio del peso se tutti il padre è `all`
-                        let double_if_all_parent = true;
-
-                        let weight = if double_if_all_parent && *parent_weight < 1.0 {
-                            *child_weight * 2.0
-                        } else {
-                            *child_weight
-                        };
                         self.f_graph.add_edge(
                             self.f_nodes
                                 .get(child_feat)
@@ -433,7 +425,9 @@ impl CollectVisitor {
                                 .get(parent_feat)
                                 .expect("Error: cannot find feature node creating features graph")
                                 .0,
-                            Edge { weight },
+                            Edge {
+                                weight: *child_weight,
+                            },
                         );
                     }
                 }

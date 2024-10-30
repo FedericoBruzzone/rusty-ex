@@ -133,8 +133,8 @@ fn test_simple_feature_weigths_features_dot() -> Result<(), String> {
     assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("4 -> 0 [ label=\"0.50\"]"));
     assert!(output.contains("5 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("6 -> 4 [ label=\"2.00\"]"));
-    assert!(output.contains("6 -> 5 [ label=\"2.00\"]"));
+    assert!(output.contains("6 -> 4 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 5 [ label=\"1.00\"]"));
 
     Ok(())
 }

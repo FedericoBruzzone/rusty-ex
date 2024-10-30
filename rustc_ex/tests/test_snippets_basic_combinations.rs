@@ -75,8 +75,8 @@ fn test_one_in_all() -> Result<(), String> {
     assert!(output.contains("3 [ label=\"c\"]"));
     assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
     assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -141,8 +141,8 @@ fn test_not_in_all() -> Result<(), String> {
     assert!(output.contains("3 [ label=\"!c\"]"));
     assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
     assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -215,10 +215,10 @@ fn test_all_in_all() -> Result<(), String> {
     assert!(output.contains("4 [ label=\"d\"]"));
     assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
     assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 1 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"0.50\"]"));
 
     Ok(())
 }
@@ -291,10 +291,10 @@ fn test_any_in_all() -> Result<(), String> {
     assert!(output.contains("4 [ label=\"d\"]"));
     assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
     assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"2.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"2.00\"]"));
-    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
-    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
