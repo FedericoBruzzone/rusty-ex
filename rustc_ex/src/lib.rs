@@ -370,16 +370,26 @@ impl CollectVisitor {
         }
 
         for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
-            let child_features = rec_weight_feature(child_artifact.borrow().features.clone());
+            let child_features = rec_weight_feature(
+                child_artifact
+                    .try_borrow()
+                    .expect("Error: borrow failed on child features creating features graph")
+                    .features
+                    .clone(),
+            );
 
             for parent_node_index in self.a_graph.neighbors(*child_node_index) {
-                let parent_node_id = self.a_graph[parent_node_index].borrow()._node_id;
+                let parent_node_id = self.a_graph[parent_node_index]
+                    .try_borrow()
+                    .expect("Error: borrow failed on parent nodeid creating features graph")
+                    ._node_id;
                 let parent_features = rec_weight_feature(
                     self.a_nodes
                         .get(&parent_node_id)
                         .expect("Error: cannot find artifact node creating edge")
                         .1
-                        .borrow()
+                        .try_borrow()
+                        .expect("Error: borrow failed on parent features creating features graph")
                         .features
                         .clone(),
                 );
@@ -429,9 +439,13 @@ impl CollectVisitor {
         let get_node_attr =
             |_g: &graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<Feature>>)| {
-                match node.1.borrow().not {
-                    true => format!("label=\"!{}\"", node.1.borrow().name),
-                    false => format!("label=\"{}\"", node.1.borrow().name),
+                let feature = node
+                    .1
+                    .try_borrow()
+                    .expect("Error: borrow failed on feature graph print");
+                match feature.not {
+                    true => format!("label=\"!{}\"", feature.name),
+                    false => format!("label=\"{}\"", feature.name),
                 }
             };
 
@@ -458,8 +472,17 @@ impl CollectVisitor {
              node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
                 format!(
                     "label=\"{} #[{}]\"",
-                    node.1.borrow().ident,
-                    CollectVisitor::features_to_string(&node.1.borrow().features)
+                    node.1
+                        .try_borrow()
+                        .expect("Error: borrow failed on artifact graph print")
+                        .ident,
+                    CollectVisitor::features_to_string(
+                        &node
+                            .1
+                            .try_borrow()
+                            .expect("Error: borrow failed on artifact graph print")
+                            .features
+                    )
                 )
             };
 
@@ -702,7 +725,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
                 // aggiornare il nodo con le cfg trovate e pesate
                 self.a_nodes.entry(cur_item.id).and_modify(|e| {
-                    e.1.borrow_mut().features = cfg.clone();
+                    e.1.try_borrow_mut()
+                        .expect("Error: borrow mut failed on artifacts nodes update")
+                        .features = cfg.clone();
                 });
 
                 // creare arco del grafo, al padre o allo scope global
