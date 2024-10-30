@@ -523,6 +523,18 @@ impl CollectVisitor {
         println!("clos {:?}", closeness);
         println!("eige {:?}", eigenvector);
     }
+
+    fn create_artifact(&mut self, ident: String, node_id: NodeId, features: Vec<FeatureType>) {
+        // creazione nodo del grafo (e cella Rc)
+        let mem_node = Rc::new(RefCell::new(Artifact {
+            ident,
+            _node_id: node_id,
+            features,
+        }));
+        let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
+        self.a_nodes
+            .insert(node_id, (graph_node, Rc::clone(&mem_node)));
+    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
@@ -626,57 +638,6 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 self.statements.last()
             );
         }
-
-        // TODO: tenere tutte le espressioni che possono avere features
-        match ex.kind {
-            // ExprKind::Array(thin_vec) => todo!(),
-            // ExprKind::ConstBlock(anon_const) => todo!(),
-            // ExprKind::Call(p, thin_vec) => todo!(),
-            // ExprKind::MethodCall(method_call) => todo!(),
-            // ExprKind::Tup(thin_vec) => todo!(),
-            // ExprKind::Binary(spanned, p, p1) => todo!(),
-            // ExprKind::Unary(un_op, p) => todo!(),
-            // ExprKind::Lit(lit) => todo!(),
-            // ExprKind::Cast(p, p1) => todo!(),
-            // ExprKind::Type(p, p1) => todo!(),
-            // ExprKind::Let(p, p1, span, recovered) => todo!(),
-            // ExprKind::If(p, p1, p2) => todo!(),
-            // ExprKind::While(p, p1, label) => todo!(),
-            // ExprKind::ForLoop { pat, iter, body, label, kind } => todo!(),
-            // ExprKind::Loop(p, label, span) => todo!(),
-            // ExprKind::Match(p, thin_vec, match_kind) => todo!(),
-            // ExprKind::Closure(closure) => todo!(),
-            // ExprKind::Block(p, label) => todo!(),
-            // ExprKind::Gen(capture_by, p, gen_block_kind, span) => todo!(),
-            // ExprKind::Await(p, span) => todo!(),
-            // ExprKind::TryBlock(p) => todo!(),
-            // ExprKind::Assign(p, p1, span) => todo!(),
-            // ExprKind::AssignOp(spanned, p, p1) => todo!(),
-            // ExprKind::Field(p, ident) => todo!(),
-            // ExprKind::Index(p, p1, span) => todo!(),
-            // ExprKind::Range(p, p1, range_limits) => todo!(),
-            // ExprKind::Underscore => todo!(),
-            // ExprKind::Path(p, path) => todo!(),
-            // ExprKind::AddrOf(borrow_kind, mutability, p) => todo!(),
-            // ExprKind::Break(label, p) => todo!(),
-            // ExprKind::Continue(label) => todo!(),
-            // ExprKind::Ret(p) => todo!(),
-            // ExprKind::InlineAsm(p) => todo!(),
-            // ExprKind::OffsetOf(p, p1) => todo!(),
-            // ExprKind::MacCall(p) => todo!(),
-            // ExprKind::Struct(p) => todo!(),
-            // ExprKind::Repeat(p, anon_const) => todo!(),
-            // ExprKind::Paren(p) => todo!(),
-            // ExprKind::Try(p) => todo!(),
-            // ExprKind::Yield(p) => todo!(),
-            // ExprKind::Yeet(p) => todo!(),
-            // ExprKind::Become(p) => todo!(),
-            // ExprKind::IncludedBytes(rc) => todo!(),
-            // ExprKind::FormatArgs(p) => todo!(),
-            // ExprKind::Err(error_guaranteed) => todo!(),
-            // ExprKind::Dummy => todo!(),
-            _ => (),
-        }
     }
 
     /// Visita item: le dichiarazione di funzioni sono item, dentro `walk_item` vengono
@@ -686,103 +647,70 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, cur_item: &'ast Item) {
-        match cur_item.kind {
-            ItemKind::Fn(..) => {
-                // creazione nodo del grafo (e cella Rc)
-                let mem_node = Rc::new(RefCell::new(Artifact {
-                    ident: cur_item.ident.to_string(),
-                    _node_id: cur_item.id,
-                    features: Vec::new(),
-                }));
-                let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
-                self.a_nodes
-                    .insert(cur_item.id, (graph_node, Rc::clone(&mem_node)));
+        self.create_artifact(cur_item.ident.to_string(), cur_item.id, Vec::new());
 
-                // aggiornamento stack per trovare cfg
-                self.statements.push(AnnotatedType::FunctionDeclaration(
-                    cur_item.id,
-                    cur_item.ident.to_string(),
-                ));
-                self.features.push(None); // dobbiamo ancora visitare gli attributes, quindi la feature è None
+        // aggiornamento stack per trovare cfg
+        self.statements.push(AnnotatedType::FunctionDeclaration(
+            cur_item.id,
+            cur_item.ident.to_string(),
+        ));
+        self.features.push(None); // dobbiamo ancora visitare gli attributes, quindi la feature è None
 
-                // visitare (anche) gli attributi (quindi le cfg)
-                walk_item(self, cur_item);
+        // visitare (anche) gli attributi (quindi le cfg)
+        walk_item(self, cur_item);
 
-                // estrarre dallo stack dati sulle cfg
-                let ident = self
-                    .statements
-                    .pop()
-                    .expect("Error: stack is empty while in item");
-                assert_eq!(
-                    ident,
-                    AnnotatedType::FunctionDeclaration(cur_item.id, cur_item.ident.to_string(),)
+        // estrarre dallo stack dati sulle cfg
+        let ident = self
+            .statements
+            .pop()
+            .expect("Error: stack is empty while in item");
+        assert_eq!(
+            ident,
+            AnnotatedType::FunctionDeclaration(cur_item.id, cur_item.ident.to_string(),)
+        );
+        let cfg = self
+            .features
+            .pop()
+            .expect("Error: stack is empty while in item")
+            .unwrap_or_default();
+
+        // aggiornare il nodo con le cfg trovate e pesate
+        self.a_nodes.entry(cur_item.id).and_modify(|e| {
+            e.1.try_borrow_mut()
+                .expect("Error: borrow mut failed on artifacts nodes update")
+                .features = cfg.clone();
+        });
+
+        // creare arco del grafo, al padre o allo scope global
+        match self.statements.last() {
+            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
+            | Some(AnnotatedType::Expression(parent_id)) => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&cur_item.id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(parent_id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
                 );
-                let cfg = self
-                    .features
-                    .pop()
-                    .expect("Error: stack is empty while in item")
-                    .unwrap_or_default();
-
-                // aggiornare il nodo con le cfg trovate e pesate
-                self.a_nodes.entry(cur_item.id).and_modify(|e| {
-                    e.1.try_borrow_mut()
-                        .expect("Error: borrow mut failed on artifacts nodes update")
-                        .features = cfg.clone();
-                });
-
-                // creare arco del grafo, al padre o allo scope global
-                match self.statements.last() {
-                    Some(AnnotatedType::FunctionDeclaration(parent_id, _ident)) => {
-                        self.a_graph.add_edge(
-                            self.a_nodes
-                                .get(&cur_item.id)
-                                .expect("Error: cannot find artifact node creating artifacts graph")
-                                .0,
-                            self.a_nodes
-                                .get(parent_id)
-                                .expect("Error: cannot find artifact node creating artifacts graph")
-                                .0,
-                            Edge { weight: 0.0 },
-                        );
-                    }
-                    None => {
-                        self.a_graph.add_edge(
-                            self.a_nodes
-                                .get(&cur_item.id)
-                                .expect("Error: cannot find artifact node creating artifacts graph")
-                                .0,
-                            self.a_nodes
-                                .get(&NodeId::from_u32(GLOBAL_NODE_ID))
-                                .expect("Error: cannot find artifact node creating artifacts graph")
-                                .0,
-                            Edge { weight: 0.0 },
-                        );
-                    }
-                    // TODO: è possibile arrivare in questo caso? forse va fatta la stessa cosa che con Some(...)
-                    _ => (),
-                }
+            }
+            None => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&cur_item.id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
+                );
             }
 
-            // TODO: tenere tutti gli item che possono avere features
-            // ItemKind::ExternCrate(symbol) => walk_item(self, i),
-            // ItemKind::Use(use_tree) => walk_item(self, i),
-            // ItemKind::Static(static_item) => walk_item(self, i),
-            // ItemKind::Const(const_item) => walk_item(self, i),
-            // ItemKind::Mod(safety, mod_kind) => walk_item(self, i),
-            // ItemKind::ForeignMod(foreign_mod) => walk_item(self, i),
-            // ItemKind::GlobalAsm(inline_asm) => walk_item(self, i),
-            // ItemKind::TyAlias(ty_alias) => walk_item(self, i),
-            // ItemKind::Enum(enum_def, generics) => walk_item(self, i),
-            // ItemKind::Struct(variant_data, generics) => walk_item(self, i),
-            // ItemKind::Union(variant_data, generics) => walk_item(self, i),
-            // ItemKind::Trait(_) => walk_item(self, i),
-            // ItemKind::TraitAlias(generics, vec) => walk_item(self, i),
-            // ItemKind::Impl(_) => walk_item(self, i),
-            // ItemKind::MacCall(p) => walk_item(self, i),
-            // ItemKind::MacroDef(macro_def) => walk_item(self, i),
-            // ItemKind::Delegation(delegation) => walk_item(self, i),
-            // ItemKind::DelegationMac(delegation_mac) => walk_item(self, i),
-            _ => walk_item(self, cur_item),
         }
     }
 }
