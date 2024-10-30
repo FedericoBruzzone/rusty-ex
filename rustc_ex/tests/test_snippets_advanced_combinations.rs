@@ -20,27 +20,91 @@ const FOLDER: &str = "tests/snippets/advanced_combinations";
 // =============================================
 
 #[test]
-#[ignore]
 fn test_one_in_all() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_all.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"2.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_not_in_all() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_all.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"!d\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"2.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_any_in_all() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_all.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("5 [ label=\"e\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"2.00\"]"));
+    assert!(output.contains("5 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"2.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_all_in_all() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_all.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("5 [ label=\"e\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
+
+    Ok(())
 }
 
 // =============================================
@@ -48,25 +112,93 @@ fn test_all_in_all() -> Result<(), String> {
 // =============================================
 
 #[test]
-#[ignore]
 fn test_one_in_any() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_any.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    // TODO: riguardare questo esempio, i 2.0 sono giusti (logicamente)?
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_not_in_any() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_any.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    // TODO: riguardare questo esempio, i 2.0 sono giusti (logicamente)?
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"!d\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_any_in_any() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_any.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    // TODO: riguardare questo esempio, i 2.0 e gli 1.0 sono giusti (logicamente)?
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("5 [ label=\"e\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 1 [ label=\"2.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"2.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
+
+    Ok(())
 }
 
 #[test]
-#[ignore]
 fn test_all_in_any() -> Result<(), String> {
-    unimplemented!()
+    let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_any.rs")).unwrap();
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+
+    // TODO: riguardare questo esempio, i 0.5 e gli 1.0 sono giusti (logicamente)?
+    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"a\"]"));
+    assert!(output.contains("2 [ label=\"!b\"]"));
+    assert!(output.contains("3 [ label=\"c\"]"));
+    assert!(output.contains("4 [ label=\"d\"]"));
+    assert!(output.contains("5 [ label=\"e\"]"));
+    assert!(output.contains("1 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"0.50\"]"));
+    assert!(output.contains("5 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"0.50\"]"));
+
+    Ok(())
 }
