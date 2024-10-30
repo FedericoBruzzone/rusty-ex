@@ -627,26 +627,62 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visita espressione: (quasi) tutto può essere annotato e quindi va pushato sullo
     /// stack degli statements per evitare di far crescere quello delle feature senza
     /// che ci sia un corrispettivo statement
-    fn visit_expr(&mut self, ex: &'ast Expr) {
-        self.statements.push(AnnotatedType::Expression(ex.id));
+    fn visit_expr(&mut self, cur_ex: &'ast Expr) {
+        self.create_artifact("__EXPRESSION__".to_string(), cur_ex.id, Vec::new());
+
+        self.statements.push(AnnotatedType::Expression(cur_ex.id));
         self.features.push(None);
 
-        walk_expr(self, ex);
+        walk_expr(self, cur_ex);
 
-        if let (Some(AnnotatedType::Expression(id)), Some(_cfg)) =
-            (self.statements.pop(), self.features.pop())
-        {
-            assert_eq!(
-                id, ex.id,
-                "Stack not synced. Expected Expression {:?}, found Expression {:?}",
-                ex.id, id
-            );
-        } else {
-            panic!(
-                "Stack not synced. Expected Expression {:?}, found {:?}",
-                ex.id,
-                self.statements.last()
-            );
+        // estrarre dallo stack dati sulle cfg
+        let ident = self
+            .statements
+            .pop()
+            .expect("Error: stack is empty while in expression");
+        assert_eq!(ident, AnnotatedType::Expression(cur_ex.id));
+        let cfg = self
+            .features
+            .pop()
+            .expect("Error: stack is empty while in expression")
+            .unwrap_or_default();
+
+        // aggiornare il nodo con le cfg trovate e pesate
+        self.a_nodes.entry(cur_ex.id).and_modify(|e| {
+            e.1.try_borrow_mut()
+                .expect("Error: borrow mut failed on artifacts nodes update")
+                .features = cfg.clone();
+        });
+
+        // creare arco del grafo, al padre o allo scope global
+        match self.statements.last() {
+            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
+            | Some(AnnotatedType::Expression(parent_id)) => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&cur_ex.id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(parent_id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
+                );
+            }
+            None => {
+                self.a_graph.add_edge(
+                    self.a_nodes
+                        .get(&cur_ex.id)
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    self.a_nodes
+                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .0,
+                    Edge { weight: 0.0 },
+                );
+            }
         }
     }
 
@@ -720,7 +756,6 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     Edge { weight: 0.0 },
                 );
             }
-
         }
     }
 }
