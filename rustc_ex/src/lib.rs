@@ -144,8 +144,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
             fn read_file(&self, path: &std::path::Path) -> io::Result<String> {
                 let content = fs::read_to_string(path)?;
-                let modified_content = content.replace("#[cfg(", "#[feat(");
-                Ok(modified_content)
+                Ok(content
+                    .replace("#[cfg(", "#[rustcex_cfg(")
+                    // TODO: if cfg!
+                    .replace("cfg!", "rustcex_cfg"))
             }
 
             fn read_binary_file(&self, _path: &std::path::Path) -> io::Result<Arc<[u8]>> {
@@ -612,7 +614,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         }
 
         if let Some(meta) = attr.meta() {
-            if meta.name_or_empty() == Symbol::intern("feat") {
+            if meta.name_or_empty() == Symbol::intern("rustcex_cfg") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     self.features.pop();
                     let feat = Some(rec_expand(self, list.to_vec(), false));
