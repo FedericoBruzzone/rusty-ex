@@ -383,7 +383,7 @@ impl CollectVisitor {
                     .try_borrow()
                     .expect("Error: borrow failed on parent nodeid creating features graph")
                     ._node_id;
-                let parent_features = rec_weight_feature(
+                let mut parent_features = rec_weight_feature(
                     self.a_nodes
                         .get(&parent_node_id)
                         .expect("Error: cannot find artifact node creating edge")
@@ -393,6 +393,16 @@ impl CollectVisitor {
                         .features
                         .clone(),
                 );
+
+                if parent_features.is_empty() {
+                    parent_features.push(WeightedFeature {
+                        feature: Feature {
+                            name: GLOBAL_FEATURE_NAME.to_string(),
+                            not: false,
+                        },
+                        weight: 1.0,
+                    });
+                }
 
                 for WeightedFeature {
                     feature: child_feat,
