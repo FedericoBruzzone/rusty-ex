@@ -102,6 +102,7 @@ pub fn remove_cargo_project_with_snippet() -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)] // FIXME: https://github.com/rust-lang/rust/issues/46379
 pub fn run_with_cargo_bin_and_snippet(
     snippet: &str,
     plugin_args: &[&str],
