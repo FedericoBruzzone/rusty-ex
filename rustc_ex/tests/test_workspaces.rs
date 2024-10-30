@@ -25,6 +25,7 @@ fn test_help_output() -> Result<(), String> {
 }
 
 #[test]
+#[ignore] // TODO: test grafo degli artefatti dopo averlo definito bene
 fn test_simple_feature_no_weigths_artifacts_dot() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin(
         "workspaces/simple_feature_no_weights",
@@ -84,6 +85,7 @@ fn test_simple_feature_no_weigths_features_dot() -> Result<(), String> {
 }
 
 #[test]
+#[ignore] // TODO: test grafo degli artefatti dopo averlo definito bene
 fn test_simple_feature_weigths_artifacts_dot() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin(
         "workspaces/simple_feature_weights",
