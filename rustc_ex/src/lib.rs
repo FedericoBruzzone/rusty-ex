@@ -498,7 +498,6 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
-
         // FIXME: se un nodo è figlio di un nodo senza feature, allora viene aggiunto un arco verso GLOBAL,
         // anche se il padre del nodo senza feature è un nodo con feature
         //
@@ -739,6 +738,34 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
         self.pre_walk(ident, node_id, stmt.clone());
         walk_item(self, cur_item);
+        self.post_walk(node_id, stmt);
+    }
+
+    /// Visita i campi di una definizione, come i campi di una struct
+    fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
+        let ident = None;
+        let node_id = cur_field.id;
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
+
+        self.pre_walk(ident, node_id, stmt.clone());
+        walk_field_def(self, cur_field);
+        self.post_walk(node_id, stmt);
+    }
+
+    /// Visita uno statement, come gli assegamenti
+    fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
+        let ident = None;
+        let node_id = cur_stmt.id;
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
+
+        self.pre_walk(ident, node_id, stmt.clone());
+        walk_stmt(self, cur_stmt);
         self.post_walk(node_id, stmt);
     }
 }
