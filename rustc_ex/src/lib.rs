@@ -237,8 +237,8 @@ struct WeightedFeature {
 }
 #[derive(Clone, Debug)]
 struct Artifact {
-    ident: String,
-    _node_id: NodeId,
+    ident: Option<String>,
+    node_id: NodeId,
     features: Vec<FeatureType>,
 }
 #[derive(Clone, Debug)]
@@ -298,11 +298,16 @@ impl std::fmt::Display for FeatureType {
 
 impl CollectVisitor {
     /// Crea l'artefatto (nodo) e lo aggiunge al grafo degli artefatti e alla hashmap dei nodi degli artefatti
-    fn create_artifact(&mut self, ident: String, node_id: NodeId, features: Vec<FeatureType>) {
+    fn create_artifact(
+        &mut self,
+        ident: Option<String>,
+        node_id: NodeId,
+        features: Vec<FeatureType>,
+    ) {
         // creazione nodo del grafo (e cella Rc)
         let mem_node = Rc::new(RefCell::new(Artifact {
             ident,
-            _node_id: node_id,
+            node_id,
             features,
         }));
         let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
@@ -323,7 +328,7 @@ impl CollectVisitor {
     /// Inizializza lo scope globale (feature e artefatto padre di tutti)
     fn init_global_scope(&mut self) {
         self.create_artifact(
-            GLOBAL_FEATURE_NAME.to_string(),
+            Some(GLOBAL_FEATURE_NAME.to_string()),
             NodeId::from_u32(GLOBAL_NODE_ID),
             Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
         );
@@ -466,7 +471,7 @@ impl CollectVisitor {
     }
 
     /// Inizializza un nuovo artefatto e aggiorna gli stack degli statement e delle feature
-    fn pre_walk(&mut self, ident: String, node_id: NodeId, stmt: AnnotatedType) {
+    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: AnnotatedType) {
         self.create_artifact(ident, node_id, Vec::new());
         self.statements.push(stmt);
         self.features.push(None);
@@ -504,7 +509,7 @@ impl CollectVisitor {
                 let parent_node_id = self.a_graph[parent_node_index]
                     .try_borrow()
                     .expect("Error: borrow failed on parent nodeid creating features graph")
-                    ._node_id;
+                    .node_id;
                 let mut parent_features = CollectVisitor::rec_weight_feature(
                     self.a_nodes
                         .get(&parent_node_id)
@@ -605,20 +610,21 @@ impl CollectVisitor {
         let get_node_attr =
             |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
-                format!(
-                    "label=\"{} #[{}]\"",
-                    node.1
-                        .try_borrow()
-                        .expect("Error: borrow failed on artifact graph print")
-                        .ident,
-                    CollectVisitor::features_to_string(
-                        &node
-                            .1
-                            .try_borrow()
-                            .expect("Error: borrow failed on artifact graph print")
-                            .features
-                    )
-                )
+                let artifact = node
+                    .1
+                    .try_borrow()
+                    .expect("Error: borrow failed on artifact graph print");
+                match &artifact.ident {
+                    Some(ident) => format!(
+                        "label=\"{} #[{}]\"",
+                        ident,
+                        CollectVisitor::features_to_string(&artifact.features)
+                    ),
+                    None => format!(
+                        "label=\"#[{}]\"",
+                        CollectVisitor::features_to_string(&artifact.features)
+                    ),
+                }
             };
 
         println!(
@@ -680,8 +686,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// stack degli statements per evitare di far crescere quello delle feature senza
     /// che ci sia un corrispettivo statement
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
-        // FIXME: usare un Optional al posto di __EXPRESSION__
-        let ident = "__EXPRESSION__".to_string();
+        let ident = None;
         let node_id = cur_ex.id;
         let stmt = AnnotatedType::Expression(node_id);
 
@@ -701,7 +706,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let node_id = cur_item.id;
         let stmt = AnnotatedType::FunctionDeclaration(node_id, ident.clone());
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(Some(ident), node_id, stmt.clone());
         walk_item(self, cur_item);
         self.post_walk(node_id, stmt);
     }
