@@ -22,12 +22,13 @@ use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use std::{fs, io};
 
+// Costanti per la feature globale
+const GLOBAL_NODE_ID: u32 = 4294967040;
+const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
+
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
 pub struct RustcEx;
-
-const GLOBAL_NODE_ID: u32 = 4294967040;
-const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 
 // To parse CLI arguments, we use Clap for this example. But that
 // detail is up to you.
@@ -294,35 +295,6 @@ impl FeatureType {
 }
 
 impl CollectVisitor {
-    /// Inizializza lo scope globale (feature e artefatto padre di tutti)
-    fn init_global_scope(&mut self) {
-        // Scope globale per gli artefatti
-        let global_node = Rc::new(RefCell::new(Artifact {
-            ident: GLOBAL_FEATURE_NAME.to_string(),
-            _node_id: NodeId::from_u32(GLOBAL_NODE_ID),
-            features: Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
-        }));
-        let graph_node = self.a_graph.add_node(Rc::clone(&global_node));
-        self.a_nodes.insert(
-            NodeId::from_u32(GLOBAL_NODE_ID),
-            (graph_node, Rc::clone(&global_node)),
-        );
-
-        // Scope globale per le features
-        let global_node = Rc::new(RefCell::new(Feature {
-            name: GLOBAL_FEATURE_NAME.to_string(),
-            not: false,
-        }));
-        let graph_node = self.f_graph.add_node(Rc::clone(&global_node));
-        self.f_nodes.insert(
-            Feature {
-                name: GLOBAL_FEATURE_NAME.to_string(),
-                not: false,
-            },
-            (graph_node, Rc::clone(&global_node)),
-        );
-    }
-
     /// Crea l'artefatto (nodo) e lo aggiunge al grafo degli artefatti e alla hashmap dei nodi degli artefatti
     fn create_artifact(&mut self, ident: String, node_id: NodeId, features: Vec<FeatureType>) {
         // creazione nodo del grafo (e cella Rc)
@@ -334,6 +306,120 @@ impl CollectVisitor {
         let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
         self.a_nodes
             .insert(node_id, (graph_node, Rc::clone(&mem_node)));
+    }
+
+    /// Crea una feature (nodo) e la aggiunge al grafo delle features e alla hashmap dei nodi delle features
+    fn create_feature_node(&mut self, feature: Feature) {
+        if !self.f_nodes.contains_key(&feature) {
+            let feat_node = Rc::new(RefCell::new(feature.clone()));
+            let graph_node = self.f_graph.add_node(Rc::clone(&feat_node));
+            self.f_nodes
+                .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
+        }
+    }
+
+    /// Inizializza lo scope globale (feature e artefatto padre di tutti)
+    fn init_global_scope(&mut self) {
+        self.create_artifact(
+            GLOBAL_FEATURE_NAME.to_string(),
+            NodeId::from_u32(GLOBAL_NODE_ID),
+            Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
+        );
+
+        self.create_feature_node(Feature {
+            name: GLOBAL_FEATURE_NAME.to_string(),
+            not: false,
+        });
+    }
+
+    /// Visita ricorsiva delle feature nestate (all, any, not)
+    fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<FeatureType> {
+        let mut cfgs = Vec::new();
+
+        for meta in nested_meta {
+            match meta.name_or_empty() {
+                sym::feature => {
+                    // FIXME: esistono meta con `value_str` a None?
+                    let name = meta.value_str().unwrap().to_string();
+
+                    let feature = Feature {
+                        name: name.clone(),
+                        not,
+                    };
+                    self.create_feature_node(feature.clone());
+                    assert!(self.f_nodes.contains_key(&feature));
+
+                    cfgs.push(FeatureType::Feat(name))
+                }
+                sym::not => cfgs.push(FeatureType::Not(
+                    self.rec_expand(
+                        meta.meta_item_list()
+                            .expect("Error: empty `not` feature attribute")
+                            .to_vec(),
+                        !not,
+                    ),
+                )),
+                sym::all => cfgs.push(FeatureType::All(
+                    self.rec_expand(
+                        meta.meta_item_list()
+                            .expect("Error: empty `all` feature attribute")
+                            .to_vec(),
+                        not,
+                    ),
+                )),
+                sym::any => cfgs.push(FeatureType::Any(
+                    self.rec_expand(
+                        meta.meta_item_list()
+                            .expect("Error: empty `any` feature attribute")
+                            .to_vec(),
+                        not,
+                    ),
+                )),
+                _ => (),
+            }
+        }
+
+        cfgs
+    }
+
+    /// Pesa le features "orizzontalmente", considerando solo i "fratelli"
+    fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
+        let mut weights = Vec::new();
+
+        for feat in features {
+            match feat {
+                FeatureType::Feat(name) => weights.push(WeightedFeature {
+                    feature: Feature { name, not: false },
+                    weight: 1.0,
+                }),
+                FeatureType::Not(nested) => {
+                    weights.extend(CollectVisitor::rec_weight_feature(nested).into_iter().map(
+                        |WeightedFeature { feature, weight }| WeightedFeature {
+                            feature: Feature {
+                                name: feature.name,
+                                not: !feature.not,
+                            },
+                            weight,
+                        },
+                    ))
+                }
+                FeatureType::All(nested) => {
+                    let size = nested.len() as f64;
+                    let rec = CollectVisitor::rec_weight_feature(nested);
+                    weights.extend(rec.into_iter().map(|WeightedFeature { feature, weight }| {
+                        WeightedFeature {
+                            feature,
+                            weight: weight / size,
+                        }
+                    }))
+                }
+                FeatureType::Any(nested) => {
+                    weights.extend(CollectVisitor::rec_weight_feature(nested))
+                }
+            }
+        }
+
+        weights
     }
 
     /// Aggiorna l'artefatto con le feature trovate
@@ -401,56 +487,10 @@ impl CollectVisitor {
         self.update_artifact_features(node_id, cfg);
     }
 
-    /// Lista di features a Stringa
-    fn features_to_string(features: &[FeatureType]) -> String {
-        features
-            .iter()
-            .map(|f| f.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
-        fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
-            let mut weights = Vec::new();
-
-            for feat in features {
-                match feat {
-                    FeatureType::Feat(name) => weights.push(WeightedFeature {
-                        feature: Feature { name, not: false },
-                        weight: 1.0,
-                    }),
-                    FeatureType::Not(nested) => {
-                        weights.extend(rec_weight_feature(nested).into_iter().map(
-                            |WeightedFeature { feature, weight }| WeightedFeature {
-                                feature: Feature {
-                                    name: feature.name,
-                                    not: !feature.not,
-                                },
-                                weight,
-                            },
-                        ))
-                    }
-                    FeatureType::All(nested) => {
-                        let size = nested.len() as f64;
-                        let rec = rec_weight_feature(nested);
-                        weights.extend(rec.into_iter().map(
-                            |WeightedFeature { feature, weight }| WeightedFeature {
-                                feature,
-                                weight: weight / size,
-                            },
-                        ))
-                    }
-                    FeatureType::Any(nested) => weights.extend(rec_weight_feature(nested)),
-                }
-            }
-
-            weights
-        }
-
         for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
-            let child_features = rec_weight_feature(
+            let child_features = CollectVisitor::rec_weight_feature(
                 child_artifact
                     .try_borrow()
                     .expect("Error: borrow failed on child features creating features graph")
@@ -463,7 +503,7 @@ impl CollectVisitor {
                     .try_borrow()
                     .expect("Error: borrow failed on parent nodeid creating features graph")
                     ._node_id;
-                let mut parent_features = rec_weight_feature(
+                let mut parent_features = CollectVisitor::rec_weight_feature(
                     self.a_nodes
                         .get(&parent_node_id)
                         .expect("Error: cannot find artifact node creating edge")
@@ -511,6 +551,15 @@ impl CollectVisitor {
                 }
             }
         }
+    }
+
+    /// Lista di features a Stringa
+    fn features_to_string(features: &[FeatureType]) -> String {
+        features
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// Stampa il grafo degli artefatti in formato DOT (per Graphviz)
@@ -612,72 +661,11 @@ impl CollectVisitor {
 impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
-        /// Visita ricorsiva delle feature nestate (all, any, not)
-        fn rec_expand(
-            visitor: &mut CollectVisitor,
-            nested_meta: Vec<MetaItemInner>,
-            not: bool,
-        ) -> Vec<FeatureType> {
-            let mut cfgs = Vec::new();
-
-            for meta in nested_meta {
-                match meta.name_or_empty() {
-                    sym::feature => {
-                        // FIXME: esistono meta con `value_str` a None?
-                        let name = meta.value_str().unwrap().to_string();
-
-                        let feature = Feature {
-                            name: name.clone(),
-                            not,
-                        };
-                        create_feature_node(visitor, feature.clone());
-                        assert!(visitor.f_nodes.contains_key(&feature));
-
-                        cfgs.push(FeatureType::Feat(name))
-                    }
-                    sym::not => cfgs.push(FeatureType::Not(rec_expand(
-                        visitor,
-                        meta.meta_item_list()
-                            .expect("Error: empty `not` feature attribute")
-                            .to_vec(),
-                        !not,
-                    ))),
-                    sym::all => cfgs.push(FeatureType::All(rec_expand(
-                        visitor,
-                        meta.meta_item_list()
-                            .expect("Error: empty `all` feature attribute")
-                            .to_vec(),
-                        not,
-                    ))),
-                    sym::any => cfgs.push(FeatureType::Any(rec_expand(
-                        visitor,
-                        meta.meta_item_list()
-                            .expect("Error: empty `any` feature attribute")
-                            .to_vec(),
-                        not,
-                    ))),
-                    _ => (),
-                }
-            }
-
-            cfgs
-        }
-
-        fn create_feature_node(visitor: &mut CollectVisitor, feature: Feature) {
-            if !visitor.f_nodes.contains_key(&feature) {
-                let feat_node = Rc::new(RefCell::new(feature.clone()));
-                let graph_node = visitor.f_graph.add_node(Rc::clone(&feat_node));
-                visitor
-                    .f_nodes
-                    .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
-            }
-        }
-
         if let Some(meta) = attr.meta() {
             if meta.name_or_empty() == Symbol::intern("rustcex_cfg") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     self.features.pop();
-                    let feat = Some(rec_expand(self, list.to_vec(), false));
+                    let feat = Some(self.rec_expand(list.to_vec(), false));
                     self.features.push(feat);
                 }
             }
