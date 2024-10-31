@@ -261,12 +261,12 @@ struct CollectVisitor {
     a_graph: graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
 }
 
-impl FeatureType {
-    /// Feature a stringa
-    fn to_string(&self) -> String {
+impl std::fmt::Display for FeatureType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FeatureType::Feat(name) => name.clone(),
-            FeatureType::Not(features) => format!(
+            FeatureType::Feat(name) => write!(f, "{}", name),
+            FeatureType::Not(features) => write!(
+                f,
                 "not({})",
                 features
                     .iter()
@@ -274,7 +274,8 @@ impl FeatureType {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            FeatureType::All(features) => format!(
+            FeatureType::All(features) => write!(
+                f,
                 "all({})",
                 features
                     .iter()
@@ -282,7 +283,8 @@ impl FeatureType {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            FeatureType::Any(features) => format!(
+            FeatureType::Any(features) => write!(
+                f,
                 "any({})",
                 features
                     .iter()
