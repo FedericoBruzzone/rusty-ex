@@ -498,24 +498,11 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
-        // FIXME: se un nodo è figlio di un nodo senza feature, allora viene aggiunto un arco verso GLOBAL,
-        // anche se il padre del nodo senza feature è un nodo con feature
-        //
-        // #[a]
-        // fn a() {
-        //
-        //    fn b() {
-        //
-        //        #[c]
-        //        fn c() {}
-        //    }
-        // }
-        //
-        // attualemente esce:
-        // a --> GLOBAL     c --> GLOBAL
-        //
-        // dovrebbe uscire:
-        // c --> a --> GLOBAL
+        let global_node_index = self
+            .a_nodes
+            .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+            .expect("Error: missing global index")
+            .0;
 
         for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
             let child_features = CollectVisitor::rec_weight_feature(
@@ -526,12 +513,32 @@ impl CollectVisitor {
                     .clone(),
             );
 
-            for parent_node_index in self.a_graph.neighbors(*child_node_index) {
+            if child_features.is_empty() {
+                continue;
+            }
+
+            // FIXME: porcate varie
+            let mut cur = child_node_index;
+            let mut parent_node_index;
+
+            let parent_features = loop {
+                if cur == &global_node_index {
+                    break Vec::new();
+                }
+
+                assert!(self.a_graph.neighbors(*cur).count() == 1);
+                parent_node_index = self
+                    .a_graph
+                    .neighbors(*cur)
+                    .next()
+                    .expect("Error: missing parent index building features graph");
+
                 let parent_node_id = self.a_graph[parent_node_index]
                     .try_borrow()
                     .expect("Error: borrow failed on parent nodeid creating features graph")
                     .node_id;
-                let mut parent_features = CollectVisitor::rec_weight_feature(
+
+                let parent_features = CollectVisitor::rec_weight_feature(
                     self.a_nodes
                         .get(&parent_node_id)
                         .expect("Error: cannot find artifact node creating edge")
@@ -543,39 +550,35 @@ impl CollectVisitor {
                 );
 
                 if parent_features.is_empty() {
-                    parent_features.push(WeightedFeature {
-                        feature: Feature {
-                            name: GLOBAL_FEATURE_NAME.to_string(),
-                            not: false,
-                        },
-                        weight: 1.0,
-                    });
+                    cur = &parent_node_index;
+                } else {
+                    break parent_features;
                 }
+            };
 
+            for WeightedFeature {
+                feature: child_feat,
+                weight: child_weight,
+            } in &child_features
+            {
                 for WeightedFeature {
-                    feature: child_feat,
-                    weight: child_weight,
-                } in &child_features
+                    feature: parent_feat,
+                    weight: _parent_weight,
+                } in &parent_features
                 {
-                    for WeightedFeature {
-                        feature: parent_feat,
-                        weight: _parent_weight,
-                    } in &parent_features
-                    {
-                        self.f_graph.add_edge(
-                            self.f_nodes
-                                .get(child_feat)
-                                .expect("Error: cannot find feature node creating features graph")
-                                .0,
-                            self.f_nodes
-                                .get(parent_feat)
-                                .expect("Error: cannot find feature node creating features graph")
-                                .0,
-                            Edge {
-                                weight: *child_weight,
-                            },
-                        );
-                    }
+                    self.f_graph.add_edge(
+                        self.f_nodes
+                            .get(child_feat)
+                            .expect("Error: cannot find feature node creating features graph")
+                            .0,
+                        self.f_nodes
+                            .get(parent_feat)
+                            .expect("Error: cannot find feature node creating features graph")
+                            .0,
+                        Edge {
+                            weight: *child_weight,
+                        },
+                    );
                 }
             }
         }
