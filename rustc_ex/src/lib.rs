@@ -147,7 +147,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let content = fs::read_to_string(path)?;
                 Ok(content
                     .replace("#[cfg(", "#[rustcex_cfg(")
-                    // TODO: if cfg!
                     .replace("cfg!", "rustcex_cfg"))
             }
 
@@ -212,9 +211,9 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
 /// Definizioni per l'estrazione delle feature dall'AST, lo statement annotato e la/le feature
 #[derive(Clone, Debug, PartialEq)]
-enum AnnotatedType {
-    FunctionDeclaration(NodeId, String),
-    Expression(NodeId),
+struct Annotated {
+    node_id: NodeId,
+    ident: Option<String>,
 }
 #[derive(Clone, Debug)]
 enum FeatureType {
@@ -249,7 +248,7 @@ struct Edge {
 /// Visitor per la visita :) dell'AST
 struct CollectVisitor {
     // stack parallelo: statements con rispettive feature
-    statements: Vec<AnnotatedType>,
+    statements: Vec<Annotated>,
     features: Vec<Option<Vec<FeatureType>>>,
 
     // grafo delle features
@@ -346,8 +345,10 @@ impl CollectVisitor {
         for meta in nested_meta {
             match meta.name_or_empty() {
                 sym::feature => {
-                    // FIXME: esistono meta con `value_str` a None?
-                    let name = meta.value_str().unwrap().to_string();
+                    let name = meta
+                        .value_str()
+                        .expect("Error: malformed feature without value `#[cfg(feature)]`")
+                        .to_string();
 
                     let feature = Feature {
                         name: name.clone(),
@@ -440,8 +441,9 @@ impl CollectVisitor {
 
         // creare arco del grafo, al padre o allo scope global
         match self.statements.last() {
-            Some(AnnotatedType::FunctionDeclaration(parent_id, ..))
-            | Some(AnnotatedType::Expression(parent_id)) => {
+            Some(Annotated {
+                node_id: parent_id, ..
+            }) => {
                 self.a_graph.add_edge(
                     self.a_nodes
                         .get(&node_id)
@@ -471,14 +473,14 @@ impl CollectVisitor {
     }
 
     /// Inizializza un nuovo artefatto e aggiorna gli stack degli statement e delle feature
-    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: AnnotatedType) {
+    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: Annotated) {
         self.create_artifact(ident, node_id, Vec::new());
         self.statements.push(stmt);
         self.features.push(None);
     }
 
     /// Estrae le feature dell'artefatto dagli stack e aggiorna il grafo degli artefatti
-    fn post_walk(&mut self, node_id: NodeId, stmt: AnnotatedType) {
+    fn post_walk(&mut self, node_id: NodeId, stmt: Annotated) {
         // estrarre dallo stack dati sulle cfg
         let ident = self
             .statements
@@ -496,6 +498,26 @@ impl CollectVisitor {
 
     /// Costruisce il grafo delle features dal grafo degli artefatti
     fn build_f_graph(&mut self) {
+
+        // FIXME: se un nodo è figlio di un nodo senza feature, allora viene aggiunto un arco verso GLOBAL,
+        // anche se il padre del nodo senza feature è un nodo con feature
+        //
+        // #[a]
+        // fn a() {
+        //
+        //    fn b() {
+        //
+        //        #[c]
+        //        fn c() {}
+        //    }
+        // }
+        //
+        // attualemente esce:
+        // a --> GLOBAL     c --> GLOBAL
+        //
+        // dovrebbe uscire:
+        // c --> a --> GLOBAL
+
         for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
             let child_features = CollectVisitor::rec_weight_feature(
                 child_artifact
@@ -667,6 +689,9 @@ impl CollectVisitor {
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
+    // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
+    // TODO: rilevare features sulle macro
+
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         if let Some(meta) = attr.meta() {
@@ -688,7 +713,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
-        let stmt = AnnotatedType::Expression(node_id);
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
 
         self.pre_walk(ident, node_id, stmt.clone());
         walk_expr(self, cur_ex);
@@ -702,11 +730,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
     /// sarebbe possibile associarli alla rispettiva funzione.
     fn visit_item(&mut self, cur_item: &'ast Item) {
-        let ident = cur_item.ident.to_string();
+        let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
-        let stmt = AnnotatedType::FunctionDeclaration(node_id, ident.clone());
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
 
-        self.pre_walk(Some(ident), node_id, stmt.clone());
+        self.pre_walk(ident, node_id, stmt.clone());
         walk_item(self, cur_item);
         self.post_walk(node_id, stmt);
     }
