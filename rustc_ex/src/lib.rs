@@ -23,10 +23,6 @@ use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use std::{fs, io};
 
-// Costanti per la feature globale
-const GLOBAL_NODE_ID: u32 = 4294967040;
-const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
-
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
 pub struct RustcEx;
@@ -35,11 +31,11 @@ pub struct RustcEx;
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
-    /// Pass --print-artifacts-dot to print the DOT graph
+    /// Pass --print-temporary-graph to print the DOT graph
     #[clap(long)]
-    print_artifacts_dot: bool,
+    print_temporary_dot: bool,
 
-    /// Pass --print-features-dot to print the DOT graph
+    /// Pass --print-features-graph to print the DOT graph
     #[clap(long)]
     print_features_dot: bool,
 
@@ -122,11 +118,11 @@ impl PrintAstCallbacks {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
-        if self.args.print_artifacts_dot {
-            collector.print_a_graph_dot();
+        if self.args.print_temporary_dot {
+            collector.print_temp_graph_dot();
         }
         if self.args.print_features_dot {
-            collector.print_f_graph_dot();
+            collector.print_feat_graph_dot();
         }
         if self.args.print_centrality {
             collector.print_centrality();
@@ -189,20 +185,23 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .global_ctxt()
             .expect("Error: global context not found")
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
-                // estrarre l'AST
+                // extract AST
                 let resolver_and_krate = tcx.resolver_for_lowering().borrow();
                 let krate = &*resolver_and_krate.1;
 
-                // visitare l'AST
+                // visit AST
                 let collector = &mut CollectVisitor {
-                    f_nodes: HashMap::new(),
-                    f_graph: graph::DiGraph::new(),
-
-                    statements: Vec::new(),
+                    // parallel stacks: AST nodes with respective features
+                    ast_nodes: Vec::new(),
                     features: Vec::new(),
 
-                    a_nodes: HashMap::new(),
-                    a_graph: graph::DiGraph::new(),
+                    // temporary graph to store AST nodes with features
+                    temp_nodes: HashMap::new(),
+                    temp_graph: graph::DiGraph::new(),
+
+                    // features graph
+                    feat_nodes: HashMap::new(),
+                    feat_graph: graph::DiGraph::new(),
                 };
 
                 collector.init_global_scope();
@@ -216,7 +215,12 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
-/// Nodo dell'AST, può essere annotato da features
+/// Constant for the global feature NodeId
+const GLOBAL_NODE_ID: u32 = 4294967040;
+/// Constant for the global feature name
+const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
+
+/// AST node, can be annotated with features
 #[derive(Clone, Debug)]
 struct ASTNode {
     node_id: NodeId,
@@ -224,7 +228,7 @@ struct ASTNode {
     features: Vec<ComplexFeature>,
 }
 
-/// Feature semplice non composta, può essere pesata
+/// Simple feature, can be weighted
 #[derive(Clone, Debug)]
 struct Feature {
     name: String,
@@ -232,7 +236,7 @@ struct Feature {
     weight: Option<f64>,
 }
 
-/// Feature composta: può essere semplice (contiene già i not), all o any
+/// Complex feature, can be a single feature (not already included), an all or an any
 #[derive(Clone, Debug)]
 enum ComplexFeature {
     Feature(Feature),
@@ -240,35 +244,38 @@ enum ComplexFeature {
     Any(Vec<ComplexFeature>),
 }
 
-/// Arco del grafo pesato
+/// Graphs edge, with weight
 #[derive(Clone, Debug)]
 struct Edge {
     weight: f64,
 }
 
-/// Visitor per la visita :) dell'AST
+/// AST visitor to collect data to build the graphs
 struct CollectVisitor {
-    // stack parallelo: statements con rispettive feature
-    statements: Vec<ASTNode>,
+    // parallel stacks: AST nodes with respective features
+    ast_nodes: Vec<ASTNode>,
     features: Vec<Option<Vec<ComplexFeature>>>,
 
-    // grafo delle features
-    f_nodes: HashMap<Feature, (NodeIndex, Rc<RefCell<Feature>>)>,
-    f_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+    // temporary graph to store AST nodes with features
+    temp_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<ASTNode>>)>,
+    temp_graph: graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
 
-    // grafo delle dipendenze
-    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<ASTNode>>)>,
-    a_graph: graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
+    // features graph
+    feat_nodes: HashMap<Feature, (NodeIndex, Rc<RefCell<Feature>>)>,
+    feat_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
 }
 
+/// Features are comparable
+impl Eq for Feature {}
+
+/// Comparison of features (weight is ignored)
 impl PartialEq for Feature {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name && self.not == other.not
     }
 }
 
-impl Eq for Feature {}
-
+/// Hash of features (weight is ignored)
 impl Hash for Feature {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);
@@ -277,6 +284,7 @@ impl Hash for Feature {
 }
 
 impl std::fmt::Display for ComplexFeature {
+    /// Complex feature to string
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ComplexFeature::Feature(Feature { name, not, weight }) => {
@@ -312,38 +320,48 @@ impl std::fmt::Display for ComplexFeature {
     }
 }
 
+impl ComplexFeature {
+    /// Complex features list to string
+    fn list_to_string(features: &[ComplexFeature]) -> String {
+        features
+            .iter()
+            .map(|f| f.to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 impl CollectVisitor {
-    /// Crea l'artefatto (nodo) e lo aggiunge al grafo degli artefatti e alla hashmap dei nodi degli artefatti
-    fn create_artifact(
+    /// Create the AST node and add it to the temporary graph and to the AST nodes hashmap
+    fn create_ast_node(
         &mut self,
         ident: Option<String>,
         node_id: NodeId,
         features: Vec<ComplexFeature>,
     ) {
-        // creazione nodo del grafo (e cella Rc)
         let mem_node = Rc::new(RefCell::new(ASTNode {
             ident,
             node_id,
             features,
         }));
-        let graph_node = self.a_graph.add_node(Rc::clone(&mem_node));
-        self.a_nodes
+        let graph_node = self.temp_graph.add_node(Rc::clone(&mem_node));
+        self.temp_nodes
             .insert(node_id, (graph_node, Rc::clone(&mem_node)));
     }
 
-    /// Crea una feature (nodo) e la aggiunge al grafo delle features e alla hashmap dei nodi delle features
+    /// Create a feature (node) and add it to the features graph and to the features nodes hashmap
     fn create_feature_node(&mut self, feature: Feature) {
-        if !self.f_nodes.contains_key(&feature) {
+        if !self.feat_nodes.contains_key(&feature) {
             let feat_node = Rc::new(RefCell::new(feature.clone()));
-            let graph_node = self.f_graph.add_node(Rc::clone(&feat_node));
-            self.f_nodes
+            let graph_node = self.feat_graph.add_node(Rc::clone(&feat_node));
+            self.feat_nodes
                 .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
         }
     }
 
-    /// Inizializza lo scope globale (feature e artefatto padre di tutti)
+    /// Initialize the global scope (feature and AST node parent of all)
     fn init_global_scope(&mut self) {
-        self.create_artifact(
+        self.create_ast_node(
             Some(GLOBAL_FEATURE_NAME.to_string()),
             NodeId::from_u32(GLOBAL_NODE_ID),
             Vec::from([ComplexFeature::Feature(Feature {
@@ -360,7 +378,7 @@ impl CollectVisitor {
         });
     }
 
-    /// Visita ricorsiva delle feature nestate (all, any, not)
+    /// Recursively visit nested features (all, any, not)
     fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<ComplexFeature> {
         let mut cfgs = Vec::new();
 
@@ -378,7 +396,7 @@ impl CollectVisitor {
                         weight: None,
                     };
                     self.create_feature_node(feature.clone());
-                    assert!(self.f_nodes.contains_key(&feature));
+                    assert!(self.feat_nodes.contains_key(&feature));
 
                     cfgs.push(ComplexFeature::Feature(feature))
                 }
@@ -413,7 +431,7 @@ impl CollectVisitor {
         cfgs
     }
 
-    /// Pesa le features "orizzontalmente", considerando solo i "fratelli"
+    /// Weight features horizontally, considering only the "siblings"
     fn rec_weight_feature(features: Vec<ComplexFeature>) -> Vec<Feature> {
         let mut weights: Vec<Feature> = Vec::new();
 
@@ -449,41 +467,41 @@ impl CollectVisitor {
         weights
     }
 
-    /// Aggiorna l'artefatto con le feature trovate
-    fn update_artifact_features(&mut self, node_id: NodeId, features: Vec<ComplexFeature>) {
-        // aggiornare il nodo con le cfg trovate e pesate
-        self.a_nodes.entry(node_id).and_modify(|e| {
+    /// Update the AST node with the found features
+    fn update_ast_node_features(&mut self, node_id: NodeId, features: Vec<ComplexFeature>) {
+        // update the node with the found and weighted cfgs
+        self.temp_nodes.entry(node_id).and_modify(|e| {
             e.1.try_borrow_mut()
-                .expect("Error: borrow mut failed on artifacts nodes update")
+                .expect("Error: borrow mut failed on temp nodes update")
                 .features = features.clone();
         });
 
-        // creare arco del grafo, al padre o allo scope global
-        match self.statements.last() {
+        // create edge in the graph, to the parent or to the global scope
+        match self.ast_nodes.last() {
             Some(ASTNode {
                 node_id: parent_id, ..
             }) => {
-                self.a_graph.add_edge(
-                    self.a_nodes
+                self.temp_graph.add_edge(
+                    self.temp_nodes
                         .get(&node_id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .expect("Error: cannot find AST node creating temp graph")
                         .0,
-                    self.a_nodes
+                    self.temp_nodes
                         .get(parent_id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .expect("Error: cannot find AST node creating temp graph")
                         .0,
                     Edge { weight: 0.0 },
                 );
             }
             None => {
-                self.a_graph.add_edge(
-                    self.a_nodes
+                self.temp_graph.add_edge(
+                    self.temp_nodes
                         .get(&node_id)
-                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .expect("Error: cannot find AST node creating temp graph")
                         .0,
-                    self.a_nodes
+                    self.temp_nodes
                         .get(&NodeId::from_u32(GLOBAL_NODE_ID))
-                        .expect("Error: cannot find artifact node creating artifacts graph")
+                        .expect("Error: cannot find AST node creating temp graph")
                         .0,
                     Edge { weight: 0.0 },
                 );
@@ -491,18 +509,17 @@ impl CollectVisitor {
         }
     }
 
-    /// Inizializza un nuovo artefatto e aggiorna gli stack degli statement e delle feature
+    /// Initialize a new AST node and update the AST nodes and features stacks
     fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: ASTNode) {
-        self.create_artifact(ident, node_id, Vec::new());
-        self.statements.push(stmt);
+        self.create_ast_node(ident, node_id, Vec::new());
+        self.ast_nodes.push(stmt);
         self.features.push(None);
     }
 
-    /// Estrae le feature dell'artefatto dagli stack e aggiorna il grafo degli artefatti
+    /// Extract the features of the AST node from the stacks and update the temporary graph
     fn post_walk(&mut self, node_id: NodeId, stmt: ASTNode) {
-        // estrarre dallo stack dati sulle cfg
         let ident = self
-            .statements
+            .ast_nodes
             .pop()
             .expect("Error: stack is empty while in expression");
         assert_eq!(ident.node_id, stmt.node_id);
@@ -512,20 +529,20 @@ impl CollectVisitor {
             .expect("Error: stack is empty while in expression")
             .unwrap_or_default();
 
-        self.update_artifact_features(node_id, cfg);
+        self.update_ast_node_features(node_id, cfg);
     }
 
-    /// Costruisce il grafo delle features dal grafo degli artefatti
+    /// Build the features graph from the temporary graph
     fn build_f_graph(&mut self) {
         let global_node_index = self
-            .a_nodes
+            .temp_nodes
             .get(&NodeId::from_u32(GLOBAL_NODE_ID))
             .expect("Error: missing global index")
             .0;
 
-        for (_child_node_id, (child_node_index, child_artifact)) in self.a_nodes.iter() {
+        for (_child_node_id, (child_node_index, child_ast_node)) in self.temp_nodes.iter() {
             let child_features = CollectVisitor::rec_weight_feature(
-                child_artifact
+                child_ast_node
                     .try_borrow()
                     .expect("Error: borrow failed on child features creating features graph")
                     .features
@@ -545,22 +562,22 @@ impl CollectVisitor {
                     break Vec::new();
                 }
 
-                assert!(self.a_graph.neighbors(*cur).count() == 1);
+                assert!(self.temp_graph.neighbors(*cur).count() == 1);
                 parent_node_index = self
-                    .a_graph
+                    .temp_graph
                     .neighbors(*cur)
                     .next()
                     .expect("Error: missing parent index building features graph");
 
-                let parent_node_id = self.a_graph[parent_node_index]
+                let parent_node_id = self.temp_graph[parent_node_index]
                     .try_borrow()
                     .expect("Error: borrow failed on parent nodeid creating features graph")
                     .node_id;
 
                 let parent_features = CollectVisitor::rec_weight_feature(
-                    self.a_nodes
+                    self.temp_nodes
                         .get(&parent_node_id)
-                        .expect("Error: cannot find artifact node creating edge")
+                        .expect("Error: cannot find AST node creating edge")
                         .1
                         .try_borrow()
                         .expect("Error: borrow failed on parent features creating features graph")
@@ -577,12 +594,12 @@ impl CollectVisitor {
 
             for child_feat in &child_features {
                 for parent_feat in &parent_features {
-                    self.f_graph.add_edge(
-                        self.f_nodes
+                    self.feat_graph.add_edge(
+                        self.feat_nodes
                             .get(child_feat)
                             .expect("Error: cannot find feature node creating features graph")
                             .0,
-                        self.f_nodes
+                        self.feat_nodes
                             .get(parent_feat)
                             .expect("Error: cannot find feature node creating features graph")
                             .0,
@@ -597,17 +614,8 @@ impl CollectVisitor {
         }
     }
 
-    /// Lista di features a Stringa
-    fn features_to_string(features: &[ComplexFeature]) -> String {
-        features
-            .iter()
-            .map(|f| f.to_string())
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// Stampa il grafo degli artefatti in formato DOT (per Graphviz)
-    fn print_f_graph_dot(&self) {
+    /// Print features graph in DOT format
+    fn print_feat_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{:.2}\"", edge.weight().weight)
@@ -629,7 +637,7 @@ impl CollectVisitor {
         println!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.f_graph,
+                &self.feat_graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
@@ -637,8 +645,8 @@ impl CollectVisitor {
         )
     }
 
-    /// Stampa il grafo delle features in formato DOT (per Graphviz)
-    fn print_a_graph_dot(&self) {
+    /// Print temporary graph in DOT format
+    fn print_temp_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)
@@ -647,19 +655,19 @@ impl CollectVisitor {
         let get_node_attr =
             |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<ASTNode>>)| {
-                let artifact = node
+                let ast_node = node
                     .1
                     .try_borrow()
-                    .expect("Error: borrow failed on artifact graph print");
-                match &artifact.ident {
+                    .expect("Error: borrow failed on temp graph print");
+                match &ast_node.ident {
                     Some(ident) => format!(
                         "label=\"{} #[{}]\"",
                         ident,
-                        CollectVisitor::features_to_string(&artifact.features)
+                        ComplexFeature::list_to_string(&ast_node.features)
                     ),
                     None => format!(
                         "label=\"#[{}]\"",
-                        CollectVisitor::features_to_string(&artifact.features)
+                        ComplexFeature::list_to_string(&ast_node.features)
                     ),
                 }
             };
@@ -667,7 +675,7 @@ impl CollectVisitor {
         println!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.a_graph,
+                &self.temp_graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
@@ -675,10 +683,11 @@ impl CollectVisitor {
         )
     }
 
+    /// Print some centrality measures of the features graph
     fn print_centrality(&self) {
         let katz: rustworkx_core::Result<Option<Vec<f64>>> =
             rustworkx_core::centrality::katz_centrality(
-                &self.f_graph,
+                &self.feat_graph,
                 |e| Ok(e.weight().weight),
                 None,
                 None,
@@ -687,11 +696,11 @@ impl CollectVisitor {
                 None,
             );
 
-        let closeness = rustworkx_core::centrality::closeness_centrality(&self.f_graph, false);
+        let closeness = rustworkx_core::centrality::closeness_centrality(&self.feat_graph, false);
 
         let eigenvector: rustworkx_core::Result<Option<Vec<f64>>> =
             rustworkx_core::centrality::eigenvector_centrality(
-                &self.f_graph,
+                &self.feat_graph,
                 |e| Ok(e.weight().weight),
                 None,
                 Some(1e-2),
@@ -707,7 +716,20 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
     // TODO: rilevare features sulle call di macro
 
-    /// Visita attributo: le feature sono degli attributi
+    // The features (cfg) are attributes, but attributes are (almost) always
+    // at the same level of the Node they are annotating. So the features are (almost)
+    // always NOT available inside the visit *node* function, but are available only
+    // to its parent. This is why we need to use a stack to keep track of the features.
+    // Example:
+    // ```
+    // #[cfg(feature = "foo")]
+    // fn bar() {}
+    // ```
+    // The `visit_fn` method will NOT visit the `cfg` attribute, NOT even after
+    // the `walk_fn` call. The attributes are available to the parent of the function,
+    // in this case an item (which calls both `visit_fn` and `visit_attribute`).
+
+    /// Visit attribute: features are attributes
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         if let Some(meta) = attr.meta() {
             if meta.name_or_empty() == Symbol::intern("rustcex_cfg") {
@@ -722,9 +744,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         walk_attribute(self, attr);
     }
 
-    /// Visita espressione: (quasi) tutto può essere annotato e quindi va pushato sullo
-    /// stack degli statements per evitare di far crescere quello delle feature senza
-    /// che ci sia un corrispettivo statement
+    /// Visit expression, like function calls
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
@@ -739,12 +759,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id, stmt);
     }
 
-    /// Visita item: le dichiarazione di funzioni sono item, dentro `walk_item` vengono
-    /// visitati anche gli attributi, quindi è dopo la chiamata le feature sono già
-    /// nello stack.
-    /// Non viene utilizzato `visit_fn` per analizzare le funzioni dato che gli attributi
-    /// non sono visitati da `walk_fn` (ma vengono visitati dopo), di conseguenza non
-    /// sarebbe possibile associarli alla rispettiva funzione.
+    /// Visit item, like functions, structs, enums
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
@@ -759,7 +774,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id, stmt);
     }
 
-    /// Visita i campi di una definizione, come i campi di una struct
+    /// Visit definition fields, like struct fields
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
         let node_id = cur_field.id;
@@ -774,7 +789,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id, stmt);
     }
 
-    /// Visita uno statement, come gli assegamenti
+    /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = cur_stmt.id;
@@ -789,7 +804,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id, stmt);
     }
 
-    /// Visita una variante di un enum
+    /// Visit enum variant
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
         let node_id = cur_var.id;
@@ -804,7 +819,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id, stmt);
     }
 
-    /// Visita il ramo di un match
+    /// Visita match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
