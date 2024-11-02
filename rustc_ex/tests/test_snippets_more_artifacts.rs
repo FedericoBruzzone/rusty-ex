@@ -73,7 +73,8 @@ fn test_struct_declaration() -> Result<(), String> {
 
 #[test]
 fn test_struct_declaration_fields() -> Result<(), String> {
-    let snippet = &std::fs::read_to_string(format!("{FOLDER}/struct_declaration_fields.rs")).unwrap();
+    let snippet =
+        &std::fs::read_to_string(format!("{FOLDER}/struct_declaration_fields.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));

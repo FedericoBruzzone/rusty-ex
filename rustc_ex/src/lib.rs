@@ -17,6 +17,7 @@ use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::{borrow::Cow, env};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
@@ -147,7 +148,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let content = fs::read_to_string(path)?;
                 Ok(content
                     // HACK: workarounds
-
                     // Features are discarded before the `after_expansion` hook, so are lost.
                     // To avoid this, we replace all `cfg` directives with a custom config.
                     .replace("#[cfg(", "#[rustcex_cfg(")
@@ -216,37 +216,44 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
-/// Definizioni per l'estrazione delle feature dall'AST, lo statement annotato e la/le feature
+// --- Definizioni per gli oggetti annotati ---
+
+/// Nodo dell'AST, potrà essere annotato da features
 #[derive(Clone, Debug, PartialEq)]
-struct Annotated {
+struct ASTNode {
     node_id: NodeId,
     ident: Option<String>,
 }
+
+/// Oggetto che può essere annotato da features (composte)
 #[derive(Clone, Debug)]
-enum FeatureType {
-    Feat(String),
-    Not(Vec<FeatureType>),
-    All(Vec<FeatureType>),
-    Any(Vec<FeatureType>),
+struct AnnotatedASTNode {
+    ident: Option<String>,
+    node_id: NodeId,
+    features: Vec<ComplexFeature>,
 }
 
-/// Definizioni per i grafi
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+// --- Definizioni per le features (cfg) ---
+
+/// Feature semplice non composta, può essere pesata
+#[derive(Clone, Debug)]
 struct Feature {
     name: String,
     not: bool,
+    weight: Option<f64>,
 }
+
+/// Feature composta: semplice (contiene già i not), all o any
 #[derive(Clone, Debug)]
-struct WeightedFeature {
-    feature: Feature,
-    weight: f64,
+enum ComplexFeature {
+    Feature(Feature),
+    All(Vec<ComplexFeature>),
+    Any(Vec<ComplexFeature>),
 }
-#[derive(Clone, Debug)]
-struct Artifact {
-    ident: Option<String>,
-    node_id: NodeId,
-    features: Vec<FeatureType>,
-}
+
+// --- Definizioni per i grafi ---
+
+/// Arco del grafo pesato
 #[derive(Clone, Debug)]
 struct Edge {
     weight: f64,
@@ -255,32 +262,48 @@ struct Edge {
 /// Visitor per la visita :) dell'AST
 struct CollectVisitor {
     // stack parallelo: statements con rispettive feature
-    statements: Vec<Annotated>,
-    features: Vec<Option<Vec<FeatureType>>>,
+    statements: Vec<ASTNode>,
+    features: Vec<Option<Vec<ComplexFeature>>>,
 
     // grafo delle features
     f_nodes: HashMap<Feature, (NodeIndex, Rc<RefCell<Feature>>)>,
     f_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
 
     // grafo delle dipendenze
-    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Artifact>>)>,
-    a_graph: graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
+    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<AnnotatedASTNode>>)>,
+    a_graph: graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
 }
 
-impl std::fmt::Display for FeatureType {
+impl PartialEq for Feature {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name && self.not == other.not
+    }
+}
+
+impl Eq for Feature {}
+
+impl Hash for Feature {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.name.hash(state);
+        self.not.hash(state);
+    }
+}
+
+impl std::fmt::Display for ComplexFeature {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FeatureType::Feat(name) => write!(f, "{}", name),
-            FeatureType::Not(features) => write!(
-                f,
-                "not({})",
-                features
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            FeatureType::All(features) => write!(
+            ComplexFeature::Feature(Feature { name, not, weight }) => {
+                let name = match not {
+                    true => "!".to_string() + name,
+                    false => name.to_string(),
+                };
+                let weight = match weight {
+                    Some(w) => format!("{:.2}", w),
+                    None => "-".to_string(),
+                };
+                write!(f, "{} ({})", name, weight)
+            }
+            ComplexFeature::All(features) => write!(
                 f,
                 "all({})",
                 features
@@ -289,7 +312,7 @@ impl std::fmt::Display for FeatureType {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            FeatureType::Any(features) => write!(
+            ComplexFeature::Any(features) => write!(
                 f,
                 "any({})",
                 features
@@ -308,10 +331,10 @@ impl CollectVisitor {
         &mut self,
         ident: Option<String>,
         node_id: NodeId,
-        features: Vec<FeatureType>,
+        features: Vec<ComplexFeature>,
     ) {
         // creazione nodo del grafo (e cella Rc)
-        let mem_node = Rc::new(RefCell::new(Artifact {
+        let mem_node = Rc::new(RefCell::new(AnnotatedASTNode {
             ident,
             node_id,
             features,
@@ -336,17 +359,22 @@ impl CollectVisitor {
         self.create_artifact(
             Some(GLOBAL_FEATURE_NAME.to_string()),
             NodeId::from_u32(GLOBAL_NODE_ID),
-            Vec::from([FeatureType::Feat(GLOBAL_FEATURE_NAME.to_string())]),
+            Vec::from([ComplexFeature::Feature(Feature {
+                name: GLOBAL_FEATURE_NAME.to_string(),
+                not: false,
+                weight: None,
+            })]),
         );
 
         self.create_feature_node(Feature {
             name: GLOBAL_FEATURE_NAME.to_string(),
             not: false,
+            weight: None,
         });
     }
 
     /// Visita ricorsiva delle feature nestate (all, any, not)
-    fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<FeatureType> {
+    fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<ComplexFeature> {
         let mut cfgs = Vec::new();
 
         for meta in nested_meta {
@@ -360,21 +388,22 @@ impl CollectVisitor {
                     let feature = Feature {
                         name: name.clone(),
                         not,
+                        weight: None,
                     };
                     self.create_feature_node(feature.clone());
                     assert!(self.f_nodes.contains_key(&feature));
 
-                    cfgs.push(FeatureType::Feat(name))
+                    cfgs.push(ComplexFeature::Feature(feature))
                 }
-                sym::not => cfgs.push(FeatureType::Not(
+                sym::not => cfgs.extend(
                     self.rec_expand(
                         meta.meta_item_list()
                             .expect("Error: empty `not` feature attribute")
                             .to_vec(),
                         !not,
                     ),
-                )),
-                sym::all => cfgs.push(FeatureType::All(
+                ),
+                sym::all => cfgs.push(ComplexFeature::All(
                     self.rec_expand(
                         meta.meta_item_list()
                             .expect("Error: empty `all` feature attribute")
@@ -382,7 +411,7 @@ impl CollectVisitor {
                         not,
                     ),
                 )),
-                sym::any => cfgs.push(FeatureType::Any(
+                sym::any => cfgs.push(ComplexFeature::Any(
                     self.rec_expand(
                         meta.meta_item_list()
                             .expect("Error: empty `any` feature attribute")
@@ -398,37 +427,33 @@ impl CollectVisitor {
     }
 
     /// Pesa le features "orizzontalmente", considerando solo i "fratelli"
-    fn rec_weight_feature(features: Vec<FeatureType>) -> Vec<WeightedFeature> {
-        let mut weights = Vec::new();
+    fn rec_weight_feature(features: Vec<ComplexFeature>) -> Vec<Feature> {
+        let mut weights: Vec<Feature> = Vec::new();
 
         for feat in features {
             match feat {
-                FeatureType::Feat(name) => weights.push(WeightedFeature {
-                    feature: Feature { name, not: false },
-                    weight: 1.0,
+                ComplexFeature::Feature(Feature { name, not, .. }) => weights.push(Feature {
+                    name,
+                    not,
+                    weight: Some(1.0),
                 }),
-                FeatureType::Not(nested) => {
-                    weights.extend(CollectVisitor::rec_weight_feature(nested).into_iter().map(
-                        |WeightedFeature { feature, weight }| WeightedFeature {
-                            feature: Feature {
-                                name: feature.name,
-                                not: !feature.not,
-                            },
-                            weight,
-                        },
-                    ))
-                }
-                FeatureType::All(nested) => {
+                ComplexFeature::All(nested) => {
                     let size = nested.len() as f64;
                     let rec = CollectVisitor::rec_weight_feature(nested);
-                    weights.extend(rec.into_iter().map(|WeightedFeature { feature, weight }| {
-                        WeightedFeature {
-                            feature,
-                            weight: weight / size,
-                        }
-                    }))
+                    weights.extend(
+                        rec.into_iter()
+                            .map(|Feature { name, not, weight }| Feature {
+                                name,
+                                not,
+                                weight: Some(
+                                    weight.expect(
+                                        "Error: feature without weight while weighting features",
+                                    ) / size,
+                                ),
+                            }),
+                    )
                 }
-                FeatureType::Any(nested) => {
+                ComplexFeature::Any(nested) => {
                     weights.extend(CollectVisitor::rec_weight_feature(nested))
                 }
             }
@@ -438,7 +463,7 @@ impl CollectVisitor {
     }
 
     /// Aggiorna l'artefatto con le feature trovate
-    fn update_artifact_features(&mut self, node_id: NodeId, features: Vec<FeatureType>) {
+    fn update_artifact_features(&mut self, node_id: NodeId, features: Vec<ComplexFeature>) {
         // aggiornare il nodo con le cfg trovate e pesate
         self.a_nodes.entry(node_id).and_modify(|e| {
             e.1.try_borrow_mut()
@@ -448,7 +473,7 @@ impl CollectVisitor {
 
         // creare arco del grafo, al padre o allo scope global
         match self.statements.last() {
-            Some(Annotated {
+            Some(ASTNode {
                 node_id: parent_id, ..
             }) => {
                 self.a_graph.add_edge(
@@ -480,14 +505,14 @@ impl CollectVisitor {
     }
 
     /// Inizializza un nuovo artefatto e aggiorna gli stack degli statement e delle feature
-    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: Annotated) {
+    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: ASTNode) {
         self.create_artifact(ident, node_id, Vec::new());
         self.statements.push(stmt);
         self.features.push(None);
     }
 
     /// Estrae le feature dell'artefatto dagli stack e aggiorna il grafo degli artefatti
-    fn post_walk(&mut self, node_id: NodeId, stmt: Annotated) {
+    fn post_walk(&mut self, node_id: NodeId, stmt: ASTNode) {
         // estrarre dallo stack dati sulle cfg
         let ident = self
             .statements
@@ -563,16 +588,8 @@ impl CollectVisitor {
                 }
             };
 
-            for WeightedFeature {
-                feature: child_feat,
-                weight: child_weight,
-            } in &child_features
-            {
-                for WeightedFeature {
-                    feature: parent_feat,
-                    weight: _parent_weight,
-                } in &parent_features
-                {
+            for child_feat in &child_features {
+                for parent_feat in &parent_features {
                     self.f_graph.add_edge(
                         self.f_nodes
                             .get(child_feat)
@@ -583,7 +600,9 @@ impl CollectVisitor {
                             .expect("Error: cannot find feature node creating features graph")
                             .0,
                         Edge {
-                            weight: *child_weight,
+                            weight: child_feat
+                                .weight
+                                .expect("Error: feature without weight creating features graph"),
                         },
                     );
                 }
@@ -592,7 +611,7 @@ impl CollectVisitor {
     }
 
     /// Lista di features a Stringa
-    fn features_to_string(features: &[FeatureType]) -> String {
+    fn features_to_string(features: &[ComplexFeature]) -> String {
         features
             .iter()
             .map(|f| f.to_string())
@@ -633,14 +652,14 @@ impl CollectVisitor {
 
     /// Stampa il grafo delle features in formato DOT (per Graphviz)
     fn print_a_graph_dot(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)
         };
 
         let get_node_attr =
-            |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
-             node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
+            |_g: &graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<AnnotatedASTNode>>)| {
                 let artifact = node
                     .1
                     .try_borrow()
@@ -722,7 +741,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
@@ -741,7 +760,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
@@ -755,7 +774,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
         let node_id = cur_field.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
@@ -769,7 +788,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = cur_stmt.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
@@ -783,7 +802,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
         let node_id = cur_var.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
@@ -797,7 +816,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
-        let stmt = Annotated {
+        let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
         };
