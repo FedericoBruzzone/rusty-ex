@@ -146,7 +146,14 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             fn read_file(&self, path: &std::path::Path) -> io::Result<String> {
                 let content = fs::read_to_string(path)?;
                 Ok(content
+                    // HACK: workarounds
+
+                    // Features are discarded before the `after_expansion` hook, so are lost.
+                    // To avoid this, we replace all `cfg` directives with a custom config.
                     .replace("#[cfg(", "#[rustcex_cfg(")
+                    // The `cfg!` macro is evaluated before the `after_expansion` hook, so we replace it with a custom one.
+                    // The replacement is not a macro because the macro would still be evaluated before the hook,
+                    // giving an error in the AST.
                     .replace("cfg!", "rustcex_cfg"))
             }
 
@@ -692,7 +699,7 @@ impl CollectVisitor {
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
     // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
-    // TODO: rilevare features sulle macro
+    // TODO: rilevare features sulle call di macro
 
     /// Visita attributo: le feature sono degli attributi
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
@@ -769,6 +776,34 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
         self.pre_walk(ident, node_id, stmt.clone());
         walk_stmt(self, cur_stmt);
+        self.post_walk(node_id, stmt);
+    }
+
+    /// Visita una variante di un enum
+    fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
+        let ident = Some(cur_var.ident.to_string());
+        let node_id = cur_var.id;
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
+
+        self.pre_walk(ident, node_id, stmt.clone());
+        walk_variant(self, cur_var);
+        self.post_walk(node_id, stmt);
+    }
+
+    /// Visita il ramo di un match
+    fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
+        let ident = None;
+        let node_id = cur_arm.id;
+        let stmt = Annotated {
+            node_id,
+            ident: ident.clone(),
+        };
+
+        self.pre_walk(ident, node_id, stmt.clone());
+        walk_arm(self, cur_arm);
         self.post_walk(node_id, stmt);
     }
 }
