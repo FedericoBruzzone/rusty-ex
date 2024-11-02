@@ -216,24 +216,13 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
-// --- Definizioni per gli oggetti annotati ---
-
-/// Nodo dell'AST, potrà essere annotato da features
-#[derive(Clone, Debug, PartialEq)]
+/// Nodo dell'AST, può essere annotato da features
+#[derive(Clone, Debug)]
 struct ASTNode {
     node_id: NodeId,
     ident: Option<String>,
-}
-
-/// Oggetto che può essere annotato da features (composte)
-#[derive(Clone, Debug)]
-struct AnnotatedASTNode {
-    ident: Option<String>,
-    node_id: NodeId,
     features: Vec<ComplexFeature>,
 }
-
-// --- Definizioni per le features (cfg) ---
 
 /// Feature semplice non composta, può essere pesata
 #[derive(Clone, Debug)]
@@ -243,15 +232,13 @@ struct Feature {
     weight: Option<f64>,
 }
 
-/// Feature composta: semplice (contiene già i not), all o any
+/// Feature composta: può essere semplice (contiene già i not), all o any
 #[derive(Clone, Debug)]
 enum ComplexFeature {
     Feature(Feature),
     All(Vec<ComplexFeature>),
     Any(Vec<ComplexFeature>),
 }
-
-// --- Definizioni per i grafi ---
 
 /// Arco del grafo pesato
 #[derive(Clone, Debug)]
@@ -270,8 +257,8 @@ struct CollectVisitor {
     f_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
 
     // grafo delle dipendenze
-    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<AnnotatedASTNode>>)>,
-    a_graph: graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
+    a_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<ASTNode>>)>,
+    a_graph: graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
 }
 
 impl PartialEq for Feature {
@@ -334,7 +321,7 @@ impl CollectVisitor {
         features: Vec<ComplexFeature>,
     ) {
         // creazione nodo del grafo (e cella Rc)
-        let mem_node = Rc::new(RefCell::new(AnnotatedASTNode {
+        let mem_node = Rc::new(RefCell::new(ASTNode {
             ident,
             node_id,
             features,
@@ -518,7 +505,7 @@ impl CollectVisitor {
             .statements
             .pop()
             .expect("Error: stack is empty while in expression");
-        assert_eq!(ident, stmt);
+        assert_eq!(ident.node_id, stmt.node_id);
         let cfg = self
             .features
             .pop()
@@ -652,14 +639,14 @@ impl CollectVisitor {
 
     /// Stampa il grafo delle features in formato DOT (per Graphviz)
     fn print_a_graph_dot(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)
         };
 
         let get_node_attr =
-            |_g: &graph::DiGraph<Rc<RefCell<AnnotatedASTNode>>, Edge>,
-             node: (graph::NodeIndex, &Rc<RefCell<AnnotatedASTNode>>)| {
+            |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<ASTNode>>)| {
                 let artifact = node
                     .1
                     .try_borrow()
@@ -744,6 +731,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
@@ -763,6 +751,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
@@ -777,6 +766,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
@@ -791,6 +781,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
@@ -805,6 +796,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
@@ -819,6 +811,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let stmt = ASTNode {
             node_id,
             ident: ident.clone(),
+            features: Vec::new(),
         };
 
         self.pre_walk(ident, node_id, stmt.clone());
