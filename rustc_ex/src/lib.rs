@@ -375,7 +375,7 @@ impl CollectVisitor {
             let feat_node = Rc::new(RefCell::new(feature.clone()));
             let graph_node = self.feat_graph.add_node(Rc::clone(&feat_node));
             self.feat_nodes
-                .insert(feature.clone(), (graph_node, Rc::clone(&feat_node)));
+                .insert(feature, (graph_node, Rc::clone(&feat_node)));
         }
     }
 
@@ -422,9 +422,7 @@ impl CollectVisitor {
             NodeId::from_u32(GLOBAL_NODE_ID),
             ComplexFeature::Feature(feature.clone()),
         );
-
         self.create_feature_node(feature);
-
         self.create_artifact_node(NodeId::from_u32(GLOBAL_NODE_ID));
     }
 
@@ -486,42 +484,36 @@ impl CollectVisitor {
 
     /// Weight features horizontally, considering only the "siblings"
     fn rec_weight_feature(features: ComplexFeature) -> Vec<Feature> {
-        let mut weights: Vec<Feature> = Vec::new();
-
         match features {
-            ComplexFeature::None => (),
-            ComplexFeature::Feature(Feature { name, not, .. }) => weights.push(Feature {
+            ComplexFeature::None => Vec::new(),
+            ComplexFeature::Feature(Feature { name, not, .. }) => Vec::from([Feature {
                 name,
                 not,
                 weight: Some(1.0),
-            }),
+            }]),
             ComplexFeature::All(nested) => {
                 let size = nested.len() as f64;
 
-                for f in nested {
-                    let rec = CollectVisitor::rec_weight_feature(f);
-                    weights.extend(
-                        rec.into_iter()
-                            .map(|Feature { name, not, weight }| Feature {
+                nested
+                    .into_iter()
+                    .map(|f| {
+                        CollectVisitor::rec_weight_feature(f).into_iter().map(
+                            |Feature { name, not, weight }| Feature {
                                 name,
                                 not,
-                                weight: Some(
-                                    weight.expect(
-                                        "Error: feature without weight while weighting features",
-                                    ) / size,
-                                ),
-                            }),
-                    )
-                }
+                                weight: Some(weight.expect("Error: feature without weight") / size),
+                            },
+                        )
+                    })
+                    .flatten()
+                    .collect()
             }
-            ComplexFeature::Any(nested) => {
-                for f in nested {
-                    weights.extend(CollectVisitor::rec_weight_feature(f))
-                }
-            }
+            ComplexFeature::Any(nested) => nested
+                .into_iter()
+                .map(|f| CollectVisitor::rec_weight_feature(f))
+                .flatten()
+                .collect(),
         }
-
-        weights
     }
 
     /// Update the AST node with the found features
