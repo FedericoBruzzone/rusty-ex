@@ -16,8 +16,9 @@ fn test_help_output() -> Result<(), String> {
         run_with_cargo_bin("workspaces/simple_feature_no_weights", None, &["--help"])?;
     for options in &[
         "--print-crate",
-        "--print-artifacts-dot",
-        "--print-features-dot",
+        "--print-artifacts-graph",
+        "--print-features-graph",
+        "--print-ast-graph",
     ] {
         assert!(output.contains(options));
     }

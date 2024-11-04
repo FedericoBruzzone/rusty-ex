@@ -22,7 +22,7 @@ const FOLDER: &str = "tests/snippets/basic_combinations";
 #[test]
 fn test_one_in_one() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_one.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -36,7 +36,7 @@ fn test_one_in_one() -> Result<(), String> {
 #[test]
 fn test_one_in_not() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_not.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"!a\"]"));
@@ -50,7 +50,7 @@ fn test_one_in_not() -> Result<(), String> {
 #[test]
 fn test_one_in_any() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_any.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -67,7 +67,7 @@ fn test_one_in_any() -> Result<(), String> {
 #[test]
 fn test_one_in_all() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/one_in_all.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -88,7 +88,7 @@ fn test_one_in_all() -> Result<(), String> {
 #[test]
 fn test_not_in_one() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_one.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -102,7 +102,7 @@ fn test_not_in_one() -> Result<(), String> {
 #[test]
 fn test_not_in_not() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_not.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"!a\"]"));
@@ -116,7 +116,7 @@ fn test_not_in_not() -> Result<(), String> {
 #[test]
 fn test_not_in_any() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_any.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -133,7 +133,7 @@ fn test_not_in_any() -> Result<(), String> {
 #[test]
 fn test_not_in_all() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/not_in_all.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -154,7 +154,7 @@ fn test_not_in_all() -> Result<(), String> {
 #[test]
 fn test_all_in_one() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_one.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -170,7 +170,7 @@ fn test_all_in_one() -> Result<(), String> {
 #[test]
 fn test_all_in_not() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_not.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"!a\"]"));
@@ -186,7 +186,7 @@ fn test_all_in_not() -> Result<(), String> {
 #[test]
 fn test_all_in_any() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_any.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -206,7 +206,7 @@ fn test_all_in_any() -> Result<(), String> {
 #[test]
 fn test_all_in_all() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/all_in_all.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -230,7 +230,7 @@ fn test_all_in_all() -> Result<(), String> {
 #[test]
 fn test_any_in_one() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_one.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -246,7 +246,7 @@ fn test_any_in_one() -> Result<(), String> {
 #[test]
 fn test_any_in_not() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_not.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"!a\"]"));
@@ -262,7 +262,7 @@ fn test_any_in_not() -> Result<(), String> {
 #[test]
 fn test_any_in_any() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_any.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));
@@ -282,7 +282,7 @@ fn test_any_in_any() -> Result<(), String> {
 #[test]
 fn test_any_in_all() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/any_in_all.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"a\"]"));

@@ -32,15 +32,15 @@ pub struct RustcEx;
 pub struct PrintAstArgs {
     /// Pass --print-ast-graph to print the DOT graph
     #[clap(long)]
-    print_ast_dot: bool,
+    print_ast_graph: bool,
 
     /// Pass --print-features-graph to print the DOT graph
     #[clap(long)]
-    print_features_dot: bool,
+    print_features_graph: bool,
 
     /// Pass --print-artifacts-graph to print the DOT graph
     #[clap(long)]
-    print_artifacts_dot: bool,
+    print_artifacts_graph: bool,
 
     /// Pass --print-crate to print the crate
     #[clap(long)]
@@ -121,14 +121,14 @@ impl PrintAstCallbacks {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
-        if self.args.print_ast_dot {
-            collector.print_ast_graph_dot();
+        if self.args.print_ast_graph {
+            collector.print_ast_graph();
         }
-        if self.args.print_features_dot {
-            collector.print_feat_graph_dot();
+        if self.args.print_features_graph {
+            collector.print_features_graph();
         }
-        if self.args.print_artifacts_dot {
-            collector.print_arti_graph_dot();
+        if self.args.print_artifacts_graph {
+            collector.print_artifacts_graph();
         }
         if self.args.print_centrality {
             collector.print_centrality();
@@ -727,7 +727,7 @@ impl CollectVisitor {
     // }
 
     /// Print features graph in DOT format
-    fn print_feat_graph_dot(&self) {
+    fn print_features_graph(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<FeatureNode, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{:.2}\"", edge.weight().weight)
@@ -754,7 +754,7 @@ impl CollectVisitor {
     }
 
     /// Print artifacts graph in DOT format
-    fn print_arti_graph_dot(&self) {
+    fn print_artifacts_graph(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<ArtifactNode, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{:.2}\"", edge.weight().weight)
@@ -785,7 +785,7 @@ impl CollectVisitor {
     }
 
     /// Print AST graph in DOT format
-    fn print_ast_graph_dot(&self) {
+    fn print_ast_graph(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)

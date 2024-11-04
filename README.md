@@ -29,9 +29,9 @@ cargo test -- --test-threads=1
 
 Available plugin args:
 
-- `--print-temporary-dot`: print the temporary graph in DOT format
-- `--print-features-dot`: print the features graph in DOT format
-- `--print-artifacts-dot`: print the artifacts graph in DOT format
+- `--print-ast-graph`: print the AST graph in DOT format
+- `--print-features-graph`: print the features graph in DOT format
+- `--print-artifacts-graph`: print the artifacts graph in DOT format
 - `--print-crate`: print the crate AST
 - `--print-centrality`: print the (some) centrality of the features graph
 
@@ -49,7 +49,7 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG]
 > Example:
 > ```bash
 > cd rustc_ex/tests/workspaces/simple_feature_no_weights
-> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-dot
+> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-graph
 > ```
 
 > [!NOTE]

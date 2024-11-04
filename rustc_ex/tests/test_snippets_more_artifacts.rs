@@ -10,7 +10,7 @@ const FOLDER: &str = "tests/snippets/more_artifacts";
 #[test]
 fn test_declaration() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/declaration.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -25,7 +25,7 @@ fn test_declaration() -> Result<(), String> {
 #[test]
 fn test_constant() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/constant.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"constant-1\"]"));
@@ -42,7 +42,7 @@ fn test_constant() -> Result<(), String> {
 #[test]
 fn test_assignment() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/assignment.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -57,7 +57,7 @@ fn test_assignment() -> Result<(), String> {
 #[test]
 fn test_struct_declaration() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/struct_declaration.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"struct-declaration-1\"]"));
@@ -75,7 +75,7 @@ fn test_struct_declaration() -> Result<(), String> {
 fn test_struct_declaration_fields() -> Result<(), String> {
     let snippet =
         &std::fs::read_to_string(format!("{FOLDER}/struct_declaration_fields.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"struct-1-fields-1\"]"));
@@ -96,7 +96,7 @@ fn test_struct_declaration_fields() -> Result<(), String> {
 #[test]
 fn test_enum_declaration() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/enum_declaration.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"enum-declaration-1\"]"));
@@ -113,7 +113,7 @@ fn test_enum_declaration() -> Result<(), String> {
 #[test]
 fn test_enum_declaration_fields() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/enum_declaration_fields.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"enum-1-fields-1\"]"));
@@ -134,7 +134,7 @@ fn test_enum_declaration_fields() -> Result<(), String> {
 #[test]
 fn test_function_definition() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/function_definition.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"function-definition-1\"]"));
@@ -151,7 +151,7 @@ fn test_function_definition() -> Result<(), String> {
 #[test]
 fn test_function_call() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/function_call.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -172,7 +172,7 @@ fn test_function_call() -> Result<(), String> {
 #[test]
 fn test_trait() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/trait.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"trait-1\"]"));
@@ -189,7 +189,7 @@ fn test_trait() -> Result<(), String> {
 #[test]
 fn test_implementation() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/implementation.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"implementation-1\"]"));
@@ -206,7 +206,7 @@ fn test_implementation() -> Result<(), String> {
 #[test]
 fn test_method_definition() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/method_definition.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"method-definition\"]"));
@@ -223,7 +223,7 @@ fn test_method_definition() -> Result<(), String> {
 #[test]
 fn test_method_call() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/method_call.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -244,7 +244,7 @@ fn test_method_call() -> Result<(), String> {
 #[test]
 fn test_block() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/block.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -263,7 +263,7 @@ fn test_block() -> Result<(), String> {
 #[test]
 fn test_closure() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/closure.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -280,7 +280,7 @@ fn test_closure() -> Result<(), String> {
 #[test]
 fn test_extern_crate() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/extern_crate.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"extern-crate\"]"));
@@ -295,7 +295,7 @@ fn test_extern_crate() -> Result<(), String> {
 #[test]
 fn test_module() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/module.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"module\"]"));
@@ -310,7 +310,7 @@ fn test_module() -> Result<(), String> {
 #[test]
 fn test_use() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/use.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"use\"]"));
@@ -325,7 +325,7 @@ fn test_use() -> Result<(), String> {
 #[test]
 fn test_if() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/if.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -342,7 +342,7 @@ fn test_if() -> Result<(), String> {
 #[test]
 fn test_loop() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/loop.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -363,7 +363,7 @@ fn test_loop() -> Result<(), String> {
 #[test]
 fn test_match() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/match.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -380,7 +380,7 @@ fn test_match() -> Result<(), String> {
 #[test]
 fn test_match_branch() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/match_branch.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -397,7 +397,7 @@ fn test_match_branch() -> Result<(), String> {
 #[test]
 fn test_return() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/return.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"return-1\"]"));
@@ -416,7 +416,7 @@ fn test_return() -> Result<(), String> {
 #[test]
 fn test_type_alias() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/type_alias.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"type-alias-1\"]"));
@@ -433,7 +433,7 @@ fn test_type_alias() -> Result<(), String> {
 #[test]
 fn test_union() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/union.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"union-1\"]"));
@@ -450,7 +450,7 @@ fn test_union() -> Result<(), String> {
 #[test]
 fn test_macro_call() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/macro_call.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"main\"]"));
@@ -467,7 +467,7 @@ fn test_macro_call() -> Result<(), String> {
 #[test]
 fn test_macro_definition() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/macro_definition.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-dot"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
     assert!(output.contains("1 [ label=\"macro-definition-1\"]"));
