@@ -39,6 +39,10 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_features_dot: bool,
 
+    /// Pass --print-artifacts-graph to print the DOT graph
+    #[clap(long)]
+    print_artifacts_dot: bool,
+
     /// Pass --print-crate to print the crate
     #[clap(long)]
     print_crate: bool,
@@ -124,6 +128,9 @@ impl PrintAstCallbacks {
         if self.args.print_features_dot {
             collector.print_feat_graph_dot();
         }
+        if self.args.print_artifacts_dot {
+            collector.print_arti_graph_dot();
+        }
         if self.args.print_centrality {
             collector.print_centrality();
         }
@@ -202,11 +209,16 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     // features graph
                     feat_nodes: HashMap::new(),
                     feat_graph: graph::DiGraph::new(),
+
+                    // artifacts graph
+                    arti_nodes: HashMap::new(),
+                    arti_graph: graph::DiGraph::new(),
                 };
 
                 collector.init_global_scope();
                 collector.visit_crate(krate);
-                collector.build_f_graph();
+                collector.build_feat_graph();
+                collector.build_arti_graph();
 
                 self.process_cli_args(collector, krate);
             });
@@ -244,6 +256,15 @@ enum ComplexFeature {
     Any(Vec<ComplexFeature>),
 }
 
+/// Artifact annotated with features, weighted with its importance (size) in the AST
+#[derive(Clone, Debug)]
+struct Artifact {
+    node_id: NodeId,
+    ident: Option<String>,
+    features: Vec<NodeIndex>, // index in features graph `CollectVisitor.feat_graph`
+    weight: f64,
+}
+
 /// Graphs edge, with weight
 #[derive(Clone, Debug)]
 struct Edge {
@@ -263,6 +284,10 @@ struct CollectVisitor {
     // features graph
     feat_nodes: HashMap<Feature, (NodeIndex, Rc<RefCell<Feature>>)>,
     feat_graph: graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
+
+    // artifacts graph
+    arti_nodes: HashMap<NodeId, (NodeIndex, Rc<RefCell<Artifact>>)>,
+    arti_graph: graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
 }
 
 /// Features are comparable
@@ -359,6 +384,36 @@ impl CollectVisitor {
         }
     }
 
+    /// Create an artifact (node) and add it to the artifacts graph and to the artifacts nodes hashmap
+    fn create_artifact_node(&mut self, node_id: NodeId) {
+        if self.arti_nodes.contains_key(&node_id) {
+            return;
+        }
+
+        let node = self
+            .temp_nodes
+            .get(&node_id)
+            .expect("Error: cannot find AST node creating artifact node")
+            .1
+            .try_borrow()
+            .expect("Error: borrow failed on temp nodes creating artifact node");
+
+        // get indexes of features in the features graph
+        let features_indexes = self.rec_features_to_indexes(node.features.clone());
+
+        let artifact = Artifact {
+            node_id: node.node_id,
+            ident: node.ident.clone(),
+            features: features_indexes,
+            weight: 0.0, // TODO: stabilire peso
+        };
+
+        let arti_node = Rc::new(RefCell::new(artifact.clone()));
+        let graph_node = self.arti_graph.add_node(Rc::clone(&arti_node));
+        self.arti_nodes
+            .insert(artifact.node_id, (graph_node, Rc::clone(&arti_node)));
+    }
+
     /// Initialize the global scope (feature and AST node parent of all)
     fn init_global_scope(&mut self) {
         self.create_ast_node(
@@ -376,6 +431,8 @@ impl CollectVisitor {
             not: false,
             weight: None,
         });
+
+        self.create_artifact_node(NodeId::from_u32(GLOBAL_NODE_ID));
     }
 
     /// Recursively visit nested features (all, any, not)
@@ -509,6 +566,29 @@ impl CollectVisitor {
         }
     }
 
+    /// Recursively convert features to node indexes in the features graph
+    fn rec_features_to_indexes(&self, features: Vec<ComplexFeature>) -> Vec<NodeIndex> {
+        let mut indexes = Vec::new();
+
+        for feat in features {
+            match feat {
+                ComplexFeature::Feature(f) => {
+                    indexes.push(
+                        self.feat_nodes
+                            .get(&f)
+                            .expect("Error: cannot find feature node index converting features to indexes")
+                            .0,
+                    );
+                }
+                ComplexFeature::All(fs) | ComplexFeature::Any(fs) => {
+                    indexes.extend(self.rec_features_to_indexes(fs));
+                }
+            }
+        }
+
+        indexes
+    }
+
     /// Initialize a new AST node and update the AST nodes and features stacks
     fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: ASTNode) {
         self.create_ast_node(ident, node_id, Vec::new());
@@ -518,22 +598,25 @@ impl CollectVisitor {
 
     /// Extract the features of the AST node from the stacks and update the temporary graph
     fn post_walk(&mut self, node_id: NodeId, stmt: ASTNode) {
-        let ident = self
+        let node = self
             .ast_nodes
             .pop()
             .expect("Error: stack is empty while in expression");
-        assert_eq!(ident.node_id, stmt.node_id);
+        assert_eq!(node.node_id, stmt.node_id);
         let cfg = self
             .features
             .pop()
             .expect("Error: stack is empty while in expression")
             .unwrap_or_default();
 
-        self.update_ast_node_features(node_id, cfg);
+        self.update_ast_node_features(node_id, cfg.clone());
+        if !cfg.is_empty() {
+            self.create_artifact_node(node_id);
+        }
     }
 
     /// Build the features graph from the temporary graph
-    fn build_f_graph(&mut self) {
+    fn build_feat_graph(&mut self) {
         let global_node_index = self
             .temp_nodes
             .get(&NodeId::from_u32(GLOBAL_NODE_ID))
@@ -577,7 +660,7 @@ impl CollectVisitor {
                 let parent_features = CollectVisitor::rec_weight_feature(
                     self.temp_nodes
                         .get(&parent_node_id)
-                        .expect("Error: cannot find AST node creating edge")
+                        .expect("Error: cannot find AST node creating edge in features graph")
                         .1
                         .try_borrow()
                         .expect("Error: borrow failed on parent features creating features graph")
@@ -614,6 +697,77 @@ impl CollectVisitor {
         }
     }
 
+    /// Build the artifacts graph from the temporary graph
+    fn build_arti_graph(&mut self) {
+        let global_node_index = self
+            .arti_nodes
+            .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+            .expect("Error: missing global index")
+            .0;
+
+        for (child_node_id, (child_node_index, child_ast_node)) in self.temp_nodes.iter() {
+            let child_features = child_ast_node
+                .try_borrow()
+                .expect("Error: borrow failed on child features creating artifacts graph")
+                .features
+                .clone();
+
+            if child_features.is_empty() {
+                continue;
+            }
+
+            // FIXME: porcate varie
+            let mut cur = child_node_index;
+            let mut parent_node_index;
+
+            let parent_node_id = loop {
+                if cur == &global_node_index {
+                    break NodeId::from_u32(GLOBAL_NODE_ID);
+                }
+
+                assert!(self.temp_graph.neighbors(*cur).count() == 1);
+                parent_node_index = self
+                    .temp_graph
+                    .neighbors(*cur)
+                    .next()
+                    .expect("Error: missing parent index building artifacts graph");
+
+                let parent_node_id = self.temp_graph[parent_node_index]
+                    .try_borrow()
+                    .expect("Error: borrow failed on parent nodeid creating artifacts graph")
+                    .node_id;
+
+                let parent_features_empty = self
+                    .temp_nodes
+                    .get(&parent_node_id)
+                    .expect("Error: cannot find AST node creating edge in artifacts graph")
+                    .1
+                    .try_borrow()
+                    .expect("Error: borrow failed on parent features creating artifacts graph")
+                    .features
+                    .is_empty();
+
+                if parent_features_empty {
+                    cur = &parent_node_index;
+                } else {
+                    break parent_node_id;
+                }
+            };
+
+            self.arti_graph.add_edge(
+                self.arti_nodes
+                    .get(child_node_id)
+                    .expect("Error: cannot find feature node creating artifacts graph")
+                    .0,
+                self.arti_nodes
+                    .get(&parent_node_id)
+                    .expect("Error: cannot find feature node creating artifacts graph")
+                    .0,
+                Edge { weight: 0.0 }, // TODO: stabilire peso
+            );
+        }
+    }
+
     /// Print features graph in DOT format
     fn print_feat_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Feature>>, Edge>,
@@ -645,6 +799,42 @@ impl CollectVisitor {
         )
     }
 
+    /// Print artifacts graph in DOT format
+    fn print_arti_graph_dot(&self) {
+        let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
+                             edge: graph::EdgeReference<Edge>| {
+            format!("label=\"{:.2}\"", edge.weight().weight)
+        };
+
+        // TODO: formattare meglio
+        let get_node_attr =
+            |_g: &graph::DiGraph<Rc<RefCell<Artifact>>, Edge>,
+             node: (graph::NodeIndex, &Rc<RefCell<Artifact>>)| {
+                let artifact = node
+                    .1
+                    .try_borrow()
+                    .expect("Error: borrow failed on artifacts graph print");
+
+                format!(
+                    "label=\"{} ({}) #[{:?}] {:.2}\"",
+                    artifact.node_id,
+                    artifact.ident.clone().unwrap_or("-".to_string()),
+                    artifact.features,
+                    artifact.weight
+                )
+            };
+
+        println!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.arti_graph,
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
+                &get_edge_attr,
+                &get_node_attr,
+            )
+        )
+    }
+
     /// Print temporary graph in DOT format
     fn print_temp_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
@@ -652,6 +842,7 @@ impl CollectVisitor {
             format!("label=\"{}\"", edge.weight().weight)
         };
 
+        // TODO: formattare meglio
         let get_node_attr =
             |_g: &graph::DiGraph<Rc<RefCell<ASTNode>>, Edge>,
              node: (graph::NodeIndex, &Rc<RefCell<ASTNode>>)| {
@@ -659,17 +850,13 @@ impl CollectVisitor {
                     .1
                     .try_borrow()
                     .expect("Error: borrow failed on temp graph print");
-                match &ast_node.ident {
-                    Some(ident) => format!(
-                        "label=\"{} #[{}]\"",
-                        ident,
-                        ComplexFeature::list_to_string(&ast_node.features)
-                    ),
-                    None => format!(
-                        "label=\"#[{}]\"",
-                        ComplexFeature::list_to_string(&ast_node.features)
-                    ),
-                }
+
+                format!(
+                    "label=\"{} ({}) #[{}]\"",
+                    ast_node.node_id,
+                    ast_node.ident.clone().unwrap_or("-".to_string()),
+                    ComplexFeature::list_to_string(&ast_node.features)
+                )
             };
 
         println!(

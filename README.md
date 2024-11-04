@@ -29,8 +29,9 @@ cargo test -- --test-threads=1
 
 Available plugin args:
 
-- `--print-artifacts-dot`: print the artifacts graph in DOT format
+- `--print-temporary-dot`: print the temporary graph in DOT format
 - `--print-features-dot`: print the features graph in DOT format
+- `--print-artifacts-dot`: print the artifacts graph in DOT format
 - `--print-crate`: print the crate AST
 - `--print-centrality`: print the (some) centrality of the features graph
 
