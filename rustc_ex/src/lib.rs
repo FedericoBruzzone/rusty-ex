@@ -30,9 +30,9 @@ pub struct RustcEx;
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
-    /// Pass --print-temporary-graph to print the DOT graph
+    /// Pass --print-ast-graph to print the DOT graph
     #[clap(long)]
-    print_temporary_dot: bool,
+    print_ast_dot: bool,
 
     /// Pass --print-features-graph to print the DOT graph
     #[clap(long)]
@@ -121,8 +121,8 @@ impl PrintAstCallbacks {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
-        if self.args.print_temporary_dot {
-            collector.print_temp_graph_dot();
+        if self.args.print_ast_dot {
+            collector.print_ast_graph_dot();
         }
         if self.args.print_features_dot {
             collector.print_feat_graph_dot();
@@ -197,21 +197,17 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visit AST
                 let collector = &mut CollectVisitor {
-                    // parallel stacks: AST nodes with respective features
                     astnodes_stack: Vec::new(),
                     features_stack: Vec::new(),
 
-                    // temporary graph to store AST nodes with features
-                    temp_nodes: HashMap::new(),
-                    temp_graph: graph::DiGraph::new(),
+                    ast_graph: graph::DiGraph::new(),
+                    ast_nodes: HashMap::new(),
 
-                    // features graph
-                    feat_nodes: HashMap::new(),
                     feat_graph: graph::DiGraph::new(),
+                    feat_nodes: HashMap::new(),
 
-                    // artifacts graph
-                    arti_nodes: HashMap::new(),
                     arti_graph: graph::DiGraph::new(),
+                    arti_nodes: HashMap::new(),
                 };
 
                 collector.init_global_scope();
@@ -227,7 +223,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 }
 
 /// Constant for the global feature NodeId
-const GLOBAL_NODE_ID: u32 = 4294967040;
+const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967040);
 /// Constant for the global feature name
 const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 
@@ -283,8 +279,8 @@ struct Edge {
     weight: f64,
 }
 
-/// Index of the temporary node in the temporary graph
-type TempIndex = NodeIndex;
+/// Index of the AST node in the AST graph
+type ASTIndex = NodeIndex;
 /// Index of the feature node in the features graph
 type FeatureIndex = NodeIndex;
 /// Index of the artifact node in the artifacts graph
@@ -297,90 +293,64 @@ struct CollectVisitor {
     astnodes_stack: Vec<ASTNode>,
     features_stack: Vec<ComplexFeature>,
 
-    /// Temporary AST nodes to store information while visiting
-    temp_nodes: HashMap<NodeId, TempIndex>,
-    /// Features nodes, with index in the features graph
-    feat_nodes: HashMap<Feature, FeatureIndex>,
-    /// Artifacts nodes, with index in the artifacts graph
-    arti_nodes: HashMap<Artifact, ArtifactIndex>,
+    /// Relationships between all nodes of the AST.
+    /// A `ASTNode` also stores features and ident of the `NodeId`
+    ast_graph: graph::DiGraph<ASTNode, Edge>,
+    /// Node of the AST -> Index in the temporary graph
+    ast_nodes: HashMap<NodeId, ASTIndex>,
 
-    /// Temporary graph used to store relationship during the visit
-    temp_graph: graph::DiGraph<ASTNode, Edge>,
-
-    /// Features graph, created from the temporary graph
-    /// the features are weighted "horizontally" (considering only the "siblings")
+    /// Features graph, created from the AST graph.
+    /// A `FeatureNode` also stores the weight of the `Feature`, calculated
+    /// "horizontally" (considering only the "siblings")
     feat_graph: graph::DiGraph<FeatureNode, Edge>,
+    /// Feature -> Index in the features graph
+    feat_nodes: HashMap<Feature, FeatureIndex>,
 
-    /// Artifacts graph, created from the temporary graph
-    /// every artifacts is weighted with its importance (size) in the AST
+    /// Artifacts graph, created from the AST graph.
+    /// Only annotated artifacts are considered (artifacts with a feature).
+    /// An `ArtifactNode` also stores the ident, the weight of the `Artifact`
+    /// and the indexes of the features in the features graph
     arti_graph: graph::DiGraph<ArtifactNode, Edge>,
-}
-
-impl std::fmt::Display for ComplexFeature {
-    /// Complex feature to string
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ComplexFeature::None => write!(f, ""),
-            ComplexFeature::Feature(Feature { name, not }) => {
-                let name = match not {
-                    true => "!".to_string() + name,
-                    false => name.to_string(),
-                };
-                write!(f, "{}", name)
-            }
-            ComplexFeature::All(features) => write!(
-                f,
-                "all({})",
-                features
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            ComplexFeature::Any(features) => write!(
-                f,
-                "any({})",
-                features
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
-    }
+    /// Artifact -> Index in the artifacts graph
+    arti_nodes: HashMap<Artifact, ArtifactIndex>,
 }
 
 impl CollectVisitor {
-    /// Create the AST node in the temporary graph and add it to the temporary nodes hashmap
+    /// Create an AST node in the AST graph and add it to the AST nodes hashmap.
+    /// Return the index of the created node.
     fn create_ast_node(
         &mut self,
         ident: Option<String>,
         node_id: NodeId,
         features: ComplexFeature,
-    ) {
-        if self.temp_nodes.contains_key(&node_id) {
-            return;
+    ) -> ASTIndex {
+        if let Some(index) = self.ast_nodes.get(&node_id) {
+            return *index;
         }
 
-        let index: TempIndex = self.temp_graph.add_node(ASTNode {
+        let index: ASTIndex = self.ast_graph.add_node(ASTNode {
             ident,
             node_id,
             features,
         });
-        self.temp_nodes.insert(node_id, index);
+        self.ast_nodes.insert(node_id, index);
+
+        index
     }
 
     /// Create a feature node in the features graph and add it to the features nodes hashmap
-    fn create_feature_node(&mut self, feature: Feature, weight: Option<f64>) {
-        if self.feat_nodes.contains_key(&feature) {
-            return;
+    fn create_feature_node(&mut self, feature: Feature, weight: Option<f64>) -> FeatureIndex {
+        if let Some(index) = self.feat_nodes.get(&feature) {
+            return *index;
         }
 
         let index: FeatureIndex = self.feat_graph.add_node(FeatureNode {
-            feature: feature.clone(), // FIXME
+            feature: feature.clone(),
             weight,
         });
         self.feat_nodes.insert(feature, index);
+
+        index
     }
 
     /// Create an artifact node in the artifacts graph and add it to the artifacts nodes hashmap
@@ -390,25 +360,27 @@ impl CollectVisitor {
         ident: Option<String>,
         features: Vec<FeatureIndex>,
         weight: Option<f64>,
-    ) {
-        if self.arti_nodes.contains_key(&artifact) {
-            return;
+    ) -> ArtifactIndex {
+        if let Some(index) = self.arti_nodes.get(&artifact) {
+            return *index;
         };
 
         let index: ArtifactIndex = self.arti_graph.add_node(ArtifactNode {
-            artifact: artifact.clone(), // FIXME
+            artifact: artifact.clone(),
             ident,
             features,
             weight,
         });
         self.arti_nodes.insert(artifact, index);
+
+        index
     }
 
     /// Initialize the global scope (AST node, feature, artifact)
     fn init_global_scope(&mut self) {
         // TODO: capire se è meglio creare questi nodi non tutti insieme
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
-        let node_id = NodeId::from_u32(GLOBAL_NODE_ID);
+        let node_id = GLOBAL_NODE_ID;
         let feature = Feature {
             name: GLOBAL_FEATURE_NAME.to_string(),
             not: false,
@@ -521,12 +493,12 @@ impl CollectVisitor {
         // TODO: ha senso fare questa cosa o è meglio crearlo già con le features dopo la risalita?
 
         // update the node with the found and weighted cfgs
-        let node_index: &TempIndex = self
-            .temp_nodes
+        let node_index: &ASTIndex = self
+            .ast_nodes
             .get(&node_id)
             .expect("Error: cannot find AST node updating features");
 
-        self.temp_graph
+        self.ast_graph
             .node_weight_mut(*node_index)
             .expect("Error: cannot find AST node updating features")
             .features = features;
@@ -536,21 +508,21 @@ impl CollectVisitor {
             Some(ASTNode {
                 node_id: parent_id, ..
             }) => {
-                self.temp_graph.add_edge(
+                self.ast_graph.add_edge(
                     *node_index,
                     *self
-                        .temp_nodes
+                        .ast_nodes
                         .get(parent_id)
                         .expect("Error: cannot find AST node creating temp graph"),
                     Edge { weight: 0.0 },
                 );
             }
             None => {
-                self.temp_graph.add_edge(
+                self.ast_graph.add_edge(
                     *node_index,
                     *self
-                        .temp_nodes
-                        .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+                        .ast_nodes
+                        .get(&GLOBAL_NODE_ID)
                         .expect("Error: cannot find AST node creating temp graph"),
                     Edge { weight: 0.0 },
                 );
@@ -586,7 +558,7 @@ impl CollectVisitor {
         self.features_stack.push(ComplexFeature::None);
     }
 
-    /// Extract the features of the AST node from the stacks and update the temporary graph
+    /// Extract the features of the AST node from the stacks and update the AST graph
     fn post_walk(&mut self, node_id: NodeId, stmt: ASTNode) {
         let node = self
             .astnodes_stack
@@ -612,16 +584,16 @@ impl CollectVisitor {
         }
     }
 
-    /// Build the features graph from the temporary graph
+    /// Build the features graph from the AST graph
     fn build_feat_graph(&mut self) {
         let global_node_index = self
-            .temp_nodes
-            .get(&NodeId::from_u32(GLOBAL_NODE_ID))
+            .ast_nodes
+            .get(&GLOBAL_NODE_ID)
             .expect("Error: missing global index");
 
-        for (_child_node_id, child_node_index) in self.temp_nodes.iter() {
+        for (_child_node_id, child_node_index) in self.ast_nodes.iter() {
             let child_features = CollectVisitor::rec_weight_feature(
-                self.temp_graph[*child_node_index].features.clone(),
+                self.ast_graph[*child_node_index].features.clone(),
             );
 
             if child_features.is_empty() {
@@ -639,17 +611,17 @@ impl CollectVisitor {
                 }
 
                 assert!(
-                    self.temp_graph.neighbors(*cur).count() == 1,
+                    self.ast_graph.neighbors(*cur).count() == 1,
                     "Error: node has multiple parents building features graph"
                 );
                 parent_node_index = self
-                    .temp_graph
+                    .ast_graph
                     .neighbors(*cur)
                     .next()
                     .expect("Error: missing parent index building features graph");
 
                 let parent_features = CollectVisitor::rec_weight_feature(
-                    self.temp_graph[parent_node_index].features.clone(),
+                    self.ast_graph[parent_node_index].features.clone(),
                 );
 
                 if parent_features.is_empty() {
@@ -812,8 +784,8 @@ impl CollectVisitor {
         )
     }
 
-    /// Print temporary graph in DOT format
-    fn print_temp_graph_dot(&self) {
+    /// Print AST graph in DOT format
+    fn print_ast_graph_dot(&self) {
         let get_edge_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
                              edge: graph::EdgeReference<Edge>| {
             format!("label=\"{}\"", edge.weight().weight)
@@ -834,7 +806,7 @@ impl CollectVisitor {
         println!(
             "{:?}",
             Dot::with_attr_getters(
-                &self.temp_graph,
+                &self.ast_graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
                 &get_edge_attr,
                 &get_node_attr,
@@ -874,6 +846,20 @@ impl CollectVisitor {
 impl<'ast> Visitor<'ast> for CollectVisitor {
     // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
     // TODO: rilevare features sulle call di macro
+
+    fn visit_crate(&mut self, krate: &'ast Crate) -> Self::Result {
+        // initialize the global AST node
+        self.create_ast_node(
+            Some(GLOBAL_FEATURE_NAME.to_string()),
+            GLOBAL_NODE_ID,
+            ComplexFeature::Feature(Feature {
+                name: GLOBAL_FEATURE_NAME.to_string(),
+                not: false,
+            }),
+        );
+
+        walk_crate(self, krate)
+    }
 
     // The features (cfg) are attributes, but attributes are (almost) always
     // at the same level of the Node they are annotating. So the features are (almost)
@@ -998,5 +984,39 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.pre_walk(ident, node_id, stmt.clone());
         walk_arm(self, cur_arm);
         self.post_walk(node_id, stmt);
+    }
+}
+
+impl std::fmt::Display for ComplexFeature {
+    /// Complex feature to string
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComplexFeature::None => write!(f, ""),
+            ComplexFeature::Feature(Feature { name, not }) => {
+                let name = match not {
+                    true => "!".to_string() + name,
+                    false => name.to_string(),
+                };
+                write!(f, "{}", name)
+            }
+            ComplexFeature::All(features) => write!(
+                f,
+                "all({})",
+                features
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            ComplexFeature::Any(features) => write!(
+                f,
+                "any({})",
+                features
+                    .iter()
+                    .map(|f| f.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
     }
 }
