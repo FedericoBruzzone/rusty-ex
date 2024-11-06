@@ -226,6 +226,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967040);
 /// Constant for the global feature name
 const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
+/// Index of the global ASTNode/Feature/Artifact in the graphs
+const GLOBAL_NODE_INDEX: usize = 0;
 
 /// AST node, can be annotated with features
 #[derive(Clone, Debug)]
@@ -378,7 +380,6 @@ impl CollectVisitor {
 
     /// Initialize the global scope (AST node, feature, artifact)
     fn init_global_scope(&mut self) {
-        // TODO: capire se è meglio creare questi nodi non tutti insieme
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
         let node_id = GLOBAL_NODE_ID;
         let feature = Feature {
@@ -388,17 +389,32 @@ impl CollectVisitor {
         let features = ComplexFeature::Feature(feature.clone());
         let artifact = Artifact { node_id };
 
-        self.create_ast_node(ident.clone(), node_id, features.clone());
-        self.create_feature_node(feature, None);
-        self.create_artifact_node(
+        let index = self.create_ast_node(ident.clone(), node_id, features.clone());
+        assert_eq!(
+            index,
+            NodeIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global AST node has an index != 0"
+        );
+        let index = self.create_feature_node(feature, None);
+        assert_eq!(
+            index,
+            NodeIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global feature node has an index != 0"
+        );
+        let index = self.create_artifact_node(
             artifact,
             ident,
             self.rec_features_to_indexes(features),
             None,
         );
+        assert_eq!(
+            index,
+            NodeIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global artifact node has an index != 0"
+        );
     }
 
-    /// Recursively visit nested features (all, any, not)
+    /// Recursively visit nested features (all, any, not), creating features nodes
     fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<ComplexFeature> {
         let mut features = Vec::new();
 
@@ -414,7 +430,6 @@ impl CollectVisitor {
                         name: name.clone(),
                         not,
                     };
-                    // TODO: ha senso crearlo qua o meglio farlo in build_feat_graph?
                     self.create_feature_node(feature.clone(), None);
                     assert!(
                         self.feat_nodes.contains_key(&feature),
@@ -455,19 +470,19 @@ impl CollectVisitor {
     }
 
     /// Weight features horizontally, considering only the "siblings"
-    fn rec_weight_feature(features: ComplexFeature) -> Vec<FeatureNode> {
+    fn rec_weight_feature(features: &ComplexFeature) -> Vec<FeatureNode> {
         match features {
             ComplexFeature::None => Vec::new(),
             ComplexFeature::Feature(feature) => Vec::from([FeatureNode {
-                feature,
+                feature: feature.clone(),
                 weight: Some(1.0),
             }]),
             ComplexFeature::All(nested) => {
                 let size = nested.len() as f64;
 
                 nested
-                    .into_iter()
-                    .map(|features| {
+                    .iter()
+                    .flat_map(|features| {
                         CollectVisitor::rec_weight_feature(features)
                             .into_iter()
                             .map(|feature| FeatureNode {
@@ -477,21 +492,17 @@ impl CollectVisitor {
                                 ),
                             })
                     })
-                    .flatten()
                     .collect()
             }
             ComplexFeature::Any(nested) => nested
-                .into_iter()
-                .map(|features| CollectVisitor::rec_weight_feature(features))
-                .flatten()
+                .iter()
+                .flat_map(CollectVisitor::rec_weight_feature)
                 .collect(),
         }
     }
 
-    /// Update the AST node with the found features
+    /// Update the AST node with the found features. The parent ASTNode should already exist
     fn update_ast_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
-        // TODO: ha senso fare questa cosa o è meglio crearlo già con le features dopo la risalita?
-
         // update the node with the found and weighted cfgs
         let node_index: &ASTIndex = self
             .ast_nodes
@@ -573,158 +584,98 @@ impl CollectVisitor {
             .pop()
             .expect("Error: stack is empty while in expression");
 
+        // insert found features in node
         self.update_ast_node_features(node_id, cfg.clone());
+
+        // create artifact if some features are found
         if cfg != ComplexFeature::None {
             self.create_artifact_node(
-                Artifact { node_id: node_id },
+                Artifact { node_id },
                 node.ident,
+                // convert features to index of the features (the features node already exist)
                 self.rec_features_to_indexes(cfg),
                 None,
             );
         }
     }
 
-    /// Build the features graph from the AST graph
-    fn build_feat_graph(&mut self) {
-        let global_node_index = self
-            .ast_nodes
-            .get(&GLOBAL_NODE_ID)
-            .expect("Error: missing global index");
+    fn get_annotated_parent(
+        graph: &graph::DiGraph<ASTNode, Edge>,
+        start_index: ASTIndex,
+    ) -> Option<ASTIndex> {
+        // global node (no parents)
+        if start_index == NodeIndex::new(GLOBAL_NODE_INDEX) {
+            return None;
+        }
 
-        for (_child_node_id, child_node_index) in self.ast_nodes.iter() {
-            let child_features = CollectVisitor::rec_weight_feature(
-                self.ast_graph[*child_node_index].features.clone(),
-            );
+        assert!(
+            graph.neighbors(start_index).count() == 1,
+            "Error: node has multiple parents"
+        );
 
-            if child_features.is_empty() {
-                continue;
-            }
+        let parent = graph
+            .neighbors(start_index)
+            .next()
+            .expect("Error: missing parent index");
 
-            // TODO: meglio farla ricorsiva?
-            // FIXME: porcate varie
-            let mut cur = child_node_index;
-            let mut parent_node_index;
+        let parent_features = &graph
+            .node_weight(parent)
+            .expect("Error: missing parent node")
+            .features;
 
-            let parent_features = loop {
-                if cur == global_node_index {
-                    break Vec::new();
-                }
-
-                assert!(
-                    self.ast_graph.neighbors(*cur).count() == 1,
-                    "Error: node has multiple parents building features graph"
-                );
-                parent_node_index = self
-                    .ast_graph
-                    .neighbors(*cur)
-                    .next()
-                    .expect("Error: missing parent index building features graph");
-
-                let parent_features = CollectVisitor::rec_weight_feature(
-                    self.ast_graph[parent_node_index].features.clone(),
-                );
-
-                if parent_features.is_empty() {
-                    cur = &parent_node_index;
-                } else {
-                    break parent_features;
-                }
-            };
-
-            for child_feat in &child_features {
-                for parent_feat in &parent_features {
-                    self.feat_graph.add_edge(
-                        *self
-                            .feat_nodes
-                            .get(&child_feat.feature)
-                            .expect("Error: cannot find feature node creating features graph"),
-                        *self
-                            .feat_nodes
-                            .get(&parent_feat.feature)
-                            .expect("Error: cannot find feature node creating features graph"),
-                        Edge {
-                            weight: child_feat
-                                .weight
-                                .expect("Error: feature without weight creating features graph"),
-                        },
-                    );
-                }
-            }
+        match parent_features {
+            ComplexFeature::None => CollectVisitor::get_annotated_parent(graph, parent),
+            _ => Some(parent),
         }
     }
 
-    /// Build the artifacts graph from the temporary graph
-    // fn build_arti_graph(&mut self) {
-    //     let global_node_index = self
-    //         .arti_nodes
-    //         .get(&Artifact{ node_id: NodeId::from_u32(GLOBAL_NODE_ID) })
-    //         .expect("Error: missing global index");
+    /// Build the features graph from the AST graph
+    fn build_feat_graph(&mut self) {
+        self.ast_nodes
+            .iter()
+            // ignore global node
+            .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
+            .for_each(|(.., child_index)| {
+                let child_node = &self
+                    .ast_graph
+                    .node_weight(*child_index)
+                    .expect("Error: cannot find child node creating features graph");
+                let child_features = CollectVisitor::rec_weight_feature(&child_node.features);
 
-    //     for (child_node_id, child_node_index) in self.temp_nodes.iter() {
-    //         let child_features = child_ast_node
-    //             .try_borrow()
-    //             .expect("Error: borrow failed on child features creating artifacts graph")
-    //             .features
-    //             .clone();
+                let parent_index =
+                    CollectVisitor::get_annotated_parent(&self.ast_graph, *child_index)
+                        .expect("Error: cannot find parent creating features graph");
+                let parent_features = CollectVisitor::rec_weight_feature(
+                    &self
+                        .ast_graph
+                        .node_weight(parent_index)
+                        .expect("Error: cannot find parent node creating features graph")
+                        .features,
+                );
 
-    //         if child_features == ComplexFeature::None {
-    //             continue;
-    //         }
-
-    //         // FIXME: porcate varie
-    //         let mut cur = child_node_index;
-    //         let mut parent_node_index;
-
-    //         let parent_node_id = loop {
-    //             if cur == &global_node_index {
-    //                 break NodeId::from_u32(GLOBAL_NODE_ID);
-    //             }
-
-    //             assert!(
-    //                 self.temp_graph.neighbors(*cur).count() == 1,
-    //                 "Error: node has multiple parents building artifacts graph"
-    //             );
-    //             parent_node_index = self
-    //                 .temp_graph
-    //                 .neighbors(*cur)
-    //                 .next()
-    //                 .expect("Error: missing parent index building artifacts graph");
-
-    //             let parent_node_id = self.temp_graph[parent_node_index]
-    //                 .try_borrow()
-    //                 .expect("Error: borrow failed on parent nodeid creating artifacts graph")
-    //                 .node_id;
-
-    //             let parent_features = self
-    //                 .temp_nodes
-    //                 .get(&parent_node_id)
-    //                 .expect("Error: cannot find AST node creating edge in artifacts graph")
-    //                 .1
-    //                 .try_borrow()
-    //                 .expect("Error: borrow failed on parent features creating artifacts graph")
-    //                 .features
-    //                 .clone();
-
-    //             if parent_features == ComplexFeature::None {
-    //                 cur = &parent_node_index;
-    //             } else {
-    //                 break parent_node_id;
-    //             }
-    //         };
-
-    //         self.arti_graph.add_edge(
-    //             self.arti_nodes
-    //                 .get(child_node_id)
-    //                 .expect("Error: cannot find feature node creating artifacts graph")
-    //                 .0,
-    //             self.arti_nodes
-    //                 .get(&parent_node_id)
-    //                 .expect("Error: cannot find feature node creating artifacts graph")
-    //                 .0,
-    //             Edge { weight: 0.0 }, // TODO: stabilire peso
-    //         );
-    //     }
-    // }
+                child_features
+                    .iter()
+                    // cartesian product
+                    .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
+                    .for_each(|(feat, parent_feat)| {
+                        self.feat_graph.add_edge(
+                            *self
+                                .feat_nodes
+                                .get(&feat.feature)
+                                .expect("Error: cannot find feature node creating features graph"),
+                            *self
+                                .feat_nodes
+                                .get(&parent_feat.feature)
+                                .expect("Error: cannot find feature node creating features graph"),
+                            Edge {
+                                weight: feat.weight.expect(
+                                    "Error: feature without weight creating features graph",
+                                ),
+                            },
+                        );
+                    });
+            });
+    }
 
     /// Print features graph in DOT format
     fn print_features_graph(&self) {
@@ -799,7 +750,7 @@ impl CollectVisitor {
                 "label=\"{} ({}) #[{}]\"",
                 ast_node.node_id,
                 ast_node.ident.clone().unwrap_or("-".to_string()),
-                ast_node.features.to_string(),
+                ast_node.features,
             )
         };
 
@@ -846,20 +797,6 @@ impl CollectVisitor {
 impl<'ast> Visitor<'ast> for CollectVisitor {
     // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
     // TODO: rilevare features sulle call di macro
-
-    fn visit_crate(&mut self, krate: &'ast Crate) -> Self::Result {
-        // initialize the global AST node
-        self.create_ast_node(
-            Some(GLOBAL_FEATURE_NAME.to_string()),
-            GLOBAL_NODE_ID,
-            ComplexFeature::Feature(Feature {
-                name: GLOBAL_FEATURE_NAME.to_string(),
-                not: false,
-            }),
-        );
-
-        walk_crate(self, krate)
-    }
 
     // The features (cfg) are attributes, but attributes are (almost) always
     // at the same level of the Node they are annotating. So the features are (almost)
