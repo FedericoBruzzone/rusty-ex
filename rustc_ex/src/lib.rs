@@ -214,6 +214,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.build_feat_graph();
                 collector.build_arti_graph();
 
+                collector.ast_graph.reverse(); // reverse graph
+                collector.weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
+                collector.ast_graph.reverse(); // restore graph
+
                 self.process_cli_args(collector, krate);
             });
 
@@ -234,6 +238,7 @@ struct ASTNode {
     node_id: NodeId,
     ident: Option<String>,
     features: ComplexFeature,
+    weight: Option<f64>,
 }
 
 /// Simple feature, key of the features hashmap
@@ -322,6 +327,7 @@ impl CollectVisitor {
         ident: Option<String>,
         node_id: NodeId,
         features: ComplexFeature,
+        weight: Option<f64>,
     ) -> ASTIndex {
         if let Some(index) = self.ast_nodes.get(&node_id) {
             return *index;
@@ -331,6 +337,7 @@ impl CollectVisitor {
             ident,
             node_id,
             features,
+            weight,
         });
         self.ast_nodes.insert(node_id, index);
 
@@ -386,7 +393,7 @@ impl CollectVisitor {
         let features = ComplexFeature::Feature(feature.clone());
         let artifact = Artifact { node_id };
 
-        let index = self.create_ast_node(ident.clone(), node_id, features.clone());
+        let index = self.create_ast_node(ident.clone(), node_id, features.clone(), None);
         assert_eq!(
             index,
             ASTIndex::new(GLOBAL_NODE_INDEX),
@@ -547,7 +554,7 @@ impl CollectVisitor {
 
     /// Initialize a new AST node and update the AST nodes and features stacks
     fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId) {
-        let astnode_index = self.create_ast_node(ident, node_id, ComplexFeature::None);
+        let astnode_index = self.create_ast_node(ident, node_id, ComplexFeature::None, None);
         self.stack.push((astnode_index, ComplexFeature::None));
     }
 
@@ -718,6 +725,37 @@ impl CollectVisitor {
             });
     }
 
+    /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
+    fn weight_ast_graph(&mut self, start_index: ASTIndex) -> f64 {
+        // TODO: pesare le chiamate di funzione
+        // TODO: trovare tutte le cose che possono pesare in maniera "indiretta"
+
+        let adjacents = self.ast_graph.neighbors(start_index).collect::<Vec<_>>();
+
+        if adjacents.is_empty() {
+            self.update_weight(start_index, 1.0);
+            return 1.0; // TODO: il peso di tutto è sempre uguale?
+        }
+
+        let weight: f64 = adjacents
+            .iter()
+            .map(|index| self.weight_ast_graph(*index))
+            .reduce(|acc, x| acc + x)
+            .expect("Error: cannot reduce weights");
+
+        self.update_weight(start_index, weight);
+        weight
+    }
+
+    fn update_weight(&mut self, ast_index: ASTIndex, weight: f64) {
+        let ast_node = self
+            .ast_graph
+            .node_weight_mut(ast_index)
+            .expect("Error: cannot find AST node updating weight");
+
+        ast_node.weight = Some(weight);
+    }
+
     /// Print AST graph in DOT format
     fn print_ast_graph(&self) {
         let get_node_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
@@ -725,11 +763,12 @@ impl CollectVisitor {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"i{}: node{} '{}' #[{}]\"",
+                "label=\"i{}: node{} '{}' #[{}] w{:.2}\"",
                 index,
                 ast_node.node_id,
                 ast_node.ident.clone().unwrap_or(" ".to_string()),
                 ast_node.features,
+                ast_node.weight.unwrap_or(0.0),
             )
         };
 
