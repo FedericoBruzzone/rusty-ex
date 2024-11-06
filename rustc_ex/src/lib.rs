@@ -212,7 +212,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.init_global_scope();
                 collector.visit_crate(krate);
                 collector.build_feat_graph();
-                // collector.build_arti_graph();
+                collector.build_arti_graph();
 
                 self.process_cli_args(collector, krate);
             });
@@ -656,6 +656,65 @@ impl CollectVisitor {
                             },
                         );
                     });
+            });
+    }
+
+    /// Build the artifacts graph from the AST graph
+    fn build_arti_graph(&mut self) {
+        self.ast_nodes
+            .iter()
+            // ignore global node
+            .filter(|(.., node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
+            // ignore nodes with no features
+            .filter(|(.., node_index)| {
+                let child_node = &self
+                    .ast_graph
+                    .node_weight(**node_index)
+                    .expect("Error: cannot find child node creating features graph");
+
+                child_node.features != ComplexFeature::None
+            })
+            // get first annotated parent for each node
+            // the index is in the AST graph, not in the artifacts graph
+            .map(|(.., child_index)| {
+                let parent_index =
+                    CollectVisitor::get_annotated_parent(&self.ast_graph, *child_index)
+                        .expect("Error: cannot find parent creating features graph");
+
+                (child_index, parent_index)
+            })
+            // add edge between child and parent in the artifacts graph
+            // we need to convert the ASTIndex to the ArtifactIndex
+            .for_each(|(child_ast_index, parent_ast_index)| {
+                let child_ast_node = &self
+                    .ast_graph
+                    .node_weight(*child_ast_index)
+                    .expect("Error: cannot find child node creating features graph");
+                let parent_ast_node = &self
+                    .ast_graph
+                    .node_weight(parent_ast_index)
+                    .expect("Error: cannot find parent node creating features graph");
+
+                let child_arti_index = self
+                    .arti_nodes
+                    .get(&Artifact {
+                        node_id: child_ast_node.node_id,
+                    })
+                    .expect("Error: cannot find child artifact node creating artifacts graph");
+                let parent_arti_index = self
+                    .arti_nodes
+                    .get(&Artifact {
+                        node_id: parent_ast_node.node_id,
+                    })
+                    .expect("Error: cannot find child artifact node creating artifacts graph");
+
+                self.arti_graph.add_edge(
+                    *child_arti_index,
+                    *parent_arti_index,
+                    Edge {
+                        weight: 0.0, // TODO: pesare i nodi degli artefatti
+                    },
+                );
             });
     }
 
