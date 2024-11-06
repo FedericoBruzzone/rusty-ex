@@ -404,7 +404,7 @@ impl CollectVisitor {
         let index = self.create_artifact_node(
             artifact,
             ident,
-            self.rec_features_to_indexes(features),
+            self.rec_features_to_indexes(&features),
             None,
         );
         assert_eq!(
@@ -426,15 +426,8 @@ impl CollectVisitor {
                         .expect("Error: malformed feature without value `#[cfg(feature)]`")
                         .to_string();
 
-                    let feature = Feature {
-                        name: name.clone(),
-                        not,
-                    };
+                    let feature = Feature { name, not };
                     self.create_feature_node(feature.clone(), None);
-                    assert!(
-                        self.feat_nodes.contains_key(&feature),
-                        "Error: failed to create feature node"
-                    );
 
                     features.push(ComplexFeature::Feature(feature));
                 }
@@ -542,13 +535,13 @@ impl CollectVisitor {
     }
 
     /// Recursively convert features to node indexes in the features graph
-    fn rec_features_to_indexes(&self, features: ComplexFeature) -> Vec<NodeIndex> {
+    fn rec_features_to_indexes(&self, features: &ComplexFeature) -> Vec<NodeIndex> {
         let mut indexes = Vec::new();
 
         match features {
             ComplexFeature::None => (),
             ComplexFeature::Feature(f) => {
-                indexes.push(*self.feat_nodes.get(&f).expect(
+                indexes.push(*self.feat_nodes.get(f).expect(
                     "Error: cannot find feature node index converting features to indexes",
                 ));
             }
@@ -584,19 +577,19 @@ impl CollectVisitor {
             .pop()
             .expect("Error: stack is empty while in expression");
 
-        // insert found features in node
-        self.update_ast_node_features(node_id, cfg.clone());
-
         // create artifact if some features are found
         if cfg != ComplexFeature::None {
             self.create_artifact_node(
                 Artifact { node_id },
                 node.ident,
                 // convert features to index of the features (the features node already exist)
-                self.rec_features_to_indexes(cfg),
+                self.rec_features_to_indexes(&cfg),
                 None,
             );
         }
+
+        // insert found features in node
+        self.update_ast_node_features(node_id, cfg);
     }
 
     fn get_annotated_parent(
