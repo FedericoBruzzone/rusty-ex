@@ -34,13 +34,13 @@ fn test_simple_feature_no_weigths_features_graph() -> Result<(), String> {
     )?;
 
     // nodes
-    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"aa\"]"));
-    assert!(output.contains("2 [ label=\"!bb\"]"));
-    assert!(output.contains("3 [ label=\"cc\"]"));
-    assert!(output.contains("4 [ label=\"dd\"]"));
-    assert!(output.contains("5 [ label=\"ee\"]"));
-    assert!(output.contains("6 [ label=\"!ff\"]"));
+    assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"i1: aa\"]"));
+    assert!(output.contains("2 [ label=\"i2: !bb\"]"));
+    assert!(output.contains("3 [ label=\"i3: cc\"]"));
+    assert!(output.contains("4 [ label=\"i4: dd\"]"));
+    assert!(output.contains("5 [ label=\"i5: ee\"]"));
+    assert!(output.contains("6 [ label=\"i6: !ff\"]"));
 
     // edges
     assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
@@ -62,13 +62,13 @@ fn test_simple_feature_weigths_features_graph() -> Result<(), String> {
     )?;
 
     // nodes
-    assert!(output.contains("0 [ label=\"__GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"aa\"]"));
-    assert!(output.contains("2 [ label=\"bb\"]"));
-    assert!(output.contains("3 [ label=\"cc\"]"));
-    assert!(output.contains("4 [ label=\"ee\"]"));
-    assert!(output.contains("5 [ label=\"!ff\"]"));
-    assert!(output.contains("6 [ label=\"dd\"]"));
+    assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
+    assert!(output.contains("1 [ label=\"i1: aa\"]"));
+    assert!(output.contains("2 [ label=\"i2: bb\"]"));
+    assert!(output.contains("3 [ label=\"i3: cc\"]"));
+    assert!(output.contains("4 [ label=\"i4: ee\"]"));
+    assert!(output.contains("5 [ label=\"i5: !ff\"]"));
+    assert!(output.contains("6 [ label=\"i6: dd\"]"));
 
     // edges
     assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));

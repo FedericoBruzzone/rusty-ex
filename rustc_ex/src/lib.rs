@@ -718,79 +718,17 @@ impl CollectVisitor {
             });
     }
 
-    /// Print features graph in DOT format
-    fn print_features_graph(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<FeatureNode, Edge>,
-                             edge: graph::EdgeReference<Edge>| {
-            format!("label=\"{:.2}\"", edge.weight().weight)
-        };
-
-        let get_node_attr = |_g: &graph::DiGraph<FeatureNode, Edge>,
-                             node: (graph::NodeIndex, &FeatureNode)| {
-            let feature = node.1;
-            match feature.feature.not {
-                true => format!("label=\"!{}\"", feature.feature.name),
-                false => format!("label=\"{}\"", feature.feature.name),
-            }
-        };
-
-        println!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.feat_graph,
-                &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &get_edge_attr,
-                &get_node_attr,
-            )
-        )
-    }
-
-    /// Print artifacts graph in DOT format
-    fn print_artifacts_graph(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<ArtifactNode, Edge>,
-                             edge: graph::EdgeReference<Edge>| {
-            format!("label=\"{:.2}\"", edge.weight().weight)
-        };
-
-        // TODO: formattare meglio
-        let get_node_attr = |_g: &graph::DiGraph<ArtifactNode, Edge>,
-                             node: (graph::NodeIndex, &ArtifactNode)| {
-            let artifact = node.1;
-            format!(
-                "label=\"{} ({}) #[{:?}] {:.2}\"",
-                artifact.artifact.node_id,
-                artifact.ident.clone().unwrap_or("-".to_string()),
-                artifact.features,
-                artifact.weight.unwrap_or(0.0)
-            )
-        };
-
-        println!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.arti_graph,
-                &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &get_edge_attr,
-                &get_node_attr,
-            )
-        )
-    }
-
     /// Print AST graph in DOT format
     fn print_ast_graph(&self) {
-        let get_edge_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
-                             edge: graph::EdgeReference<Edge>| {
-            format!("label=\"{}\"", edge.weight().weight)
-        };
-
-        // TODO: formattare meglio
         let get_node_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
                              node: (graph::NodeIndex, &ASTNode)| {
+            let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"{} ({}) #[{}]\"",
+                "label=\"i{}: node{} '{}' #[{}]\"",
+                index,
                 ast_node.node_id,
-                ast_node.ident.clone().unwrap_or("-".to_string()),
+                ast_node.ident.clone().unwrap_or(" ".to_string()),
                 ast_node.features,
             )
         };
@@ -800,7 +738,62 @@ impl CollectVisitor {
             Dot::with_attr_getters(
                 &self.ast_graph,
                 &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &get_edge_attr,
+                &|_g, _e| String::new(), // do not print edge labels
+                &get_node_attr,
+            )
+        )
+    }
+
+    /// Print features graph in DOT format
+    fn print_features_graph(&self) {
+        let get_node_attr = |_g: &graph::DiGraph<FeatureNode, Edge>,
+                             node: (graph::NodeIndex, &FeatureNode)| {
+            let index = node.0.index();
+            let feature = node.1;
+            match feature.feature.not {
+                true => format!("label=\"i{}: !{}\"", index, feature.feature.name),
+                false => format!("label=\"i{}: {}\"", index, feature.feature.name),
+            }
+        };
+
+        println!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.feat_graph,
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
+                &|_g, e| format!("label=\"{:.2}\"", e.weight().weight),
+                &get_node_attr,
+            )
+        )
+    }
+
+    /// Print artifacts graph in DOT format
+    fn print_artifacts_graph(&self) {
+        let get_node_attr = |_g: &graph::DiGraph<ArtifactNode, Edge>,
+                             node: (graph::NodeIndex, &ArtifactNode)| {
+            let index = node.0.index();
+            let artifact = node.1;
+            format!(
+                "label=\"i{} node{} '{}' #[{}] w{:.2}\"",
+                index,
+                artifact.artifact.node_id,
+                artifact.ident.clone().unwrap_or("-".to_string()),
+                artifact
+                    .features
+                    .iter()
+                    .map(|f| f.index().to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                artifact.weight.unwrap_or(0.0)
+            )
+        };
+
+        println!(
+            "{:?}",
+            Dot::with_attr_getters(
+                &self.arti_graph,
+                &[Config::NodeNoLabel, Config::EdgeNoLabel],
+                &|_g, _e| String::new(), // do not print edge labels
                 &get_node_attr,
             )
         )
