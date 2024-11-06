@@ -389,13 +389,13 @@ impl CollectVisitor {
         let index = self.create_ast_node(ident.clone(), node_id, features.clone());
         assert_eq!(
             index,
-            NodeIndex::new(GLOBAL_NODE_INDEX),
+            ASTIndex::new(GLOBAL_NODE_INDEX),
             "Error: global AST node has an index != 0"
         );
         let index = self.create_feature_node(feature, None);
         assert_eq!(
             index,
-            NodeIndex::new(GLOBAL_NODE_INDEX),
+            FeatureIndex::new(GLOBAL_NODE_INDEX),
             "Error: global feature node has an index != 0"
         );
         let index = self.create_artifact_node(
@@ -406,13 +406,17 @@ impl CollectVisitor {
         );
         assert_eq!(
             index,
-            NodeIndex::new(GLOBAL_NODE_INDEX),
+            ArtifactIndex::new(GLOBAL_NODE_INDEX),
             "Error: global artifact node has an index != 0"
         );
     }
 
     /// Recursively visit nested features (all, any, not), creating features nodes
-    fn rec_expand(&mut self, nested_meta: Vec<MetaItemInner>, not: bool) -> Vec<ComplexFeature> {
+    fn rec_expand_features(
+        &mut self,
+        nested_meta: Vec<MetaItemInner>,
+        not: bool,
+    ) -> Vec<ComplexFeature> {
         let mut features = Vec::new();
 
         for meta in nested_meta {
@@ -429,7 +433,7 @@ impl CollectVisitor {
                     features.push(ComplexFeature::Feature(feature));
                 }
                 sym::not => features.extend(
-                    self.rec_expand(
+                    self.rec_expand_features(
                         meta.meta_item_list()
                             .expect("Error: empty `not` feature attribute")
                             .to_vec(),
@@ -437,7 +441,7 @@ impl CollectVisitor {
                     ),
                 ),
                 sym::all => features.push(ComplexFeature::All(
-                    self.rec_expand(
+                    self.rec_expand_features(
                         meta.meta_item_list()
                             .expect("Error: empty `all` feature attribute")
                             .to_vec(),
@@ -445,7 +449,7 @@ impl CollectVisitor {
                     ),
                 )),
                 sym::any => features.push(ComplexFeature::Any(
-                    self.rec_expand(
+                    self.rec_expand_features(
                         meta.meta_item_list()
                             .expect("Error: empty `any` feature attribute")
                             .to_vec(),
@@ -635,18 +639,18 @@ impl CollectVisitor {
                     .iter()
                     // cartesian product
                     .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
-                    .for_each(|(feat, parent_feat)| {
+                    .for_each(|(child_feat, parent_feat)| {
                         self.feat_graph.add_edge(
                             *self
                                 .feat_nodes
-                                .get(&feat.feature)
+                                .get(&child_feat.feature)
                                 .expect("Error: cannot find feature node creating features graph"),
                             *self
                                 .feat_nodes
                                 .get(&parent_feat.feature)
                                 .expect("Error: cannot find feature node creating features graph"),
                             Edge {
-                                weight: feat.weight.expect(
+                                weight: child_feat.weight.expect(
                                     "Error: feature without weight creating features graph",
                                 ),
                             },
@@ -796,7 +800,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     match self.stack.pop() {
                         Some((astnode_index, ComplexFeature::None)) => {
-                            let parsed_features = self.rec_expand(list.to_vec(), false);
+                            let parsed_features = self.rec_expand_features(list.to_vec(), false);
                             assert!(
                                 parsed_features.len() == 1,
                                 "Error: multiple (not nested) features in cfg attribute"
