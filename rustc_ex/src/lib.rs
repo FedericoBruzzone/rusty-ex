@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::{borrow::Cow, env};
-use std::{fs, io};
+use std::{fs, io, panic};
 
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
@@ -197,8 +197,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visit AST
                 let collector = &mut CollectVisitor {
-                    astnodes_stack: Vec::new(),
-                    features_stack: Vec::new(),
+                    stack: Vec::new(),
 
                     ast_graph: graph::DiGraph::new(),
                     ast_nodes: HashMap::new(),
@@ -290,10 +289,8 @@ type ArtifactIndex = NodeIndex;
 
 /// AST visitor to collect data to build the graphs
 struct CollectVisitor {
-    // parallel stacks: AST nodes with respective features
-    // TODO: probabilmente basta un solo stack
-    astnodes_stack: Vec<ASTNode>,
-    features_stack: Vec<ComplexFeature>,
+    // stack to keep track of the AST nodes dependencies
+    stack: Vec<(ASTIndex, ComplexFeature)>,
 
     /// Relationships between all nodes of the AST.
     /// A `ASTNode` also stores features and ident of the `NodeId`
@@ -508,26 +505,15 @@ impl CollectVisitor {
             .features = features;
 
         // create edge in the graph, to the parent or to the global scope
-        match self.astnodes_stack.last() {
-            Some(ASTNode {
-                node_id: parent_id, ..
-            }) => {
-                self.ast_graph.add_edge(
-                    *node_index,
-                    *self
-                        .ast_nodes
-                        .get(parent_id)
-                        .expect("Error: cannot find AST node creating temp graph"),
-                    Edge { weight: 0.0 },
-                );
+        match self.stack.last() {
+            Some((parent_index, ..)) => {
+                self.ast_graph
+                    .add_edge(*node_index, *parent_index, Edge { weight: 0.0 });
             }
             None => {
                 self.ast_graph.add_edge(
                     *node_index,
-                    *self
-                        .ast_nodes
-                        .get(&GLOBAL_NODE_ID)
-                        .expect("Error: cannot find AST node creating temp graph"),
+                    ASTIndex::new(GLOBAL_NODE_INDEX),
                     Edge { weight: 0.0 },
                 );
             }
@@ -556,40 +542,39 @@ impl CollectVisitor {
     }
 
     /// Initialize a new AST node and update the AST nodes and features stacks
-    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId, stmt: ASTNode) {
-        self.create_ast_node(ident, node_id, ComplexFeature::None);
-        self.astnodes_stack.push(stmt);
-        self.features_stack.push(ComplexFeature::None);
+    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId) {
+        let astnode_index = self.create_ast_node(ident, node_id, ComplexFeature::None);
+        self.stack.push((astnode_index, ComplexFeature::None));
     }
 
     /// Extract the features of the AST node from the stacks and update the AST graph
-    fn post_walk(&mut self, node_id: NodeId, stmt: ASTNode) {
-        let node = self
-            .astnodes_stack
-            .pop()
-            .expect("Error: stack is empty while in expression");
-        assert_eq!(
-            node.node_id, stmt.node_id,
-            "Error: node id mismatch, stack not synchronized"
-        );
-        let cfg = self
-            .features_stack
+    fn post_walk(&mut self, node_id: NodeId) {
+        let (node_index, features) = self
+            .stack
             .pop()
             .expect("Error: stack is empty while in expression");
 
+        let ast_node = self
+            .ast_graph
+            .node_weight_mut(node_index)
+            .expect("Error: missing node post AST walk");
+
+        assert_eq!(
+            node_id, ast_node.node_id,
+            "Error: node id mismatch post AST walk"
+        );
+
         // create artifact if some features are found
-        if cfg != ComplexFeature::None {
-            self.create_artifact_node(
-                Artifact { node_id },
-                node.ident,
-                // convert features to index of the features (the features node already exist)
-                self.rec_features_to_indexes(&cfg),
-                None,
-            );
+        if features != ComplexFeature::None {
+            let ident = ast_node.ident.clone();
+            // convert features to index of the features (the features node already exist)
+            let features_indexes = self.rec_features_to_indexes(&features);
+
+            self.create_artifact_node(Artifact { node_id }, ident, features_indexes, None);
         }
 
         // insert found features in node
-        self.update_ast_node_features(node_id, cfg);
+        self.update_ast_node_features(node_id, features);
     }
 
     fn get_annotated_parent(
@@ -809,16 +794,24 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         if let Some(meta) = attr.meta() {
             if meta.name_or_empty() == Symbol::intern("rustcex_cfg") {
                 if let MetaItemKind::List(ref list) = meta.kind {
-                    self.features_stack.pop();
+                    match self.stack.pop() {
+                        Some((astnode_index, ComplexFeature::None)) => {
+                            let parsed_features = self.rec_expand(list.to_vec(), false);
+                            assert!(
+                                parsed_features.len() == 1,
+                                "Error: multiple (not nested) features in cfg attribute"
+                            );
+                            let feat = parsed_features[0].to_owned();
 
-                    let parsed_features = self.rec_expand(list.to_vec(), false);
-                    assert!(
-                        parsed_features.len() == 1,
-                        "Error: multiple (not nested) features in cfg attribute"
-                    );
-                    let feat = parsed_features[0].to_owned();
-
-                    self.features_stack.push(feat);
+                            self.stack.push((astnode_index, feat));
+                        }
+                        Some((.., ComplexFeature::Feature(..)))
+                        | Some((.., ComplexFeature::All(..)))
+                        | Some((.., ComplexFeature::Any(..))) => {
+                            panic!("Error: node on stack already has a feature visiting attribute")
+                        }
+                        None => panic!("Error: stack is empty while in attribute (cfg) visit"),
+                    }
                 }
             }
         }
@@ -830,90 +823,60 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_expr(self, cur_ex);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 
     /// Visit item, like functions, structs, enums
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_item(self, cur_item);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 
     /// Visit definition fields, like struct fields
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
         let node_id = cur_field.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_field_def(self, cur_field);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 
     /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = cur_stmt.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_stmt(self, cur_stmt);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 
     /// Visit enum variant
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
         let node_id = cur_var.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_variant(self, cur_var);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 
     /// Visita match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
-        let stmt = ASTNode {
-            node_id,
-            ident: ident.clone(),
-            features: ComplexFeature::None,
-        };
 
-        self.pre_walk(ident, node_id, stmt.clone());
+        self.pre_walk(ident, node_id);
         walk_arm(self, cur_arm);
-        self.post_walk(node_id, stmt);
+        self.post_walk(node_id);
     }
 }
 
