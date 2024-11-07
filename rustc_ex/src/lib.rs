@@ -236,16 +236,16 @@ const GLOBAL_NODE_INDEX: usize = 0;
 enum ASTNodeWeightKind {
     /// Leaf, a literal or something that does NOT calls anything.
     /// The weight is 1.0
-    Leaf,
+    Leaf(String),
     /// A block of statements, expressions or items. Has no intrinsic weight.
     /// The weight is the sum of the children.
-    Block,
+    Block(String),
     /// A call to another node, like a function call.
     /// The weight is the weight of the called thing.
-    Call,
+    Call(String),
     /// Items that have no weight, like `_`.
     /// The weight is 0.0
-    NoWeight,
+    NoWeight(String),
 }
 
 /// AST node, can be annotated with features
@@ -413,7 +413,7 @@ impl CollectVisitor {
         let artifact = Artifact { node_id };
 
         let index = self.create_ast_node(
-            ASTNodeWeightKind::Block,
+            ASTNodeWeightKind::Block("Global".to_string()),
             ident.clone(),
             node_id,
             features.clone(),
@@ -768,10 +768,10 @@ impl CollectVisitor {
             .expect("Error: cannot find AST node weighting AST graph")
             .kind
         {
-            ASTNodeWeightKind::Leaf => 1.0 + childs_weight,
-            ASTNodeWeightKind::Block => childs_weight,
-            ASTNodeWeightKind::Call => 0.0 + childs_weight, // TODO: pesare le chiamate
-            ASTNodeWeightKind::NoWeight => 0.0,
+            ASTNodeWeightKind::Leaf(..) => 1.0 + childs_weight,
+            ASTNodeWeightKind::Block(..) => childs_weight,
+            ASTNodeWeightKind::Call(..) => 0.0 + childs_weight, // TODO: pesare le chiamate
+            ASTNodeWeightKind::NoWeight(..) => 0.0,
         };
 
         self.update_weight(start_index, weight);
@@ -794,7 +794,7 @@ impl CollectVisitor {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"i{}: node{} ({:?}) '{}' #[{}] w{:.2}\"",
+                "label=\"i{}: node{} ({}) '{}' #[{}] w{:.2}\"",
                 index,
                 ast_node.node_id,
                 ast_node.kind,
@@ -950,6 +950,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
+        let kind_string = ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
             // blocks
             ExprKind::Array(..)
@@ -979,11 +980,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
             | ExprKind::Paren(..)
-            | ExprKind::Try(..) => ASTNodeWeightKind::Block,
+            | ExprKind::Try(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
             ExprKind::Call(..) | ExprKind::MethodCall(..) | ExprKind::MacCall(..) => {
-                ASTNodeWeightKind::Call
+                ASTNodeWeightKind::Call(kind_string)
             }
 
             // leafs
@@ -995,7 +996,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Yield(..)
             | ExprKind::Yeet(..)
             | ExprKind::Become(..)
-            | ExprKind::Err(..) => ASTNodeWeightKind::Leaf,
+            | ExprKind::Err(..) => ASTNodeWeightKind::Leaf(kind_string),
 
             // no weight
             ExprKind::Underscore
@@ -1003,7 +1004,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::OffsetOf(..)
             | ExprKind::IncludedBytes(..)
             | ExprKind::FormatArgs(..)
-            | ExprKind::Dummy => ASTNodeWeightKind::NoWeight,
+            | ExprKind::Dummy => ASTNodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1015,6 +1016,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
+        let kind_string =
+            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
             // blocks
             ItemKind::Fn(..)
@@ -1023,25 +1026,25 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::Struct(..)
             | ItemKind::Trait(..)
             | ItemKind::Impl(..)
-            | ItemKind::MacroDef(..) => ASTNodeWeightKind::Block,
+            | ItemKind::MacroDef(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
             ItemKind::Union(..) | ItemKind::TraitAlias(..) | ItemKind::MacCall(..) => {
-                ASTNodeWeightKind::Call
+                ASTNodeWeightKind::Call(kind_string)
             }
 
             // leafs
             ItemKind::Static(..)
             | ItemKind::Const(..)
             | ItemKind::GlobalAsm(..)
-            | ItemKind::TyAlias(..) => ASTNodeWeightKind::Leaf,
+            | ItemKind::TyAlias(..) => ASTNodeWeightKind::Leaf(kind_string),
 
             // no weight
             ItemKind::Use(..)
             | ItemKind::ExternCrate(..)
             | ItemKind::ForeignMod(..)
             | ItemKind::Delegation(..)
-            | ItemKind::DelegationMac(..) => ASTNodeWeightKind::NoWeight,
+            | ItemKind::DelegationMac(..) => ASTNodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1053,18 +1056,22 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = cur_stmt.id;
+        let kind_string =
+            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // blocks
-            StmtKind::Item(..) => ASTNodeWeightKind::Block,
+            StmtKind::Item(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            StmtKind::MacCall(..) => ASTNodeWeightKind::Call,
+            StmtKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string),
 
             // leafs
-            StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => ASTNodeWeightKind::Leaf,
+            StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
+                ASTNodeWeightKind::Leaf(kind_string)
+            }
 
             // no weight
-            StmtKind::Empty => ASTNodeWeightKind::NoWeight,
+            StmtKind::Empty => ASTNodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1076,7 +1083,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
         let node_id = cur_field.id;
-        let kind = ASTNodeWeightKind::Leaf;
+        let kind_string = "FieldDef".to_string();
+        let kind = ASTNodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_field_def(self, cur_field);
@@ -1087,7 +1095,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
         let node_id = cur_var.id;
-        let kind = ASTNodeWeightKind::Leaf;
+        let kind_string = "Variant".to_string();
+        let kind = ASTNodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_variant(self, cur_var);
@@ -1098,7 +1107,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
-        let kind = ASTNodeWeightKind::Leaf;
+        let kind_string = "Arm".to_string();
+        let kind = ASTNodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
@@ -1136,6 +1146,25 @@ impl std::fmt::Display for ComplexFeature {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+        }
+    }
+}
+
+impl ASTNodeWeightKind {
+    /// Parse the kind variant name from the debug string (keep only the Kind name)
+    fn parse_kind_variant_name(s: String) -> String {
+        s.split(['(', '{']).next().unwrap_or("").trim().to_string()
+    }
+}
+
+impl std::fmt::Display for ASTNodeWeightKind {
+    /// Complex feature to string
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ASTNodeWeightKind::Leaf(name) => write!(f, "Leaf({})", name),
+            ASTNodeWeightKind::Block(name) => write!(f, "Block({})", name),
+            ASTNodeWeightKind::Call(name) => write!(f, "Call({})", name),
+            ASTNodeWeightKind::NoWeight(name) => write!(f, "NoWeight({})", name),
         }
     }
 }
