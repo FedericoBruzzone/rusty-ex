@@ -215,7 +215,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.build_arti_graph();
 
                 collector.ast_graph.reverse(); // reverse graph
-                collector.weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
+                collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
                 collector.ast_graph.reverse(); // restore graph
 
                 self.process_cli_args(collector, krate);
@@ -751,22 +751,28 @@ impl CollectVisitor {
     }
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
-    fn weight_ast_graph(&mut self, start_index: ASTIndex) -> f64 {
+    fn rec_weight_ast_graph(&mut self, start_index: ASTIndex) -> f64 {
         // TODO: pesare le chiamate di funzione
-        // TODO: trovare tutte le cose che possono pesare in maniera "indiretta"
 
         let adjacents = self.ast_graph.neighbors(start_index).collect::<Vec<_>>();
 
-        if adjacents.is_empty() {
-            self.update_weight(start_index, 1.0);
-            return 1.0; // TODO: il peso di tutto è sempre uguale?
-        }
-
-        let weight: f64 = adjacents
+        let childs_weight: f64 = adjacents
             .iter()
-            .map(|index| self.weight_ast_graph(*index))
+            .map(|index| self.rec_weight_ast_graph(*index))
             .reduce(|acc, x| acc + x)
-            .expect("Error: cannot reduce weights");
+            .unwrap_or(0.0);
+
+        let weight = match self
+            .ast_graph
+            .node_weight(start_index)
+            .expect("Error: cannot find AST node weighting AST graph")
+            .kind
+        {
+            ASTNodeWeightKind::Leaf => 1.0 + childs_weight,
+            ASTNodeWeightKind::Block => childs_weight,
+            ASTNodeWeightKind::Call => 0.0 + childs_weight, // TODO: pesare le chiamate
+            ASTNodeWeightKind::NoWeight => 0.0,
+        };
 
         self.update_weight(start_index, weight);
         weight
@@ -788,9 +794,10 @@ impl CollectVisitor {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"i{}: node{} '{}' #[{}] w{:.2}\"",
+                "label=\"i{}: node{} ({:?}) '{}' #[{}] w{:.2}\"",
                 index,
                 ast_node.node_id,
+                ast_node.kind,
                 ast_node.ident.clone().unwrap_or(" ".to_string()),
                 ast_node.features,
                 ast_node.weight.unwrap_or(0.0),
