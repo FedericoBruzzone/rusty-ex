@@ -232,9 +232,16 @@ const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
 const GLOBAL_NODE_INDEX: usize = 0;
 
+#[derive(Clone, Debug)]
+enum ASTNodeKind {
+    TODO, // TODO: trovare a cosa assegnare questi
+    Global,
+}
+
 /// AST node, can be annotated with features
 #[derive(Clone, Debug)]
 struct ASTNode {
+    kind: ASTNodeKind,
     node_id: NodeId,
     ident: Option<String>,
     features: ComplexFeature,
@@ -324,6 +331,7 @@ impl CollectVisitor {
     /// Return the index of the created node.
     fn create_ast_node(
         &mut self,
+        kind: ASTNodeKind,
         ident: Option<String>,
         node_id: NodeId,
         features: ComplexFeature,
@@ -334,6 +342,7 @@ impl CollectVisitor {
         }
 
         let index: ASTIndex = self.ast_graph.add_node(ASTNode {
+            kind,
             ident,
             node_id,
             features,
@@ -393,7 +402,13 @@ impl CollectVisitor {
         let features = ComplexFeature::Feature(feature.clone());
         let artifact = Artifact { node_id };
 
-        let index = self.create_ast_node(ident.clone(), node_id, features.clone(), None);
+        let index = self.create_ast_node(
+            ASTNodeKind::Global,
+            ident.clone(),
+            node_id,
+            features.clone(),
+            None,
+        );
         assert_eq!(
             index,
             ASTIndex::new(GLOBAL_NODE_INDEX),
@@ -553,8 +568,8 @@ impl CollectVisitor {
     }
 
     /// Initialize a new AST node and update the AST nodes and features stacks
-    fn pre_walk(&mut self, ident: Option<String>, node_id: NodeId) {
-        let astnode_index = self.create_ast_node(ident, node_id, ComplexFeature::None, None);
+    fn pre_walk(&mut self, kind: ASTNodeKind, ident: Option<String>, node_id: NodeId) {
+        let astnode_index = self.create_ast_node(kind, ident, node_id, ComplexFeature::None, None);
         self.stack.push((astnode_index, ComplexFeature::None));
     }
 
@@ -918,8 +933,56 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = cur_ex.id;
+        let kind = match &cur_ex.kind {
+            ExprKind::Array(thin_vec) => todo!(),
+            ExprKind::ConstBlock(anon_const) => todo!(),
+            ExprKind::Call(p, thin_vec) => todo!(),
+            ExprKind::MethodCall(method_call) => todo!(),
+            ExprKind::Tup(thin_vec) => todo!(),
+            ExprKind::Binary(spanned, p, p1) => todo!(),
+            ExprKind::Unary(un_op, p) => todo!(),
+            ExprKind::Lit(lit) => todo!(),
+            ExprKind::Cast(p, p1) => todo!(),
+            ExprKind::Type(p, p1) => todo!(),
+            ExprKind::Let(p, p1, span, recovered) => todo!(),
+            ExprKind::If(p, p1, p2) => todo!(),
+            ExprKind::While(p, p1, label) => todo!(),
+            ExprKind::ForLoop { pat, iter, body, label, kind } => todo!(),
+            ExprKind::Loop(p, label, span) => todo!(),
+            ExprKind::Match(p, thin_vec, match_kind) => todo!(),
+            ExprKind::Closure(closure) => todo!(),
+            ExprKind::Block(p, label) => todo!(),
+            ExprKind::Gen(capture_by, p, gen_block_kind, span) => todo!(),
+            ExprKind::Await(p, span) => todo!(),
+            ExprKind::TryBlock(p) => todo!(),
+            ExprKind::Assign(p, p1, span) => todo!(),
+            ExprKind::AssignOp(spanned, p, p1) => todo!(),
+            ExprKind::Field(p, ident) => todo!(),
+            ExprKind::Index(p, p1, span) => todo!(),
+            ExprKind::Range(p, p1, range_limits) => todo!(),
+            ExprKind::Underscore => todo!(),
+            ExprKind::Path(p, path) => todo!(),
+            ExprKind::AddrOf(borrow_kind, mutability, p) => todo!(),
+            ExprKind::Break(label, p) => todo!(),
+            ExprKind::Continue(label) => todo!(),
+            ExprKind::Ret(p) => todo!(),
+            ExprKind::InlineAsm(p) => todo!(),
+            ExprKind::OffsetOf(p, p1) => todo!(),
+            ExprKind::MacCall(p) => todo!(),
+            ExprKind::Struct(p) => todo!(),
+            ExprKind::Repeat(p, anon_const) => todo!(),
+            ExprKind::Paren(p) => todo!(),
+            ExprKind::Try(p) => todo!(),
+            ExprKind::Yield(p) => todo!(),
+            ExprKind::Yeet(p) => todo!(),
+            ExprKind::Become(p) => todo!(),
+            ExprKind::IncludedBytes(rc) => todo!(),
+            ExprKind::FormatArgs(p) => todo!(),
+            ExprKind::Err(error_guaranteed) => todo!(),
+            ExprKind::Dummy => todo!(),
+        };
 
-        self.pre_walk(ident, node_id);
+        self.pre_walk(kind, ident, node_id);
         walk_expr(self, cur_ex);
         self.post_walk(node_id);
     }
@@ -928,19 +991,30 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = cur_item.id;
+        let kind = match &cur_item.kind {
+            ItemKind::ExternCrate(symbol) => todo!(),
+            ItemKind::Use(use_tree) => todo!(),
+            ItemKind::Static(static_item) => todo!(),
+            ItemKind::Const(const_item) => todo!(),
+            ItemKind::Fn(_) => todo!(),
+            ItemKind::Mod(safety, mod_kind) => todo!(),
+            ItemKind::ForeignMod(foreign_mod) => todo!(),
+            ItemKind::GlobalAsm(inline_asm) => todo!(),
+            ItemKind::TyAlias(ty_alias) => todo!(),
+            ItemKind::Enum(enum_def, generics) => todo!(),
+            ItemKind::Struct(variant_data, generics) => todo!(),
+            ItemKind::Union(variant_data, generics) => todo!(),
+            ItemKind::Trait(_) => todo!(),
+            ItemKind::TraitAlias(generics, vec) => todo!(),
+            ItemKind::Impl(_) => todo!(),
+            ItemKind::MacCall(p) => todo!(),
+            ItemKind::MacroDef(macro_def) => todo!(),
+            ItemKind::Delegation(delegation) => todo!(),
+            ItemKind::DelegationMac(delegation_mac) => todo!(),
+        };
 
-        self.pre_walk(ident, node_id);
+        self.pre_walk(kind, ident, node_id);
         walk_item(self, cur_item);
-        self.post_walk(node_id);
-    }
-
-    /// Visit definition fields, like struct fields
-    fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
-        let ident = None;
-        let node_id = cur_field.id;
-
-        self.pre_walk(ident, node_id);
-        walk_field_def(self, cur_field);
         self.post_walk(node_id);
     }
 
@@ -948,9 +1022,28 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = cur_stmt.id;
+        let kind = match &cur_stmt.kind {
+            StmtKind::Let(p) => todo!(),
+            StmtKind::Item(p) => todo!(),
+            StmtKind::Expr(p) => todo!(),
+            StmtKind::Semi(p) => todo!(),
+            StmtKind::Empty => todo!(),
+            StmtKind::MacCall(p) => todo!(),
+        };
 
-        self.pre_walk(ident, node_id);
+        self.pre_walk(kind, ident, node_id);
         walk_stmt(self, cur_stmt);
+        self.post_walk(node_id);
+    }
+
+    /// Visit definition fields, like struct fields
+    fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
+        let ident = None;
+        let node_id = cur_field.id;
+        let kind = ASTNodeKind::TODO;
+
+        self.pre_walk(kind, ident, node_id);
+        walk_field_def(self, cur_field);
         self.post_walk(node_id);
     }
 
@@ -958,8 +1051,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
         let node_id = cur_var.id;
+        let kind = ASTNodeKind::TODO;
 
-        self.pre_walk(ident, node_id);
+        self.pre_walk(kind, ident, node_id);
         walk_variant(self, cur_var);
         self.post_walk(node_id);
     }
@@ -968,8 +1062,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
+        let kind = ASTNodeKind::TODO;
 
-        self.pre_walk(ident, node_id);
+        self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
         self.post_walk(node_id);
     }
