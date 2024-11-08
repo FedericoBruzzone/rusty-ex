@@ -242,7 +242,7 @@ enum ASTNodeWeightKind {
     Block(String),
     /// A call to another node, like a function call.
     /// The weight is the weight of the called thing.
-    Call(String),
+    Call(String, Option<String>),
     /// Items that have no weight, like `_`.
     /// The weight is 0.0
     NoWeight(String),
@@ -983,8 +983,34 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Try(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            ExprKind::Call(..) | ExprKind::MethodCall(..) | ExprKind::MacCall(..) => {
-                ASTNodeWeightKind::Call(kind_string)
+            ExprKind::Call(call, ..) => {
+                let ident = match &call.kind {
+                    ExprKind::Path(None, Path { segments, .. }) => Some(
+                        segments
+                            .iter()
+                            .map(|seg| seg.ident.to_string())
+                            .collect::<Vec<_>>()
+                            .join("::"),
+                    ),
+                    _ => None,
+                };
+                ASTNodeWeightKind::Call(kind_string, ident)
+            }
+            ExprKind::MethodCall(method_call) => {
+                let ident = Some(method_call.seg.ident.to_string());
+                ASTNodeWeightKind::Call(kind_string, ident)
+            }
+            ExprKind::MacCall(mac_call) => {
+                let ident = Some(
+                    mac_call
+                        .path
+                        .segments
+                        .iter()
+                        .map(|seg| seg.ident.to_string())
+                        .collect::<Vec<_>>()
+                        .join("::"),
+                );
+                ASTNodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
@@ -1030,7 +1056,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
             // calls
             ItemKind::Union(..) | ItemKind::TraitAlias(..) | ItemKind::MacCall(..) => {
-                ASTNodeWeightKind::Call(kind_string)
+                ASTNodeWeightKind::Call(kind_string, None) // TODO
             }
 
             // leafs
@@ -1063,7 +1089,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             StmtKind::Item(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            StmtKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string),
+            StmtKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string, None), // TODO
 
             // leafs
             StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
@@ -1158,12 +1184,17 @@ impl ASTNodeWeightKind {
 }
 
 impl std::fmt::Display for ASTNodeWeightKind {
-    /// Complex feature to string
+    /// ASTNodeWeightKind to string
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ASTNodeWeightKind::Leaf(name) => write!(f, "Leaf({})", name),
             ASTNodeWeightKind::Block(name) => write!(f, "Block({})", name),
-            ASTNodeWeightKind::Call(name) => write!(f, "Call({})", name),
+            ASTNodeWeightKind::Call(name, ident) => write!(
+                f,
+                "Call({})->{}",
+                name,
+                ident.clone().unwrap_or("??".to_string())
+            ),
             ASTNodeWeightKind::NoWeight(name) => write!(f, "NoWeight({})", name),
         }
     }
