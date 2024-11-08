@@ -1078,6 +1078,33 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id);
     }
 
+    /// Visit associated items, like methods in impls
+    fn visit_assoc_item(&mut self, cur_aitem: &'ast AssocItem, ctxt: AssocCtxt) -> Self::Result {
+        let ident = Some(cur_aitem.ident.to_string());
+        let node_id = cur_aitem.id;
+        let kind_string =
+            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
+        let kind = match &cur_aitem.kind {
+            // blocks
+            AssocItemKind::Fn(..) => ASTNodeWeightKind::Block(kind_string),
+
+            // calls
+            AssocItemKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string, None), // TODO
+
+            // leafs
+            AssocItemKind::Const(..) => ASTNodeWeightKind::Leaf(kind_string),
+
+            // no weight
+            AssocItemKind::Type(..) => ASTNodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::Delegation(..) => ASTNodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::DelegationMac(..) => ASTNodeWeightKind::NoWeight(kind_string),
+        };
+
+        self.pre_walk(kind, ident, node_id);
+        walk_assoc_item(self, cur_aitem, ctxt);
+        self.post_walk(node_id);
+    }
+
     /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
