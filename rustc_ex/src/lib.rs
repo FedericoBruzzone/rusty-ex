@@ -195,6 +195,13 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let resolver_and_krate = tcx.resolver_for_lowering().borrow();
                 let krate = &*resolver_and_krate.1;
 
+                // TODO: vedere se qualcuno può essere utile
+                // tcx.features();
+                // tcx.get_attrs(did, attr);
+                // tcx.has_attr(did, attr);
+                // tcx.is_lang_item(def_id, lang_item);
+                // tcx.used_crates(key);
+
                 // visit AST
                 let collector = &mut CollectVisitor {
                     stack: Vec::new(),
