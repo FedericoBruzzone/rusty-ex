@@ -1052,11 +1052,20 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::Struct(..)
             | ItemKind::Trait(..)
             | ItemKind::Impl(..)
+            | ItemKind::Union(..)
+            | ItemKind::TraitAlias(..)
             | ItemKind::MacroDef(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            ItemKind::Union(..) | ItemKind::TraitAlias(..) | ItemKind::MacCall(..) => {
-                ASTNodeWeightKind::Call(kind_string, None) // TODO
+            ItemKind::MacCall(mac_call) => {
+                let ident = Some(
+                    mac_call.path.segments
+                        .iter()
+                        .map(|seg| seg.ident.to_string())
+                        .collect::<Vec<_>>()
+                        .join("::"),
+                );
+                ASTNodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
@@ -1089,7 +1098,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             AssocItemKind::Fn(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            AssocItemKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string, None), // TODO
+            AssocItemKind::MacCall(mac_call) => {
+                let ident = Some(
+                    mac_call.path.segments
+                        .iter()
+                        .map(|seg| seg.ident.to_string())
+                        .collect::<Vec<_>>()
+                        .join("::"),
+                );
+                ASTNodeWeightKind::Call(kind_string, ident)
+            },
 
             // leafs
             AssocItemKind::Const(..) => ASTNodeWeightKind::Leaf(kind_string),
@@ -1116,7 +1134,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             StmtKind::Item(..) => ASTNodeWeightKind::Block(kind_string),
 
             // calls
-            StmtKind::MacCall(..) => ASTNodeWeightKind::Call(kind_string, None), // TODO
+            StmtKind::MacCall(mac_call) => {
+                let ident = Some(
+                    mac_call.mac.path.segments
+                        .iter()
+                        .map(|seg| seg.ident.to_string())
+                        .collect::<Vec<_>>()
+                        .join("::"),
+                );
+                ASTNodeWeightKind::Call(kind_string, ident)
+            },
 
             // leafs
             StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
