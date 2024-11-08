@@ -232,8 +232,9 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     }
 }
 
-/// Constant for the global feature NodeId
-const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967040);
+/// Constant for the global feature NodeId.
+/// 4294967040 is not used because it is used by the compiler for "Dummy" nodes
+const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
 /// Constant for the global feature name
 const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
@@ -1066,7 +1067,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             // calls
             ItemKind::MacCall(mac_call) => {
                 let ident = Some(
-                    mac_call.path.segments
+                    mac_call
+                        .path
+                        .segments
                         .iter()
                         .map(|seg| seg.ident.to_string())
                         .collect::<Vec<_>>()
@@ -1107,14 +1110,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             // calls
             AssocItemKind::MacCall(mac_call) => {
                 let ident = Some(
-                    mac_call.path.segments
+                    mac_call
+                        .path
+                        .segments
                         .iter()
                         .map(|seg| seg.ident.to_string())
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
                 ASTNodeWeightKind::Call(kind_string, ident)
-            },
+            }
 
             // leafs
             AssocItemKind::Const(..) => ASTNodeWeightKind::Leaf(kind_string),
@@ -1143,14 +1148,17 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             // calls
             StmtKind::MacCall(mac_call) => {
                 let ident = Some(
-                    mac_call.mac.path.segments
+                    mac_call
+                        .mac
+                        .path
+                        .segments
                         .iter()
                         .map(|seg| seg.ident.to_string())
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
                 ASTNodeWeightKind::Call(kind_string, ident)
-            },
+            }
 
             // leafs
             StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
