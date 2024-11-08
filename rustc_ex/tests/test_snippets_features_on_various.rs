@@ -3,7 +3,7 @@ mod utils;
 // use pretty_assertions::assert_eq;
 use utils::run_with_cargo_bin_and_snippet;
 
-const FOLDER: &str = "tests/snippets/more_artifacts";
+const FOLDER: &str = "tests/snippets/features_on_various";
 
 // =============================================
 
