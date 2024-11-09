@@ -1198,7 +1198,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id);
     }
 
-    /// Visita match arm
+    /// Visits match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
         let node_id = cur_arm.id;
@@ -1207,6 +1207,18 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
+        self.post_walk(node_id);
+    }
+
+    /// Visits a function parameter
+    fn visit_param(&mut self, cur_par: &'ast Param) -> Self::Result {
+        let ident = None;
+        let node_id = cur_par.id;
+        let kind_string = "Param".to_string();
+        let kind = ASTNodeWeightKind::NoWeight(kind_string);
+
+        self.pre_walk(kind, ident, node_id);
+        walk_param(self, cur_par);
         self.post_walk(node_id);
     }
 }
