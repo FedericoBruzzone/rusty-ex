@@ -86,7 +86,7 @@ pub fn create_cargo_project_with_snippet(snippet: &str) -> Result<(), String> {
 [package]
 name = "temp"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 "#,
