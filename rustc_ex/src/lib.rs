@@ -932,13 +932,22 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     match self.stack.pop() {
                         Some((astnode_index, ComplexFeature::None)) => {
                             let parsed_features = self.rec_expand_features(list.to_vec(), false);
-                            assert!(
-                                parsed_features.len() == 1,
-                                "Error: multiple (not nested) features in cfg attribute"
-                            );
-                            let feat = parsed_features[0].to_owned();
 
-                            self.stack.push((astnode_index, feat));
+                            match parsed_features.len() {
+                                // well-formed without feature (we can ignore): #[cfg(windows)]
+                                0 => {
+                                    self.stack.push((astnode_index, ComplexFeature::None));
+                                }
+                                // well-formed with feature (we need the feature): #[cfg(feature = "a"))]
+                                1 => {
+                                    self.stack
+                                        .push((astnode_index, parsed_features[0].to_owned()));
+                                }
+                                // malformed (panic): #[cfg(feature = "a", feature = "b")]
+                                _ => {
+                                    panic!("Error: multiple (not nested) features in cfg attribute")
+                                }
+                            }
                         }
                         Some((.., ComplexFeature::Feature(..)))
                         | Some((.., ComplexFeature::All(..)))
