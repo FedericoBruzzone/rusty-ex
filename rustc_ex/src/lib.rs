@@ -17,7 +17,7 @@ use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{self, NodeIndex};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{borrow::Cow, env};
 use std::{fs, io, panic};
@@ -216,16 +216,23 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     arti_nodes: HashMap::new(),
 
                     functions_weights: HashMap::new(),
+                    weights_to_resolve: HashSet::new(),
                 };
 
+                // initialize global scope (global feature and artifact)
                 collector.init_global_scope();
+
+                // visit AST and build AST graph
                 collector.visit_crate(krate);
+
+                // build features and artifacts graphs visiting AST graph
                 collector.build_feat_graph();
                 collector.build_arti_graph();
 
+                // calculate weights of AST nodes
                 collector.ast_graph.reverse(); // reverse graph
                 collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
-                collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX)); // resolve wait
+                collector.resolve_weights_in_wait();
                 collector.ast_graph.reverse(); // restore graph
 
                 self.process_cli_args(collector, krate);
@@ -356,6 +363,8 @@ struct CollectVisitor {
 
     /// Weights of the functions (needed to weight the ASTNodes, specifically Calls)
     functions_weights: HashMap<String, f64>,
+    /// Weights of the ASTNodes that are waiting for something to be resolved
+    weights_to_resolve: HashSet<ASTIndex>,
 }
 
 impl CollectVisitor {
@@ -800,6 +809,7 @@ impl CollectVisitor {
                 }
                 ASTNodeWeight::Wait(dep) => {
                     self.update_weight(start_index, ASTNodeWeight::Wait(dep.clone()));
+                    self.weights_to_resolve.insert(start_index);
                     return ASTNodeWeight::Wait(dep);
                 }
                 ASTNodeWeight::Weight(w) => child_weight += w,
@@ -817,7 +827,10 @@ impl CollectVisitor {
             ASTNodeWeightKind::Call(.., to) => match &to {
                 Some(to_ident) => match &self.functions_weights.get(to_ident) {
                     Some(fn_weight) => ASTNodeWeight::Weight(*fn_weight + child_weight),
-                    None => ASTNodeWeight::Wait(to_ident.to_string()),
+                    None => {
+                        self.weights_to_resolve.insert(start_index);
+                        ASTNodeWeight::Wait(to_ident.to_string())
+                    }
                 },
                 None => ASTNodeWeight::Weight(child_weight),
             },
@@ -828,6 +841,26 @@ impl CollectVisitor {
         weight
     }
 
+    fn resolve_weights_in_wait(&mut self) {
+        let mut seen = HashSet::new();
+
+        while let Some(cur_index) = self.weights_to_resolve.iter().next() {
+            // pop from hashset
+            let cur_index = *cur_index;
+            self.weights_to_resolve.remove(&cur_index);
+
+            // prevent infinte loop:
+            // if the same index is seen with the same number of unsolved weights, then it's a loop
+            if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
+                return;
+            }
+            seen.insert((cur_index, self.weights_to_resolve.len()));
+
+            // try to weight the node, if it's not possible, it will be added again to the queue
+            self.rec_weight_ast_graph(cur_index);
+        }
+    }
+
     fn update_weight(&mut self, ast_index: ASTIndex, weight: ASTNodeWeight) {
         let ast_node = self
             .ast_graph
@@ -836,6 +869,12 @@ impl CollectVisitor {
 
         ast_node.weight = weight.clone();
 
+        // remove from nodes in wait
+        if let ASTNodeWeight::Weight(..) = weight {
+            self.weights_to_resolve.retain(|index| *index != ast_index);
+        }
+
+        // add to idents map if it has an ident
         if let (ASTNodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
             self.functions_weights.insert(ident, weight);
         }
