@@ -12,6 +12,7 @@ extern crate rustc_span;
 
 use clap::Parser;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
+use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
 use rustc_span::symbol::*;
 use rustworkx_core::petgraph::dot::{Config, Dot};
@@ -216,7 +217,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     arti_nodes: HashMap::new(),
 
                     functions_weights: HashMap::new(),
-                    weights_to_resolve: HashSet::new(),
+                    weights_to_resolve: LinkedHashSet::new(),
                 };
 
                 // initialize global scope (global feature and artifact)
@@ -363,8 +364,9 @@ struct CollectVisitor {
 
     /// Weights of the functions (needed to weight the ASTNodes, specifically Calls)
     functions_weights: HashMap<String, f64>,
-    /// Weights of the ASTNodes that are waiting for something to be resolved
-    weights_to_resolve: HashSet<ASTIndex>,
+    /// Weights of the ASTNodes that are waiting for something to be resolved.
+    /// This needs to be a set, but with insertion order preserved (a "unique" queue)
+    weights_to_resolve: LinkedHashSet<ASTIndex>,
 }
 
 impl CollectVisitor {
@@ -844,11 +846,7 @@ impl CollectVisitor {
     fn resolve_weights_in_wait(&mut self) {
         let mut seen = HashSet::new();
 
-        while let Some(cur_index) = self.weights_to_resolve.iter().next() {
-            // pop from hashset
-            let cur_index = *cur_index;
-            self.weights_to_resolve.remove(&cur_index);
-
+        while let Some(cur_index) = self.weights_to_resolve.pop_front() {
             // prevent infinte loop:
             // if the same index is seen with the same number of unsolved weights, then it's a loop
             if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
@@ -871,7 +869,7 @@ impl CollectVisitor {
 
         // remove from nodes in wait
         if let ASTNodeWeight::Weight(..) = weight {
-            self.weights_to_resolve.retain(|index| *index != ast_index);
+            self.weights_to_resolve.remove(&ast_index);
         }
 
         // add to idents map if it has an ident
