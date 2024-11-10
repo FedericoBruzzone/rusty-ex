@@ -214,6 +214,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                     arti_graph: graph::DiGraph::new(),
                     arti_nodes: HashMap::new(),
+
+                    functions_weights: HashMap::new(),
                 };
 
                 collector.init_global_scope();
@@ -223,6 +225,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 collector.ast_graph.reverse(); // reverse graph
                 collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
+                collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX)); // resolve wait
                 collector.ast_graph.reverse(); // restore graph
 
                 self.process_cli_args(collector, krate);
@@ -256,6 +259,14 @@ enum ASTNodeWeightKind {
     NoWeight(String),
 }
 
+/// Weight of an AST node: not yet calculated, a float, or waiting for something to be resolved
+#[derive(Clone, Debug)]
+enum ASTNodeWeight {
+    ToBeCalculated,
+    Weight(f64),
+    Wait(String),
+}
+
 /// AST node, can be annotated with features
 #[derive(Clone, Debug)]
 struct ASTNode {
@@ -263,7 +274,7 @@ struct ASTNode {
     node_id: NodeId,
     ident: Option<String>,
     features: ComplexFeature,
-    weight: Option<f64>,
+    weight: ASTNodeWeight,
 }
 
 /// Simple feature, key of the features hashmap
@@ -342,6 +353,9 @@ struct CollectVisitor {
     arti_graph: graph::DiGraph<ArtifactNode, Edge>,
     /// Artifact -> Index in the artifacts graph
     arti_nodes: HashMap<Artifact, ArtifactIndex>,
+
+    /// Weights of the functions (needed to weight the ASTNodes, specifically Calls)
+    functions_weights: HashMap<String, f64>,
 }
 
 impl CollectVisitor {
@@ -353,7 +367,7 @@ impl CollectVisitor {
         ident: Option<String>,
         node_id: NodeId,
         features: ComplexFeature,
-        weight: Option<f64>,
+        weight: ASTNodeWeight,
     ) -> ASTIndex {
         if let Some(index) = self.ast_nodes.get(&node_id) {
             return *index;
@@ -425,7 +439,7 @@ impl CollectVisitor {
             ident.clone(),
             node_id,
             features.clone(),
-            None,
+            ASTNodeWeight::ToBeCalculated,
         );
         assert_eq!(
             index,
@@ -587,7 +601,13 @@ impl CollectVisitor {
 
     /// Initialize a new AST node and update the AST nodes and features stacks
     fn pre_walk(&mut self, kind: ASTNodeWeightKind, ident: Option<String>, node_id: NodeId) {
-        let astnode_index = self.create_ast_node(kind, ident, node_id, ComplexFeature::None, None);
+        let astnode_index = self.create_ast_node(
+            kind,
+            ident,
+            node_id,
+            ComplexFeature::None,
+            ASTNodeWeight::ToBeCalculated,
+        );
         self.stack.push((astnode_index, ComplexFeature::None));
     }
 
@@ -759,40 +779,66 @@ impl CollectVisitor {
     }
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
-    fn rec_weight_ast_graph(&mut self, start_index: ASTIndex) -> f64 {
-        // TODO: pesare le chiamate di funzione
+    fn rec_weight_ast_graph(&mut self, start_index: ASTIndex) -> ASTNodeWeight {
+        // TODO: cachare per velocizzare la seconda passata. Solo quelli in Wait vanno visti
+        // TODO: se dopo la seconda visita ci sono ancora Wait, allora sono ricorsivi (mutui o normali)
+        // TODO: vedere cosa altro può essere visto come una call (ovvero che il peso dipende dal vero), struct?
 
-        let adjacents = self.ast_graph.neighbors(start_index).collect::<Vec<_>>();
+        let adjacents = self
+            .ast_graph
+            .neighbors(start_index)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|index| self.rec_weight_ast_graph(index))
+            .collect::<Vec<_>>();
 
-        let childs_weight: f64 = adjacents
-            .iter()
-            .map(|index| self.rec_weight_ast_graph(*index))
-            .reduce(|acc, x| acc + x)
-            .unwrap_or(0.0);
+        let mut child_weight = 0.0;
+        for adj_weight in adjacents {
+            match adj_weight {
+                ASTNodeWeight::ToBeCalculated => {
+                    panic!("Error: recursion not working while weighting AST graph")
+                }
+                ASTNodeWeight::Wait(dep) => {
+                    self.update_weight(start_index, ASTNodeWeight::Wait(dep.clone()));
+                    return ASTNodeWeight::Wait(dep);
+                }
+                ASTNodeWeight::Weight(w) => child_weight += w,
+            }
+        }
 
-        let weight = match self
+        let weight = match &self
             .ast_graph
             .node_weight(start_index)
             .expect("Error: cannot find AST node weighting AST graph")
             .kind
         {
-            ASTNodeWeightKind::Leaf(..) => 1.0 + childs_weight,
-            ASTNodeWeightKind::Block(..) => childs_weight,
-            ASTNodeWeightKind::Call(..) => 0.0 + childs_weight, // TODO: pesare le chiamate
-            ASTNodeWeightKind::NoWeight(..) => 0.0,
+            ASTNodeWeightKind::Leaf(..) => ASTNodeWeight::Weight(1.0 + child_weight),
+            ASTNodeWeightKind::Block(..) => ASTNodeWeight::Weight(child_weight),
+            ASTNodeWeightKind::Call(.., to) => match &to {
+                Some(to_ident) => match &self.functions_weights.get(to_ident) {
+                    Some(fn_weight) => ASTNodeWeight::Weight(*fn_weight + child_weight),
+                    None => ASTNodeWeight::Wait(to_ident.to_string()),
+                },
+                None => ASTNodeWeight::Weight(child_weight),
+            },
+            ASTNodeWeightKind::NoWeight(..) => ASTNodeWeight::Weight(0.0),
         };
 
-        self.update_weight(start_index, weight);
+        self.update_weight(start_index, weight.clone());
         weight
     }
 
-    fn update_weight(&mut self, ast_index: ASTIndex, weight: f64) {
+    fn update_weight(&mut self, ast_index: ASTIndex, weight: ASTNodeWeight) {
         let ast_node = self
             .ast_graph
             .node_weight_mut(ast_index)
             .expect("Error: cannot find AST node updating weight");
 
-        ast_node.weight = Some(weight);
+        ast_node.weight = weight.clone();
+
+        if let (ASTNodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
+            self.functions_weights.insert(ident, weight);
+        }
     }
 
     /// Print AST graph in DOT format
@@ -802,13 +848,13 @@ impl CollectVisitor {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"i{}: node{} ({}) '{}' #[{}] w{:.2}\"",
+                "label=\"i{}: node{} ({}) '{}' #[{}] {}\"",
                 index,
                 ast_node.node_id,
                 ast_node.kind,
                 ast_node.ident.clone().unwrap_or(" ".to_string()),
                 ast_node.features,
-                ast_node.weight.unwrap_or(0.0),
+                ast_node.weight,
             )
         };
 
@@ -1286,6 +1332,17 @@ impl std::fmt::Display for ASTNodeWeightKind {
                 ident.clone().unwrap_or("??".to_string())
             ),
             ASTNodeWeightKind::NoWeight(name) => write!(f, "NoWeight({})", name),
+        }
+    }
+}
+
+impl std::fmt::Display for ASTNodeWeight {
+    /// ASTNodeWeight to string
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ASTNodeWeight::ToBeCalculated => write!(f, "w-"),
+            ASTNodeWeight::Weight(w) => write!(f, "w{:.2}", w),
+            ASTNodeWeight::Wait(wait_ident) => write!(f, "wwait...({})", wait_ident),
         }
     }
 }
