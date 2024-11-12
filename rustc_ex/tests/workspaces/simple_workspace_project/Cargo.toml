@@ -1,0 +1,14 @@
+[package]
+name = "simple_workspace_project"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crate_a = { path = "crates/crate_a" }
+crate_b = { path = "crates/crate_b" }
+
+[workspace]
+members = [ 
+    "crates/crate_a",
+    "crates/crate_b",
+]
