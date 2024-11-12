@@ -150,7 +150,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             fn read_file(&self, path: &std::path::Path) -> io::Result<String> {
                 let content = fs::read_to_string(path)?;
                 Ok(content
-                    // HACK: workarounds
                     // Features are discarded before the `after_expansion` hook, so are lost.
                     // To avoid this, we replace all `cfg` directives with a custom config.
                     .replace("#[cfg(", "#[rustcex_cfg(")
@@ -161,7 +160,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             }
 
             fn read_binary_file(&self, _path: &std::path::Path) -> io::Result<Arc<[u8]>> {
-                // TODO: fare anche questo
+                // TODO: fare il replace anche nella lettura di file binari
                 todo!()
             }
         }
@@ -195,13 +194,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 // extract AST
                 let resolver_and_krate = tcx.resolver_for_lowering().borrow();
                 let krate = &*resolver_and_krate.1;
-
-                // TODO: vedere se qualcuno può essere utile
-                // tcx.features();
-                // tcx.get_attrs(did, attr);
-                // tcx.has_attr(did, attr);
-                // tcx.is_lang_item(def_id, lang_item);
-                // tcx.used_crates(key);
 
                 // visit AST
                 let collector = &mut CollectVisitor {
@@ -734,6 +726,8 @@ impl CollectVisitor {
 
     /// Build the artifacts graph from the AST graph
     fn build_arti_graph(&mut self) {
+        // TODO: questo grafo è `ast_graph` senza i nodi senza features. Ci è utile?
+
         self.ast_nodes
             .iter()
             // ignore global node
@@ -784,18 +778,19 @@ impl CollectVisitor {
                 self.arti_graph.add_edge(
                     *child_arti_index,
                     *parent_arti_index,
-                    Edge {
-                        weight: 0.0, // TODO: pesare i nodi degli artefatti
-                    },
+                    Edge { weight: 0.0 },
                 );
             });
     }
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
     fn rec_weight_ast_graph(&mut self, start_index: ASTIndex) -> ASTNodeWeight {
-        // TODO: cachare per velocizzare la seconda passata. Solo quelli in Wait vanno visti
-        // TODO: se dopo la seconda visita ci sono ancora Wait, allora sono ricorsivi (mutui o normali)
-        // TODO: vedere cosa altro può essere visto come una call (ovvero che il peso dipende dal vero), struct?
+        // TODO: ci sono altre cose fa considerare come Call?
+
+        // IMPORTANT! We cannot skip already weighted nodes because a re-evaluation may be needed.
+        // For example, if the weight an ident has changed (multiple definitions), then we need to
+        // update the weight of all calls to that ident.
+        // This works because the root (GLOBAL) is in Wait state until everything is resolved.
 
         let adjacents = self
             .ast_graph

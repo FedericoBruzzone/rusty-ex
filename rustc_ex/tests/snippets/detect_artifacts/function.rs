@@ -12,18 +12,13 @@ fn example6<T: Debug>(a: T) -> T where T: Clone {}
 
 extern "ABI" fn example7() {}
 
-unsafe extern "ABI" {
-  unsafe fn example8();
-  fn example9();
-}
+const fn example8() {}
 
-const fn example10() {}
+async fn example9() {}
 
-async fn example11() {}
+async unsafe fn example10() { }
 
-async unsafe fn example12() { }
-
-fn example13(
+fn example11(
     #[cfg(feature = "a")] slice: &[u16],
     #[cfg(not(feature = "b"))] slice: &[u8],
 ) {

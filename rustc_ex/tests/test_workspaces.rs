@@ -81,6 +81,3 @@ fn test_simple_feature_weigths_features_graph() -> Result<(), String> {
 
     Ok(())
 }
-
-// TODO: testare grafo degli artefatti per no weights
-// TODO: testare grafo degli artefatti per weights

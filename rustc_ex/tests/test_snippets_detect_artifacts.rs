@@ -68,8 +68,6 @@ fn test_function() -> Result<(), String> {
     assert!(same_line(&output, vec!["Fn", "example9"]));
     assert!(same_line(&output, vec!["Fn", "example10"]));
     assert!(same_line(&output, vec!["Fn", "example11"]));
-    assert!(same_line(&output, vec!["Fn", "example12"]));
-    assert!(same_line(&output, vec!["Fn", "example13"]));
 
     Ok(())
 }

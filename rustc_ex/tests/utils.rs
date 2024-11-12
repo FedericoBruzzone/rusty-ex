@@ -102,7 +102,7 @@ pub fn remove_cargo_project_with_snippet() -> Result<(), String> {
     Ok(())
 }
 
-#[allow(dead_code)] // FIXME: https://github.com/rust-lang/rust/issues/46379
+#[allow(dead_code)] // TODO: https://github.com/rust-lang/rust/issues/46379
 pub fn run_with_cargo_bin_and_snippet(
     snippet: &str,
     plugin_args: &[&str],
@@ -113,7 +113,7 @@ pub fn run_with_cargo_bin_and_snippet(
     result
 }
 
-#[allow(dead_code)] // FIXME: https://github.com/rust-lang/rust/issues/46379
+#[allow(dead_code)] // TODO: https://github.com/rust-lang/rust/issues/46379
 /// Check if at least one line of the output contains all the items (on the same line!)
 pub fn same_line(output: &String, items: Vec<&str>) -> bool {
     output
@@ -121,7 +121,7 @@ pub fn same_line(output: &String, items: Vec<&str>) -> bool {
         .any(|line| items.iter().all(|item| line.contains(item)))
 }
 
-#[allow(dead_code)] // FIXME: https://github.com/rust-lang/rust/issues/46379
+#[allow(dead_code)] // TODO: https://github.com/rust-lang/rust/issues/46379
 /// Count the number of lines in the output that contain all the items (on the same line!)
 pub fn count_line(output: &String, items: Vec<&str>) -> u32 {
     output
