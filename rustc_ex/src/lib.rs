@@ -826,16 +826,14 @@ impl CollectVisitor {
         {
             ASTNodeWeightKind::Leaf(..) => ASTNodeWeight::Weight(1.0 + child_weight),
             ASTNodeWeightKind::Block(..) => ASTNodeWeight::Weight(child_weight),
-            ASTNodeWeightKind::Call(.., to) => match &to {
-                Some(to_ident) => match &self.functions_weights.get(to_ident) {
-                    Some(fn_weight) => ASTNodeWeight::Weight(*fn_weight + child_weight),
-                    None => {
-                        self.weights_to_resolve.insert(start_index);
-                        ASTNodeWeight::Wait(to_ident.to_string())
-                    }
-                },
-                None => ASTNodeWeight::Weight(child_weight),
+            ASTNodeWeightKind::Call(.., Some(to)) => match &self.functions_weights.get(to) {
+                Some(fn_weight) => ASTNodeWeight::Weight(*fn_weight + child_weight),
+                None => {
+                    self.weights_to_resolve.insert(start_index);
+                    ASTNodeWeight::Wait(to.to_string())
+                }
             },
+            ASTNodeWeightKind::Call(.., None) => ASTNodeWeight::Weight(child_weight),
             ASTNodeWeightKind::NoWeight(..) => ASTNodeWeight::Weight(0.0),
         };
 
@@ -874,6 +872,8 @@ impl CollectVisitor {
 
         // add to idents map if it has an ident
         if let (ASTNodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
+            // TODO: se l'ident è nella mappa, allora calcolare la media
+            // assert!(!self.functions_weights.contains_key(&ident), "Error: function '{}' already weighted", ident);
             self.functions_weights.insert(ident, weight);
         }
     }
