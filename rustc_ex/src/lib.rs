@@ -981,9 +981,29 @@ impl CollectVisitor {
                 Some(1e-2),
             );
 
-        println!("katz {:?}", katz.unwrap().unwrap());
-        println!("clos {:?}", closeness);
-        println!("eige {:?}", eigenvector);
+        let graph_nodes = self
+            .feat_graph
+            .node_indices()
+            .map(|n| {
+                let feat = self.feat_graph.node_weight(n).unwrap();
+                (n, (feat.feature.name.clone(), feat.feature.not, feat.weight))
+            })
+            .collect::<Vec<_>>();
+
+        let katz = katz.unwrap().unwrap();
+        let katz_zip = katz.iter().zip(graph_nodes.iter()).collect::<Vec<_>>();
+
+        let closeness_zip = closeness.iter().zip(graph_nodes.iter()).collect::<Vec<_>>();
+
+        let eigenvector = eigenvector.unwrap().unwrap();
+        let eigenvector_zip = eigenvector
+            .iter()
+            .zip(graph_nodes.iter())
+            .collect::<Vec<_>>();
+
+        println!("katz {:?}", katz_zip); // println!("katz {:?}", katz.unwrap().unwrap());
+        println!("clos {:?}", closeness_zip); // println!("clos {:?}", closeness);
+        println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
     }
 }
 
