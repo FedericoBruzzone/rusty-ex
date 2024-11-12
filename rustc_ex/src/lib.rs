@@ -216,7 +216,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     arti_graph: graph::DiGraph::new(),
                     arti_nodes: HashMap::new(),
 
-                    functions_weights: HashMap::new(),
+                    idents_weights: HashMap::new(),
                     weights_to_resolve: LinkedHashSet::new(),
                 };
 
@@ -362,8 +362,10 @@ struct CollectVisitor {
     /// Artifact -> Index in the artifacts graph
     arti_nodes: HashMap<Artifact, ArtifactIndex>,
 
-    /// Weights of the functions (needed to weight the ASTNodes, specifically Calls)
-    functions_weights: HashMap<String, f64>,
+    /// Weights of the already weighted idents (needed to weight the Calls).
+    /// The weights for a single ident can be multiple, because a function can
+    /// be defined multiple times (with different #[cfg] attributes)
+    idents_weights: HashMap<String, Vec<f64>>,
     /// Weights of the ASTNodes that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
     weights_to_resolve: LinkedHashSet<ASTIndex>,
@@ -826,8 +828,10 @@ impl CollectVisitor {
         {
             ASTNodeWeightKind::Leaf(..) => ASTNodeWeight::Weight(1.0 + child_weight),
             ASTNodeWeightKind::Block(..) => ASTNodeWeight::Weight(child_weight),
-            ASTNodeWeightKind::Call(.., Some(to)) => match &self.functions_weights.get(to) {
-                Some(fn_weight) => ASTNodeWeight::Weight(*fn_weight + child_weight),
+            ASTNodeWeightKind::Call(.., Some(to)) => match self.idents_weights.get(to) {
+                Some(vec_fn_weight) => ASTNodeWeight::Weight(
+                    (vec_fn_weight.iter().sum::<f64>() / vec_fn_weight.len() as f64) + child_weight,
+                ),
                 None => {
                     self.weights_to_resolve.insert(start_index);
                     ASTNodeWeight::Wait(to.to_string())
@@ -872,9 +876,7 @@ impl CollectVisitor {
 
         // add to idents map if it has an ident
         if let (ASTNodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
-            // TODO: se l'ident è nella mappa, allora calcolare la media
-            // assert!(!self.functions_weights.contains_key(&ident), "Error: function '{}' already weighted", ident);
-            self.functions_weights.insert(ident, weight);
+            self.idents_weights.entry(ident).or_default().push(weight);
         }
     }
 
