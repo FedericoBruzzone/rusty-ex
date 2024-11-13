@@ -126,7 +126,7 @@ fn test_recursive() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/recursive.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
 
-    assert!(same_line(&output, vec!["Fn", "'main'", "wait...(main)"]));
+    assert!(same_line(&output, vec!["Fn", "'main'", "wait(main)"]));
 
     assert!(same_line(&output, vec!["Call(Call)->main", "wait"]));
 
@@ -138,8 +138,8 @@ fn test_mutual_recursive() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/mutual_recursive.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
 
-    assert!(same_line(&output, vec!["Fn", "'main'", "wait...(a)"]));
-    assert!(same_line(&output, vec!["Fn", "'a'", "wait...(main)"]));
+    assert!(same_line(&output, vec!["Fn", "'main'", "wait(a)"]));
+    assert!(same_line(&output, vec!["Fn", "'a'", "wait(main)"]));
 
     assert!(same_line(&output, vec!["Call(Call)->a", "wait"]));
     assert!(same_line(&output, vec!["Call(Call)->main", "wait"]));
