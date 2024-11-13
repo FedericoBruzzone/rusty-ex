@@ -115,6 +115,7 @@ pub fn cli_main<T: RustcPlugin>(plugin: T) {
 
     plugin.modify_cargo(&mut cmd, &plugin_args.args);
 
+    log::debug!("Running command: {:?}", cmd);
     let exit_status = cmd.status().expect("failed to wait for cargo?");
 
     exit(exit_status.code().unwrap_or(-1));
