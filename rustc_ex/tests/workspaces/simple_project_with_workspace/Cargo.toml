@@ -1,7 +1,11 @@
 [package]
-name = "simple_workspace_project"
+name = "simple_project_with_workspace"
 version = "0.1.0"
 edition = "2021"
+
+#[[bin]]
+#name = "main"
+#path = "src/main.rs"
 
 [dependencies]
 crate_a = { path = "crates/crate_a" }

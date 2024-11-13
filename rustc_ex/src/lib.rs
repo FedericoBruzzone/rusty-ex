@@ -107,6 +107,8 @@ impl RustcPlugin for RustcEx {
         compiler_args: Vec<String>,
         plugin_args: Self::Args,
     ) -> rustc_interface::interface::Result<()> {
+        log::debug!("Running plugin with compiler args: {:?}", compiler_args);
+        log::debug!("Running plugin with args: {:?}", plugin_args);
         let mut callbacks = PrintAstCallbacks { args: plugin_args };
         let compiler = rustc_driver::RunCompiler::new(&compiler_args, &mut callbacks);
         compiler.run()
