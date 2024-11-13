@@ -51,9 +51,9 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_centrality: bool,
 
-    /// Pass --print-serialize-data to print all extracted data serialized
+    /// Pass --print-serialized-graphs to print all extracted data serialized
     #[clap(long)]
-    print_serialized_data: bool,
+    print_serialized_graphs: bool,
 
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
@@ -140,8 +140,8 @@ impl PrintAstCallbacks {
         if self.args.print_centrality {
             collector.print_centrality();
         }
-        if self.args.print_serialized_data {
-            collector.print_serialized_data();
+        if self.args.print_serialized_graphs {
+            collector.print_serialized_graphs();
         }
     }
 }
@@ -256,6 +256,7 @@ const GLOBAL_NODE_INDEX: usize = 0;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct NNodeId(NodeId);
 
+/// Type of the weight of an AST node (not the actual weight)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 enum ASTNodeWeightKind {
     /// Leaf, a literal or something that does NOT calls anything.
@@ -344,7 +345,7 @@ type ArtifactIndex = NodeIndex;
 /// AST visitor to collect data to build the graphs
 #[derive(Serialize, Deserialize)]
 struct CollectVisitor {
-    // stack to keep track of the AST nodes dependencies
+    /// Stack to keep track of the AST nodes dependencies
     #[serde(skip_serializing, skip_deserializing)]
     stack: Vec<(ASTIndex, ComplexFeature)>,
 
@@ -385,7 +386,7 @@ struct CollectVisitor {
 
 impl CollectVisitor {
     /// Create an AST node in the AST graph and add it to the AST nodes hashmap.
-    /// Return the index of the created node.
+    /// Return the index of the created node
     fn create_ast_node(
         &mut self,
         kind: ASTNodeWeightKind,
@@ -410,7 +411,8 @@ impl CollectVisitor {
         index
     }
 
-    /// Create a feature node in the features graph and add it to the features nodes hashmap
+    /// Create a feature node in the features graph and add it to the features nodes hashmap.
+    /// Return the index of the created node
     fn create_feature_node(&mut self, feature: Feature, weight: Option<f64>) -> FeatureIndex {
         if let Some(index) = self.feat_nodes.get(&feature) {
             return *index;
@@ -425,7 +427,8 @@ impl CollectVisitor {
         index
     }
 
-    /// Create an artifact node in the artifacts graph and add it to the artifacts nodes hashmap
+    /// Create an artifact node in the artifacts graph and add it to the artifacts nodes hashmap.
+    /// Return the index of the created node
     fn create_artifact_node(
         &mut self,
         artifact: Artifact,
@@ -448,7 +451,7 @@ impl CollectVisitor {
         index
     }
 
-    /// Initialize the global scope (AST node, feature, artifact)
+    /// Initialize the global scope (AST node, feature node, artifact node)
     fn init_global_scope(&mut self) {
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
         let node_id = GLOBAL_NODE_ID;
@@ -574,7 +577,8 @@ impl CollectVisitor {
         }
     }
 
-    /// Update the AST node with the found features. The parent ASTNode should already exist
+    /// Update the AST node with the found features and create the dependency (edge)
+    /// in the AST graph. The parent ASTNode should already exist (anothe node or global scope)
     fn update_ast_node_features(&mut self, node_id: NNodeId, features: ComplexFeature) {
         // update the node with the found and weighted cfgs
         let node_index: &ASTIndex = self
@@ -624,7 +628,7 @@ impl CollectVisitor {
         indexes
     }
 
-    /// Initialize a new AST node and update the AST nodes and features stacks
+    /// Initialize a new AST node and update the stack
     fn pre_walk(&mut self, kind: ASTNodeWeightKind, ident: Option<String>, node_id: NNodeId) {
         let astnode_index = self.create_ast_node(
             kind,
@@ -636,7 +640,7 @@ impl CollectVisitor {
         self.stack.push((astnode_index, ComplexFeature::None));
     }
 
-    /// Extract the features of the AST node from the stacks and update the AST graph
+    /// Extract the features of the AST node from the stack and update the AST graph
     fn post_walk(&mut self, node_id: NNodeId) {
         let (node_index, features) = self
             .stack
@@ -666,7 +670,9 @@ impl CollectVisitor {
         self.update_ast_node_features(node_id, features);
     }
 
-    fn get_annotated_parent(
+    /// Recursively fet the first parent node with features. The only node with no
+    /// annotated parents is the global scope
+    fn rec_get_annotated_parent(
         graph: &graph::DiGraph<ASTNode, Edge>,
         start_index: ASTIndex,
     ) -> Option<ASTIndex> {
@@ -691,116 +697,9 @@ impl CollectVisitor {
             .features;
 
         match parent_features {
-            ComplexFeature::None => CollectVisitor::get_annotated_parent(graph, parent),
+            ComplexFeature::None => CollectVisitor::rec_get_annotated_parent(graph, parent),
             _ => Some(parent),
         }
-    }
-
-    /// Build the features graph from the AST graph
-    fn build_feat_graph(&mut self) {
-        self.ast_nodes
-            .iter()
-            // ignore global node
-            .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
-            .for_each(|(.., child_index)| {
-                let child_node = &self
-                    .ast_graph
-                    .node_weight(*child_index)
-                    .expect("Error: cannot find child node creating features graph");
-                let child_features = CollectVisitor::rec_weight_feature(&child_node.features);
-
-                let parent_index =
-                    CollectVisitor::get_annotated_parent(&self.ast_graph, *child_index)
-                        .expect("Error: cannot find parent creating features graph");
-                let parent_features = CollectVisitor::rec_weight_feature(
-                    &self
-                        .ast_graph
-                        .node_weight(parent_index)
-                        .expect("Error: cannot find parent node creating features graph")
-                        .features,
-                );
-
-                child_features
-                    .iter()
-                    // cartesian product
-                    .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
-                    .for_each(|(child_feat, parent_feat)| {
-                        self.feat_graph.add_edge(
-                            *self
-                                .feat_nodes
-                                .get(&child_feat.feature)
-                                .expect("Error: cannot find feature node creating features graph"),
-                            *self
-                                .feat_nodes
-                                .get(&parent_feat.feature)
-                                .expect("Error: cannot find feature node creating features graph"),
-                            Edge {
-                                weight: child_feat.weight.expect(
-                                    "Error: feature without weight creating features graph",
-                                ),
-                            },
-                        );
-                    });
-            });
-    }
-
-    /// Build the artifacts graph from the AST graph
-    fn build_arti_graph(&mut self) {
-        // TODO: questo grafo è `ast_graph` senza i nodi senza features. Ci è utile?
-
-        self.ast_nodes
-            .iter()
-            // ignore global node
-            .filter(|(.., node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
-            // ignore nodes with no features
-            .filter(|(.., node_index)| {
-                let child_node = &self
-                    .ast_graph
-                    .node_weight(**node_index)
-                    .expect("Error: cannot find child node creating features graph");
-
-                child_node.features != ComplexFeature::None
-            })
-            // get first annotated parent for each node
-            // the index is in the AST graph, not in the artifacts graph
-            .map(|(.., child_index)| {
-                let parent_index =
-                    CollectVisitor::get_annotated_parent(&self.ast_graph, *child_index)
-                        .expect("Error: cannot find parent creating features graph");
-
-                (child_index, parent_index)
-            })
-            // add edge between child and parent in the artifacts graph
-            // we need to convert the ASTIndex to the ArtifactIndex
-            .for_each(|(child_ast_index, parent_ast_index)| {
-                let child_ast_node = &self
-                    .ast_graph
-                    .node_weight(*child_ast_index)
-                    .expect("Error: cannot find child node creating features graph");
-                let parent_ast_node = &self
-                    .ast_graph
-                    .node_weight(parent_ast_index)
-                    .expect("Error: cannot find parent node creating features graph");
-
-                let child_arti_index = self
-                    .arti_nodes
-                    .get(&Artifact {
-                        node_id: child_ast_node.node_id,
-                    })
-                    .expect("Error: cannot find child artifact node creating artifacts graph");
-                let parent_arti_index = self
-                    .arti_nodes
-                    .get(&Artifact {
-                        node_id: parent_ast_node.node_id,
-                    })
-                    .expect("Error: cannot find child artifact node creating artifacts graph");
-
-                self.arti_graph.add_edge(
-                    *child_arti_index,
-                    *parent_arti_index,
-                    Edge { weight: 0.0 },
-                );
-            });
     }
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
@@ -860,6 +759,7 @@ impl CollectVisitor {
         weight
     }
 
+    /// Calculate the weights of the nodes in wait
     fn resolve_weights_in_wait(&mut self) {
         let mut seen = HashSet::new();
 
@@ -876,6 +776,9 @@ impl CollectVisitor {
         }
     }
 
+    /// Update the weight of the AST node.
+    /// Remove the updated node from nodes in wait (only if the weight is not a Wait).
+    /// Add the weight to the `idents_weights` map if the node has an ident
     fn update_weight(&mut self, ast_index: ASTIndex, weight: ASTNodeWeight) {
         let ast_node = self
             .ast_graph
@@ -893,6 +796,113 @@ impl CollectVisitor {
         if let (ASTNodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
             self.idents_weights.entry(ident).or_default().push(weight);
         }
+    }
+
+    /// Build the features graph from the AST graph
+    fn build_feat_graph(&mut self) {
+        self.ast_nodes
+            .iter()
+            // ignore global node
+            .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
+            .for_each(|(.., child_index)| {
+                let child_node = &self
+                    .ast_graph
+                    .node_weight(*child_index)
+                    .expect("Error: cannot find child node creating features graph");
+                let child_features = CollectVisitor::rec_weight_feature(&child_node.features);
+
+                let parent_index =
+                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph, *child_index)
+                        .expect("Error: cannot find parent creating features graph");
+                let parent_features = CollectVisitor::rec_weight_feature(
+                    &self
+                        .ast_graph
+                        .node_weight(parent_index)
+                        .expect("Error: cannot find parent node creating features graph")
+                        .features,
+                );
+
+                child_features
+                    .iter()
+                    // cartesian product
+                    .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
+                    .for_each(|(child_feat, parent_feat)| {
+                        self.feat_graph.add_edge(
+                            *self
+                                .feat_nodes
+                                .get(&child_feat.feature)
+                                .expect("Error: cannot find feature node creating features graph"),
+                            *self
+                                .feat_nodes
+                                .get(&parent_feat.feature)
+                                .expect("Error: cannot find feature node creating features graph"),
+                            Edge {
+                                weight: child_feat.weight.expect(
+                                    "Error: feature without weight creating features graph",
+                                ),
+                            },
+                        );
+                    });
+            });
+    }
+
+    /// Build the artifacts graph from the AST graph
+    fn build_arti_graph(&mut self) {
+        // TODO: questo grafo è `ast_graph` senza i nodi senza features. Ci è utile?
+
+        self.ast_nodes
+            .iter()
+            // ignore global node
+            .filter(|(.., node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
+            // ignore nodes with no features
+            .filter(|(.., node_index)| {
+                let child_node = &self
+                    .ast_graph
+                    .node_weight(**node_index)
+                    .expect("Error: cannot find child node creating features graph");
+
+                child_node.features != ComplexFeature::None
+            })
+            // get first annotated parent for each node
+            // the index is in the AST graph, not in the artifacts graph
+            .map(|(.., child_index)| {
+                let parent_index =
+                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph, *child_index)
+                        .expect("Error: cannot find parent creating features graph");
+
+                (child_index, parent_index)
+            })
+            // add edge between child and parent in the artifacts graph
+            // we need to convert the ASTIndex to the ArtifactIndex
+            .for_each(|(child_ast_index, parent_ast_index)| {
+                let child_ast_node = &self
+                    .ast_graph
+                    .node_weight(*child_ast_index)
+                    .expect("Error: cannot find child node creating features graph");
+                let parent_ast_node = &self
+                    .ast_graph
+                    .node_weight(parent_ast_index)
+                    .expect("Error: cannot find parent node creating features graph");
+
+                let child_arti_index = self
+                    .arti_nodes
+                    .get(&Artifact {
+                        node_id: child_ast_node.node_id,
+                    })
+                    .expect("Error: cannot find child artifact node creating artifacts graph");
+                let parent_arti_index = self
+                    .arti_nodes
+                    .get(&Artifact {
+                        node_id: parent_ast_node.node_id,
+                    })
+                    .expect("Error: cannot find child artifact node creating artifacts graph");
+
+                self.arti_graph.add_edge(
+                    *child_arti_index,
+                    *parent_arti_index,
+                    Edge { weight: 0.0 },
+                );
+            });
     }
 
     /// Print AST graph in DOT format
@@ -1029,8 +1039,8 @@ impl CollectVisitor {
         println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
     }
 
-    /// Print all extracted data serialized
-    fn print_serialized_data(&self) {
+    /// Print all extracted graphs serialized
+    fn print_serialized_graphs(&self) {
         println!(
             "{}",
             serde_json::to_string(self).expect("Error: cannot serialize data")

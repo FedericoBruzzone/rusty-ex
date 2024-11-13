@@ -34,6 +34,7 @@ Available plugin args:
 - `--print-artifacts-graph`: print the artifacts graph in DOT format
 - `--print-crate`: print the crate AST
 - `--print-centrality`: print the (some) centrality of the features graph
+- `--print-serialized-graphs`: print the extracted graphs serialized
 
 Use the cargo plugin:
 
