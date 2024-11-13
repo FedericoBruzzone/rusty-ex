@@ -51,6 +51,10 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_centrality: bool,
 
+    /// Pass --print-serialize-data to print all extracted data serialized
+    #[clap(long)]
+    print_serialized_data: bool,
+
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
     //                     ^^^^^^^^^^^^^^^^^^^^ these are cargo args
@@ -135,6 +139,9 @@ impl PrintAstCallbacks {
         }
         if self.args.print_centrality {
             collector.print_centrality();
+        }
+        if self.args.print_serialized_data {
+            collector.print_serialized_data();
         }
     }
 }
@@ -239,13 +246,17 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
 /// Constant for the global feature NodeId.
 /// 4294967040 is not used because it is used by the compiler for "Dummy" nodes
-const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
+const GLOBAL_NODE_ID: NNodeId = NNodeId(NodeId::from_u32(4294967039));
 /// Constant for the global feature name
 const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
 const GLOBAL_NODE_INDEX: usize = 0;
 
-#[derive(Clone, Debug)]
+/// Wrapper around `rustc_ast::NodeId` to implement `Serialize` and `Deserialize`
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct NNodeId(NodeId);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 enum ASTNodeWeightKind {
     /// Leaf, a literal or something that does NOT calls anything.
     /// The weight is 1.0
@@ -262,7 +273,7 @@ enum ASTNodeWeightKind {
 }
 
 /// Weight of an AST node: not yet calculated, a float, or waiting for something to be resolved
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 enum ASTNodeWeight {
     ToBeCalculated,
     Weight(f64),
@@ -270,24 +281,24 @@ enum ASTNodeWeight {
 }
 
 /// AST node, can be annotated with features
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct ASTNode {
     kind: ASTNodeWeightKind,
-    node_id: NodeId,
+    node_id: NNodeId,
     ident: Option<String>,
     features: ComplexFeature,
     weight: ASTNodeWeight,
 }
 
 /// Simple feature, key of the features hashmap
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct Feature {
     name: String,
     not: bool,
 }
 
 /// Complex feature, can be a single feature (not already included), an all or an any
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum ComplexFeature {
     None,
     Feature(Feature),
@@ -296,20 +307,20 @@ enum ComplexFeature {
 }
 
 /// Node of the features graph, a feature with its weight
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct FeatureNode {
     feature: Feature,
     weight: Option<f64>,
 }
 
 /// Artifact, key of the artifacts hashmap
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 struct Artifact {
-    node_id: NodeId,
+    node_id: NNodeId,
 }
 
 /// Node of the artifacts graph, an artifact with its features and its weight
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct ArtifactNode {
     artifact: Artifact,
     ident: Option<String>,
@@ -318,7 +329,7 @@ struct ArtifactNode {
 }
 
 /// Graphs edge, with weight
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Edge {
     weight: f64,
 }
@@ -331,21 +342,25 @@ type FeatureIndex = NodeIndex;
 type ArtifactIndex = NodeIndex;
 
 /// AST visitor to collect data to build the graphs
+#[derive(Serialize, Deserialize)]
 struct CollectVisitor {
     // stack to keep track of the AST nodes dependencies
+    #[serde(skip_serializing, skip_deserializing)]
     stack: Vec<(ASTIndex, ComplexFeature)>,
 
     /// Relationships between all nodes of the AST.
     /// A `ASTNode` also stores features and ident of the `NodeId`
     ast_graph: graph::DiGraph<ASTNode, Edge>,
     /// Node of the AST -> Index in the temporary graph
-    ast_nodes: HashMap<NodeId, ASTIndex>,
+    #[serde(skip_serializing, skip_deserializing)]
+    ast_nodes: HashMap<NNodeId, ASTIndex>,
 
     /// Features graph, created from the AST graph.
     /// A `FeatureNode` also stores the weight of the `Feature`, calculated
     /// "horizontally" (considering only the "siblings")
     feat_graph: graph::DiGraph<FeatureNode, Edge>,
     /// Feature -> Index in the features graph
+    #[serde(skip_serializing, skip_deserializing)]
     feat_nodes: HashMap<Feature, FeatureIndex>,
 
     /// Artifacts graph, created from the AST graph.
@@ -354,14 +369,17 @@ struct CollectVisitor {
     /// and the indexes of the features in the features graph
     arti_graph: graph::DiGraph<ArtifactNode, Edge>,
     /// Artifact -> Index in the artifacts graph
+    #[serde(skip_serializing, skip_deserializing)]
     arti_nodes: HashMap<Artifact, ArtifactIndex>,
 
     /// Weights of the already weighted idents (needed to weight the Calls).
     /// The weights for a single ident can be multiple, because a function can
     /// be defined multiple times (with different #[cfg] attributes)
+    #[serde(skip_serializing, skip_deserializing)]
     idents_weights: HashMap<String, Vec<f64>>,
     /// Weights of the ASTNodes that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
+    #[serde(skip_serializing, skip_deserializing)]
     weights_to_resolve: LinkedHashSet<ASTIndex>,
 }
 
@@ -372,7 +390,7 @@ impl CollectVisitor {
         &mut self,
         kind: ASTNodeWeightKind,
         ident: Option<String>,
-        node_id: NodeId,
+        node_id: NNodeId,
         features: ComplexFeature,
         weight: ASTNodeWeight,
     ) -> ASTIndex {
@@ -557,7 +575,7 @@ impl CollectVisitor {
     }
 
     /// Update the AST node with the found features. The parent ASTNode should already exist
-    fn update_ast_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
+    fn update_ast_node_features(&mut self, node_id: NNodeId, features: ComplexFeature) {
         // update the node with the found and weighted cfgs
         let node_index: &ASTIndex = self
             .ast_nodes
@@ -607,7 +625,7 @@ impl CollectVisitor {
     }
 
     /// Initialize a new AST node and update the AST nodes and features stacks
-    fn pre_walk(&mut self, kind: ASTNodeWeightKind, ident: Option<String>, node_id: NodeId) {
+    fn pre_walk(&mut self, kind: ASTNodeWeightKind, ident: Option<String>, node_id: NNodeId) {
         let astnode_index = self.create_ast_node(
             kind,
             ident,
@@ -619,7 +637,7 @@ impl CollectVisitor {
     }
 
     /// Extract the features of the AST node from the stacks and update the AST graph
-    fn post_walk(&mut self, node_id: NodeId) {
+    fn post_walk(&mut self, node_id: NNodeId) {
         let (node_index, features) = self
             .stack
             .pop()
@@ -988,7 +1006,10 @@ impl CollectVisitor {
             .node_indices()
             .map(|n| {
                 let feat = self.feat_graph.node_weight(n).unwrap();
-                (n, (feat.feature.name.clone(), feat.feature.not, feat.weight))
+                (
+                    n,
+                    (feat.feature.name.clone(), feat.feature.not, feat.weight),
+                )
             })
             .collect::<Vec<_>>();
 
@@ -1006,6 +1027,14 @@ impl CollectVisitor {
         println!("katz {:?}", katz_zip); // println!("katz {:?}", katz.unwrap().unwrap());
         println!("clos {:?}", closeness_zip); // println!("clos {:?}", closeness);
         println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
+    }
+
+    /// Print all extracted data serialized
+    fn print_serialized_data(&self) {
+        println!(
+            "{}",
+            serde_json::to_string(self).expect("Error: cannot serialize data")
+        );
     }
 }
 
@@ -1068,7 +1097,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit expression, like function calls
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
-        let node_id = cur_ex.id;
+        let node_id = NNodeId(cur_ex.id);
         let kind_string = ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
             // blocks
@@ -1160,7 +1189,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit item, like functions, structs, enums
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
-        let node_id = cur_item.id;
+        let node_id = NNodeId(cur_item.id);
         let kind_string =
             ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
@@ -1211,7 +1240,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit associated items, like methods in impls
     fn visit_assoc_item(&mut self, cur_aitem: &'ast AssocItem, ctxt: AssocCtxt) -> Self::Result {
         let ident = Some(cur_aitem.ident.to_string());
-        let node_id = cur_aitem.id;
+        let node_id = NNodeId(cur_aitem.id);
         let kind_string =
             ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
@@ -1249,7 +1278,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
-        let node_id = cur_stmt.id;
+        let node_id = NNodeId(cur_stmt.id);
         let kind_string =
             ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
@@ -1288,7 +1317,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit definition fields, like struct fields
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
-        let node_id = cur_field.id;
+        let node_id = NNodeId(cur_field.id);
         let kind_string = "FieldDef".to_string();
         let kind = ASTNodeWeightKind::Leaf(kind_string);
 
@@ -1300,7 +1329,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit enum variant
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
-        let node_id = cur_var.id;
+        let node_id = NNodeId(cur_var.id);
         let kind_string = "Variant".to_string();
         let kind = ASTNodeWeightKind::Leaf(kind_string);
 
@@ -1312,7 +1341,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
-        let node_id = cur_arm.id;
+        let node_id = NNodeId(cur_arm.id);
         let kind_string = "Arm".to_string();
         let kind = ASTNodeWeightKind::Leaf(kind_string);
 
@@ -1324,7 +1353,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits a function parameter
     fn visit_param(&mut self, cur_par: &'ast Param) -> Self::Result {
         let ident = None;
-        let node_id = cur_par.id;
+        let node_id = NNodeId(cur_par.id);
         let kind_string = "Param".to_string();
         let kind = ASTNodeWeightKind::NoWeight(kind_string);
 
@@ -1400,5 +1429,35 @@ impl std::fmt::Display for ASTNodeWeight {
             ASTNodeWeight::Weight(w) => write!(f, "w{:.2}", w),
             ASTNodeWeight::Wait(wait_ident) => write!(f, "wwait...({})", wait_ident),
         }
+    }
+}
+
+impl Copy for NNodeId {}
+
+impl std::fmt::Display for NNodeId {
+    /// NNodeId to string
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.as_u32())
+    }
+}
+
+impl Serialize for NNodeId {
+    /// Serialize NNodeId
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u32(self.0.as_u32())
+    }
+}
+
+impl<'de> Deserialize<'de> for NNodeId {
+    /// Deserialize NNodeId
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u32::deserialize(deserializer)?;
+        Ok(NNodeId(NodeId::from_u32(value)))
     }
 }
