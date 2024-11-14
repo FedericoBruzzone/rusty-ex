@@ -142,7 +142,7 @@ impl PrintAstCallbacks {
             collector.print_centrality();
         }
         if self.args.print_serialized_graphs {
-            // collector.print_serialized_graphs();
+            collector.print_serialized_graphs();
         }
     }
 }
@@ -817,13 +817,26 @@ impl CollectVisitor {
         println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
     }
 
-    // /// Print all extracted graphs serialized
-    // fn print_serialized_graphs(&self) {
-    //     println!(
-    //         "{}",
-    //         serde_json::to_string(self).expect("Error: cannot serialize data")
-    //     );
-    // }
+    /// Print all extracted graphs serialized
+    fn print_serialized_graphs(&self) {
+        #[derive(Serialize, Deserialize)]
+        struct Serialized {
+            ast_graph: DiGraph<AstNode, Edge>,
+            features_graph: DiGraph<FeatureNode, Edge>,
+            artifacts_graph: DiGraph<ArtifactNode, Edge>,
+        }
+
+        let graphs = Serialized {
+            ast_graph: self.ast_graph.graph.clone(),
+            features_graph: self.features_graph.graph.clone(),
+            artifacts_graph: self.artifacts_graph.graph.clone(),
+        };
+
+        println!(
+            "{}",
+            serde_json::to_string(&graphs).expect("Error: cannot serialize data")
+        );
+    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {

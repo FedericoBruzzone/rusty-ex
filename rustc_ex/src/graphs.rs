@@ -1,20 +1,21 @@
 use rustc_ast::NodeId;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 // -------------------- Features --------------------
 
 /// Simple feature
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct Feature {
     pub name: String,
     pub not: bool,
 }
 
 /// Complex feature: none, a single feature (not included), all features, or any feature
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum ComplexFeature {
     None,
     Feature(Feature),
@@ -25,7 +26,7 @@ pub enum ComplexFeature {
 // -------------------- Weights --------------------
 
 /// Type of the weight of a node (not the actual weight, only the type)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeWeightKind {
     /// Leaf, a literal or something that does NOT calls anything.
     /// The weight is 1.0
@@ -42,7 +43,7 @@ pub enum NodeWeightKind {
 }
 
 /// Weight of a node: not yet calculated, a float, or waiting for something to be resolved
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeWeight {
     ToBeCalculated,
     Weight(f64),
@@ -52,7 +53,7 @@ pub enum NodeWeight {
 // -------------------- Graphs common --------------------
 
 /// Edge between nodes, has a weight
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Edge {
     pub weight: f64,
 }
@@ -69,7 +70,7 @@ pub struct AstKey(pub NodeId);
 /// AST node, with features (complex, already parsed) and weight (kind and value).
 /// The weight of an AST node is the sum of the weights of all its children plus
 /// its intrinsic weight (if it has one)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AstNode {
     pub node_id: AstKey,
     pub ident: Option<String>,
@@ -91,12 +92,12 @@ pub struct AstGraph {
 pub type FeatureIndex = NodeIndex;
 
 /// Key to uniquely identify a feature (used to get the index in the `nodes` map)
-#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct FeatureKey(pub Feature);
 
 /// Feature node, with the feature and the weight (if calculated).
 /// The weight is calculated "horizontally", considering only the "siblings"
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureNode {
     pub feature: FeatureKey,
     pub weight: Option<f64>,
@@ -120,7 +121,7 @@ pub struct ArtifactKey(pub NodeId);
 
 /// Artifact node, with features (indexes in the features graph) and weight (sum of the weights
 /// of all its children (even the not annotated ones) plus its intrinsic weight (if it has one))
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactNode {
     pub artifact: ArtifactKey,
     pub ident: Option<String>,
@@ -399,5 +400,47 @@ impl Display for NodeWeight {
             NodeWeight::Weight(w) => write!(f, "w{:.2}", w),
             NodeWeight::Wait(wait_ident) => write!(f, "wait({})", wait_ident),
         }
+    }
+}
+
+impl Serialize for AstKey {
+    /// Serialize AstKey
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u32(self.0.as_u32())
+    }
+}
+
+impl<'de> Deserialize<'de> for AstKey {
+    /// Deserialize AstKey
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u32::deserialize(deserializer)?;
+        Ok(AstKey(NodeId::from_u32(value)))
+    }
+}
+
+impl Serialize for ArtifactKey {
+    /// Serialize ArtifactKey
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u32(self.0.as_u32())
+    }
+}
+
+impl<'de> Deserialize<'de> for ArtifactKey {
+    /// Deserialize ArtifactKey
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = u32::deserialize(deserializer)?;
+        Ok(ArtifactKey(NodeId::from_u32(value)))
     }
 }
