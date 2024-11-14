@@ -1,5 +1,6 @@
 #![feature(rustc_private)]
 
+pub mod graphs;
 pub mod instrument;
 
 extern crate rustc_ast;
@@ -11,12 +12,12 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
+use graphs::*;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
 use rustc_span::symbol::*;
-use rustworkx_core::petgraph::dot::{Config, Dot};
-use rustworkx_core::petgraph::graph::{self, NodeIndex};
+use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -129,19 +130,19 @@ impl PrintAstCallbacks {
             println!("{:#?}", krate);
         }
         if self.args.print_ast_graph {
-            collector.print_ast_graph();
+            collector.ast_graph.print_dot();
         }
         if self.args.print_features_graph {
-            collector.print_features_graph();
+            collector.features_graph.print_dot();
         }
         if self.args.print_artifacts_graph {
-            collector.print_artifacts_graph();
+            collector.artifacts_graph.print_dot();
         }
         if self.args.print_centrality {
             collector.print_centrality();
         }
         if self.args.print_serialized_graphs {
-            collector.print_serialized_graphs();
+            // collector.print_serialized_graphs();
         }
     }
 }
@@ -208,14 +209,9 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let collector = &mut CollectVisitor {
                     stack: Vec::new(),
 
-                    ast_graph: graph::DiGraph::new(),
-                    ast_nodes: HashMap::new(),
-
-                    feat_graph: graph::DiGraph::new(),
-                    feat_nodes: HashMap::new(),
-
-                    arti_graph: graph::DiGraph::new(),
-                    arti_nodes: HashMap::new(),
+                    ast_graph: AstGraph::new(),
+                    features_graph: FeaturesGraph::new(),
+                    artifacts_graph: ArtifactsGraph::new(),
 
                     idents_weights: HashMap::new(),
                     weights_to_resolve: LinkedHashSet::new(),
@@ -232,10 +228,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.build_arti_graph();
 
                 // calculate weights of AST nodes
-                collector.ast_graph.reverse(); // reverse graph
-                collector.rec_weight_ast_graph(ASTIndex::new(GLOBAL_NODE_INDEX));
+                collector.ast_graph.graph.reverse(); // reverse graph
+                collector.rec_weight_ast_graph(AstIndex::new(GLOBAL_NODE_INDEX));
                 collector.resolve_weights_in_wait();
-                collector.ast_graph.reverse(); // restore graph
+                collector.ast_graph.graph.reverse(); // restore graph
 
                 self.process_cli_args(collector, krate);
             });
@@ -246,211 +242,34 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
 /// Constant for the global feature NodeId.
 /// 4294967040 is not used because it is used by the compiler for "Dummy" nodes
-const GLOBAL_NODE_ID: NNodeId = NNodeId(NodeId::from_u32(4294967039));
+const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
 /// Constant for the global feature name
 const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
 const GLOBAL_NODE_INDEX: usize = 0;
 
-/// Wrapper around `rustc_ast::NodeId` to implement `Serialize` and `Deserialize`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct NNodeId(NodeId);
-
-/// Type of the weight of an AST node (not the actual weight)
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum ASTNodeWeightKind {
-    /// Leaf, a literal or something that does NOT calls anything.
-    /// The weight is 1.0
-    Leaf(String),
-    /// A block of statements, expressions or items. Has no intrinsic weight.
-    /// The weight is the sum of the children.
-    Block(String),
-    /// A call to another node, like a function call.
-    /// The weight is the weight of the called thing.
-    Call(String, Option<String>),
-    /// Items that have no weight, like `_`.
-    /// The weight is 0.0
-    NoWeight(String),
-}
-
-/// Weight of an AST node: not yet calculated, a float, or waiting for something to be resolved
-#[derive(Clone, Debug, Serialize, Deserialize)]
-enum NodeWeight {
-    ToBeCalculated,
-    Weight(f64),
-    Wait(String),
-}
-
-/// AST node, can be annotated with features
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ASTNode {
-    kind: ASTNodeWeightKind,
-    node_id: NNodeId,
-    ident: Option<String>,
-    features: ComplexFeature,
-    weight: NodeWeight,
-}
-
-/// Simple feature, key of the features hashmap
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Feature {
-    name: String,
-    not: bool,
-}
-
-/// Complex feature, can be a single feature (not already included), an all or an any
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-enum ComplexFeature {
-    None,
-    Feature(Feature),
-    All(Vec<ComplexFeature>),
-    Any(Vec<ComplexFeature>),
-}
-
-/// Node of the features graph, a feature with its weight
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct FeatureNode {
-    feature: Feature,
-    weight: Option<f64>,
-}
-
-/// Artifact, key of the artifacts hashmap
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Artifact {
-    node_id: NNodeId,
-}
-
-/// Node of the artifacts graph, an artifact with its features and its weight
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct ArtifactNode {
-    artifact: Artifact,
-    ident: Option<String>,
-    features: Vec<FeatureIndex>, // index in features graph
-    weight: NodeWeight,
-}
-
-/// Graphs edge, with weight
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Edge {
-    weight: f64,
-}
-
-/// Index of the AST node in the AST graph
-type ASTIndex = NodeIndex;
-/// Index of the feature node in the features graph
-type FeatureIndex = NodeIndex;
-/// Index of the artifact node in the artifacts graph
-type ArtifactIndex = NodeIndex;
-
 /// AST visitor to collect data to build the graphs
-#[derive(Serialize, Deserialize)]
-struct CollectVisitor {
+pub struct CollectVisitor {
     /// Stack to keep track of the AST nodes dependencies
-    #[serde(skip_serializing, skip_deserializing)]
-    stack: Vec<(ASTIndex, ComplexFeature)>,
+    stack: Vec<(AstIndex, ComplexFeature)>,
 
-    /// Relationships between all nodes of the AST.
-    /// A `ASTNode` also stores features and ident of the `NodeId`
-    ast_graph: graph::DiGraph<ASTNode, Edge>,
-    /// Node of the AST -> Index in the temporary graph
-    #[serde(skip_serializing, skip_deserializing)]
-    ast_nodes: HashMap<NNodeId, ASTIndex>,
-
-    /// Features graph, created from the AST graph.
-    /// A `FeatureNode` also stores the weight of the `Feature`, calculated
-    /// "horizontally" (considering only the "siblings")
-    feat_graph: graph::DiGraph<FeatureNode, Edge>,
-    /// Feature -> Index in the features graph
-    #[serde(skip_serializing, skip_deserializing)]
-    feat_nodes: HashMap<Feature, FeatureIndex>,
-
-    /// Artifacts graph, created from the AST graph.
-    /// Only annotated artifacts are considered (artifacts with a feature).
-    /// An `ArtifactNode` also stores the ident, the weight of the `Artifact`
-    /// and the indexes of the features in the features graph
-    arti_graph: graph::DiGraph<ArtifactNode, Edge>,
-    /// Artifact -> Index in the artifacts graph
-    #[serde(skip_serializing, skip_deserializing)]
-    arti_nodes: HashMap<Artifact, ArtifactIndex>,
+    /// Relationships between all nodes of the AST (both annotated or not)
+    ast_graph: AstGraph,
+    /// Multigraph storing relationships between features
+    features_graph: FeaturesGraph,
+    /// Graph storing only annotated artifacts (AST nodes with features)
+    artifacts_graph: ArtifactsGraph,
 
     /// Weights of the already weighted idents (needed to weight the Calls).
     /// The weights for a single ident can be multiple, because a function can
     /// be defined multiple times (with different #[cfg] attributes)
-    #[serde(skip_serializing, skip_deserializing)]
     idents_weights: HashMap<String, Vec<f64>>,
     /// Weights of the ASTNodes that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
-    #[serde(skip_serializing, skip_deserializing)]
-    weights_to_resolve: LinkedHashSet<ASTIndex>,
+    weights_to_resolve: LinkedHashSet<AstIndex>,
 }
 
 impl CollectVisitor {
-    /// Create an AST node in the AST graph and add it to the AST nodes hashmap.
-    /// Return the index of the created node
-    fn create_ast_node(
-        &mut self,
-        kind: ASTNodeWeightKind,
-        ident: Option<String>,
-        node_id: NNodeId,
-        features: ComplexFeature,
-        weight: NodeWeight,
-    ) -> ASTIndex {
-        if let Some(index) = self.ast_nodes.get(&node_id) {
-            return *index;
-        }
-
-        let index: ASTIndex = self.ast_graph.add_node(ASTNode {
-            kind,
-            ident,
-            node_id,
-            features,
-            weight,
-        });
-        self.ast_nodes.insert(node_id, index);
-
-        index
-    }
-
-    /// Create a feature node in the features graph and add it to the features nodes hashmap.
-    /// Return the index of the created node
-    fn create_feature_node(&mut self, feature: Feature, weight: Option<f64>) -> FeatureIndex {
-        if let Some(index) = self.feat_nodes.get(&feature) {
-            return *index;
-        }
-
-        let index: FeatureIndex = self.feat_graph.add_node(FeatureNode {
-            feature: feature.clone(),
-            weight,
-        });
-        self.feat_nodes.insert(feature, index);
-
-        index
-    }
-
-    /// Create an artifact node in the artifacts graph and add it to the artifacts nodes hashmap.
-    /// Return the index of the created node
-    fn create_artifact_node(
-        &mut self,
-        artifact: Artifact,
-        ident: Option<String>,
-        features: Vec<FeatureIndex>,
-        weight: NodeWeight,
-    ) -> ArtifactIndex {
-        if let Some(index) = self.arti_nodes.get(&artifact) {
-            return *index;
-        };
-
-        let index: ArtifactIndex = self.arti_graph.add_node(ArtifactNode {
-            artifact: artifact.clone(),
-            ident,
-            features,
-            weight,
-        });
-        self.arti_nodes.insert(artifact, index);
-
-        index
-    }
-
     /// Initialize the global scope (AST node, feature node, artifact node)
     fn init_global_scope(&mut self) {
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
@@ -460,27 +279,27 @@ impl CollectVisitor {
             not: false,
         };
         let features = ComplexFeature::Feature(feature.clone());
-        let artifact = Artifact { node_id };
+        let artifact = ArtifactKey(node_id);
 
-        let index = self.create_ast_node(
-            ASTNodeWeightKind::Block("Global".to_string()),
+        let index = self.ast_graph.create_node(
+            AstKey(node_id),
             ident.clone(),
-            node_id,
             features.clone(),
+            NodeWeightKind::Block("Global".to_string()),
             NodeWeight::ToBeCalculated,
         );
         assert_eq!(
             index,
-            ASTIndex::new(GLOBAL_NODE_INDEX),
+            AstIndex::new(GLOBAL_NODE_INDEX),
             "Error: global AST node has an index != 0"
         );
-        let index = self.create_feature_node(feature, None);
+        let index = self.features_graph.create_node(FeatureKey(feature), None);
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
             "Error: global feature node has an index != 0"
         );
-        let index = self.create_artifact_node(
+        let index = self.artifacts_graph.create_node(
             artifact,
             ident,
             self.rec_features_to_indexes(&features),
@@ -510,7 +329,8 @@ impl CollectVisitor {
                         .to_string();
 
                     let feature = Feature { name, not };
-                    self.create_feature_node(feature.clone(), None);
+                    self.features_graph
+                        .create_node(FeatureKey(feature.clone()), None);
 
                     features.push(ComplexFeature::Feature(feature));
                 }
@@ -550,7 +370,7 @@ impl CollectVisitor {
         match features {
             ComplexFeature::None => Vec::new(),
             ComplexFeature::Feature(feature) => Vec::from([FeatureNode {
-                feature: feature.clone(),
+                feature: FeatureKey(feature.clone()),
                 weight: Some(1.0),
             }]),
             ComplexFeature::All(nested) => {
@@ -579,14 +399,16 @@ impl CollectVisitor {
 
     /// Update the AST node with the found features and create the dependency (edge)
     /// in the AST graph. The parent ASTNode should already exist (anothe node or global scope)
-    fn update_ast_node_features(&mut self, node_id: NNodeId, features: ComplexFeature) {
+    fn update_ast_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
         // update the node with the found and weighted cfgs
-        let node_index: &ASTIndex = self
-            .ast_nodes
-            .get(&node_id)
+        let node_index: &AstIndex = self
+            .ast_graph
+            .nodes
+            .get(&AstKey(node_id))
             .expect("Error: cannot find AST node updating features");
 
         self.ast_graph
+            .graph
             .node_weight_mut(*node_index)
             .expect("Error: cannot find AST node updating features")
             .features = features;
@@ -595,12 +417,13 @@ impl CollectVisitor {
         match self.stack.last() {
             Some((parent_index, ..)) => {
                 self.ast_graph
+                    .graph
                     .add_edge(*node_index, *parent_index, Edge { weight: 0.0 });
             }
             None => {
-                self.ast_graph.add_edge(
+                self.ast_graph.graph.add_edge(
                     *node_index,
-                    ASTIndex::new(GLOBAL_NODE_INDEX),
+                    AstIndex::new(GLOBAL_NODE_INDEX),
                     Edge { weight: 0.0 },
                 );
             }
@@ -614,9 +437,15 @@ impl CollectVisitor {
         match features {
             ComplexFeature::None => (),
             ComplexFeature::Feature(f) => {
-                indexes.push(*self.feat_nodes.get(f).expect(
-                    "Error: cannot find feature node index converting features to indexes",
-                ));
+                indexes.push(
+                    *self
+                        .features_graph
+                        .nodes
+                        .get(&FeatureKey(f.clone()))
+                        .expect(
+                            "Error: cannot find feature node index converting features to indexes",
+                        ),
+                );
             }
             ComplexFeature::All(fs) | ComplexFeature::Any(fs) => {
                 for f in fs {
@@ -629,19 +458,19 @@ impl CollectVisitor {
     }
 
     /// Initialize a new AST node and update the stack
-    fn pre_walk(&mut self, kind: ASTNodeWeightKind, ident: Option<String>, node_id: NNodeId) {
-        let astnode_index = self.create_ast_node(
-            kind,
+    fn pre_walk(&mut self, kind: NodeWeightKind, ident: Option<String>, node_id: NodeId) {
+        let ast_index = self.ast_graph.create_node(
+            AstKey(node_id),
             ident,
-            node_id,
             ComplexFeature::None,
+            kind,
             NodeWeight::ToBeCalculated,
         );
-        self.stack.push((astnode_index, ComplexFeature::None));
+        self.stack.push((ast_index, ComplexFeature::None));
     }
 
     /// Extract the features of the AST node from the stack and update the AST graph
-    fn post_walk(&mut self, node_id: NNodeId) {
+    fn post_walk(&mut self, node_id: NodeId) {
         let (node_index, features) = self
             .stack
             .pop()
@@ -649,11 +478,12 @@ impl CollectVisitor {
 
         let ast_node = self
             .ast_graph
+            .graph
             .node_weight_mut(node_index)
             .expect("Error: missing node post AST walk");
 
         assert_eq!(
-            node_id, ast_node.node_id,
+            node_id, ast_node.node_id.0,
             "Error: node id mismatch post AST walk"
         );
 
@@ -663,8 +493,8 @@ impl CollectVisitor {
             // convert features to index of the features (the features node already exist)
             let features_indexes = self.rec_features_to_indexes(&features);
 
-            self.create_artifact_node(
-                Artifact { node_id },
+            self.artifacts_graph.create_node(
+                ArtifactKey(node_id),
                 ident,
                 features_indexes,
                 NodeWeight::ToBeCalculated,
@@ -678,9 +508,9 @@ impl CollectVisitor {
     /// Recursively fet the first parent node with features. The only node with no
     /// annotated parents is the global scope
     fn rec_get_annotated_parent(
-        graph: &graph::DiGraph<ASTNode, Edge>,
-        start_index: ASTIndex,
-    ) -> Option<ASTIndex> {
+        graph: &DiGraph<AstNode, Edge>,
+        start_index: AstIndex,
+    ) -> Option<AstIndex> {
         // global node (no parents)
         if start_index == NodeIndex::new(GLOBAL_NODE_INDEX) {
             return None;
@@ -708,7 +538,7 @@ impl CollectVisitor {
     }
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
-    fn rec_weight_ast_graph(&mut self, start_index: ASTIndex) -> NodeWeight {
+    fn rec_weight_ast_graph(&mut self, start_index: AstIndex) -> NodeWeight {
         // TODO: ci sono altre cose fa considerare come Call?
 
         // IMPORTANT! We cannot skip already weighted nodes because a re-evaluation may be needed.
@@ -718,6 +548,7 @@ impl CollectVisitor {
 
         let adjacents = self
             .ast_graph
+            .graph
             .neighbors(start_index)
             .collect::<Vec<_>>()
             .into_iter()
@@ -741,13 +572,14 @@ impl CollectVisitor {
 
         let weight = match &self
             .ast_graph
+            .graph
             .node_weight(start_index)
             .expect("Error: cannot find AST node weighting AST graph")
-            .kind
+            .weight_kind
         {
-            ASTNodeWeightKind::Leaf(..) => NodeWeight::Weight(1.0 + child_weight),
-            ASTNodeWeightKind::Block(..) => NodeWeight::Weight(child_weight),
-            ASTNodeWeightKind::Call(.., Some(to)) => match self.idents_weights.get(to) {
+            NodeWeightKind::Leaf(..) => NodeWeight::Weight(1.0 + child_weight),
+            NodeWeightKind::Block(..) => NodeWeight::Weight(child_weight),
+            NodeWeightKind::Call(.., Some(to)) => match self.idents_weights.get(to) {
                 Some(vec_fn_weight) => NodeWeight::Weight(
                     (vec_fn_weight.iter().sum::<f64>() / vec_fn_weight.len() as f64) + child_weight,
                 ),
@@ -756,8 +588,8 @@ impl CollectVisitor {
                     NodeWeight::Wait(to.to_string())
                 }
             },
-            ASTNodeWeightKind::Call(.., None) => NodeWeight::Weight(child_weight),
-            ASTNodeWeightKind::NoWeight(..) => NodeWeight::Weight(0.0),
+            NodeWeightKind::Call(.., None) => NodeWeight::Weight(child_weight),
+            NodeWeightKind::NoWeight(..) => NodeWeight::Weight(0.0),
         };
 
         self.update_weight(start_index, weight.clone());
@@ -784,21 +616,22 @@ impl CollectVisitor {
     /// Update the weight of the AST node.
     /// Remove the updated node from nodes in wait (only if the weight is not a Wait).
     /// Add the weight to the `idents_weights` map if the node has an ident
-    fn update_weight(&mut self, ast_index: ASTIndex, weight: NodeWeight) {
+    fn update_weight(&mut self, ast_index: AstIndex, weight: NodeWeight) {
         let ast_node = self
             .ast_graph
+            .graph
             .node_weight_mut(ast_index)
             .expect("Error: cannot find AST node updating weight");
 
         if ast_node.features != ComplexFeature::None {
             let artifact_index = self
-                .arti_nodes
-                .get(&Artifact {
-                    node_id: ast_node.node_id,
-                })
+                .artifacts_graph
+                .nodes
+                .get(&ArtifactKey(ast_node.node_id.0))
                 .expect("Error: cannot find artifact index updating weight");
             let artifact_node = self
-                .arti_graph
+                .artifacts_graph
+                .graph
                 .node_weight_mut(*artifact_index)
                 .expect("Error: cannot find artifact node updating weight");
             artifact_node.weight = weight.clone();
@@ -819,23 +652,26 @@ impl CollectVisitor {
 
     /// Build the features graph from the AST graph
     fn build_feat_graph(&mut self) {
-        self.ast_nodes
+        self.ast_graph
+            .nodes
             .iter()
             // ignore global node
             .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
             .for_each(|(.., child_index)| {
                 let child_node = &self
                     .ast_graph
+                    .graph
                     .node_weight(*child_index)
                     .expect("Error: cannot find child node creating features graph");
                 let child_features = CollectVisitor::rec_weight_feature(&child_node.features);
 
                 let parent_index =
-                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph, *child_index)
+                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph.graph, *child_index)
                         .expect("Error: cannot find parent creating features graph");
                 let parent_features = CollectVisitor::rec_weight_feature(
                     &self
                         .ast_graph
+                        .graph
                         .node_weight(parent_index)
                         .expect("Error: cannot find parent node creating features graph")
                         .features,
@@ -846,13 +682,15 @@ impl CollectVisitor {
                     // cartesian product
                     .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
                     .for_each(|(child_feat, parent_feat)| {
-                        self.feat_graph.add_edge(
+                        self.features_graph.graph.add_edge(
                             *self
-                                .feat_nodes
+                                .features_graph
+                                .nodes
                                 .get(&child_feat.feature)
                                 .expect("Error: cannot find feature node creating features graph"),
                             *self
-                                .feat_nodes
+                                .features_graph
+                                .nodes
                                 .get(&parent_feat.feature)
                                 .expect("Error: cannot find feature node creating features graph"),
                             Edge {
@@ -869,7 +707,8 @@ impl CollectVisitor {
     fn build_arti_graph(&mut self) {
         // TODO: questo grafo è `ast_graph` senza i nodi senza features. Ci è utile?
 
-        self.ast_nodes
+        self.ast_graph
+            .nodes
             .iter()
             // ignore global node
             .filter(|(.., node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
@@ -877,6 +716,7 @@ impl CollectVisitor {
             .filter(|(.., node_index)| {
                 let child_node = &self
                     .ast_graph
+                    .graph
                     .node_weight(**node_index)
                     .expect("Error: cannot find child node creating features graph");
 
@@ -886,37 +726,37 @@ impl CollectVisitor {
             // the index is in the AST graph, not in the artifacts graph
             .map(|(.., child_index)| {
                 let parent_index =
-                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph, *child_index)
+                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph.graph, *child_index)
                         .expect("Error: cannot find parent creating features graph");
 
                 (child_index, parent_index)
             })
             // add edge between child and parent in the artifacts graph
-            // we need to convert the ASTIndex to the ArtifactIndex
+            // we need to convert the AstIndex to the ArtifactIndex
             .for_each(|(child_ast_index, parent_ast_index)| {
                 let child_ast_node = &self
                     .ast_graph
+                    .graph
                     .node_weight(*child_ast_index)
                     .expect("Error: cannot find child node creating features graph");
                 let parent_ast_node = &self
                     .ast_graph
+                    .graph
                     .node_weight(parent_ast_index)
                     .expect("Error: cannot find parent node creating features graph");
 
                 let child_arti_index = self
-                    .arti_nodes
-                    .get(&Artifact {
-                        node_id: child_ast_node.node_id,
-                    })
+                    .artifacts_graph
+                    .nodes
+                    .get(&ArtifactKey(child_ast_node.node_id.0))
                     .expect("Error: cannot find child artifact node creating artifacts graph");
                 let parent_arti_index = self
-                    .arti_nodes
-                    .get(&Artifact {
-                        node_id: parent_ast_node.node_id,
-                    })
+                    .artifacts_graph
+                    .nodes
+                    .get(&ArtifactKey(parent_ast_node.node_id.0))
                     .expect("Error: cannot find child artifact node creating artifacts graph");
 
-                self.arti_graph.add_edge(
+                self.artifacts_graph.graph.add_edge(
                     *child_arti_index,
                     *parent_arti_index,
                     Edge { weight: 0.0 },
@@ -924,94 +764,11 @@ impl CollectVisitor {
             });
     }
 
-    /// Print AST graph in DOT format
-    fn print_ast_graph(&self) {
-        let get_node_attr = |_g: &graph::DiGraph<ASTNode, Edge>,
-                             node: (graph::NodeIndex, &ASTNode)| {
-            let index = node.0.index();
-            let ast_node = node.1;
-            format!(
-                "label=\"i{}: node{} ({}) '{}' #[{}] {}\"",
-                index,
-                ast_node.node_id,
-                ast_node.kind,
-                ast_node.ident.clone().unwrap_or(" ".to_string()),
-                ast_node.features,
-                ast_node.weight,
-            )
-        };
-
-        println!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.ast_graph,
-                &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &|_g, _e| String::new(), // do not print edge labels
-                &get_node_attr,
-            )
-        )
-    }
-
-    /// Print features graph in DOT format
-    fn print_features_graph(&self) {
-        let get_node_attr = |_g: &graph::DiGraph<FeatureNode, Edge>,
-                             node: (graph::NodeIndex, &FeatureNode)| {
-            let index = node.0.index();
-            let feature = node.1;
-            match feature.feature.not {
-                true => format!("label=\"i{}: !{}\"", index, feature.feature.name),
-                false => format!("label=\"i{}: {}\"", index, feature.feature.name),
-            }
-        };
-
-        println!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.feat_graph,
-                &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &|_g, e| format!("label=\"{:.2}\"", e.weight().weight),
-                &get_node_attr,
-            )
-        )
-    }
-
-    /// Print artifacts graph in DOT format
-    fn print_artifacts_graph(&self) {
-        let get_node_attr = |_g: &graph::DiGraph<ArtifactNode, Edge>,
-                             node: (graph::NodeIndex, &ArtifactNode)| {
-            let index = node.0.index();
-            let artifact = node.1;
-            format!(
-                "label=\"i{} node{} '{}' #[{}] {}\"",
-                index,
-                artifact.artifact.node_id,
-                artifact.ident.clone().unwrap_or("-".to_string()),
-                artifact
-                    .features
-                    .iter()
-                    .map(|f| f.index().to_string())
-                    .collect::<Vec<String>>()
-                    .join(", "),
-                artifact.weight
-            )
-        };
-
-        println!(
-            "{:?}",
-            Dot::with_attr_getters(
-                &self.arti_graph,
-                &[Config::NodeNoLabel, Config::EdgeNoLabel],
-                &|_g, _e| String::new(), // do not print edge labels
-                &get_node_attr,
-            )
-        )
-    }
-
     /// Print some centrality measures of the features graph
     fn print_centrality(&self) {
         let katz: rustworkx_core::Result<Option<Vec<f64>>> =
             rustworkx_core::centrality::katz_centrality(
-                &self.feat_graph,
+                &self.features_graph.graph,
                 |e| Ok(e.weight().weight),
                 None,
                 None,
@@ -1020,24 +777,26 @@ impl CollectVisitor {
                 None,
             );
 
-        let closeness = rustworkx_core::centrality::closeness_centrality(&self.feat_graph, false);
+        let closeness =
+            rustworkx_core::centrality::closeness_centrality(&self.features_graph.graph, false);
 
         let eigenvector: rustworkx_core::Result<Option<Vec<f64>>> =
             rustworkx_core::centrality::eigenvector_centrality(
-                &self.feat_graph,
+                &self.features_graph.graph,
                 |e| Ok(e.weight().weight),
                 None,
                 Some(1e-2),
             );
 
         let graph_nodes = self
-            .feat_graph
+            .features_graph
+            .graph
             .node_indices()
             .map(|n| {
-                let feat = self.feat_graph.node_weight(n).unwrap();
+                let feat = self.features_graph.graph.node_weight(n).unwrap();
                 (
                     n,
-                    (feat.feature.name.clone(), feat.feature.not, feat.weight),
+                    (feat.feature.0.name.clone(), feat.feature.0.not, feat.weight),
                 )
             })
             .collect::<Vec<_>>();
@@ -1058,13 +817,13 @@ impl CollectVisitor {
         println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
     }
 
-    /// Print all extracted graphs serialized
-    fn print_serialized_graphs(&self) {
-        println!(
-            "{}",
-            serde_json::to_string(self).expect("Error: cannot serialize data")
-        );
-    }
+    // /// Print all extracted graphs serialized
+    // fn print_serialized_graphs(&self) {
+    //     println!(
+    //         "{}",
+    //         serde_json::to_string(self).expect("Error: cannot serialize data")
+    //     );
+    // }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
@@ -1126,8 +885,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit expression, like function calls
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
-        let node_id = NNodeId(cur_ex.id);
-        let kind_string = ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
+        let node_id = cur_ex.id;
+        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
             // blocks
             ExprKind::Array(..)
@@ -1157,7 +916,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
             | ExprKind::Paren(..)
-            | ExprKind::Try(..) => ASTNodeWeightKind::Block(kind_string),
+            | ExprKind::Try(..) => NodeWeightKind::Block(kind_string),
 
             // calls
             ExprKind::Call(call, ..) => {
@@ -1171,11 +930,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     ),
                     _ => None,
                 };
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
             ExprKind::MethodCall(method_call) => {
                 let ident = Some(method_call.seg.ident.to_string());
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
             ExprKind::MacCall(mac_call) => {
                 let ident = Some(
@@ -1187,7 +946,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
@@ -1199,7 +958,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Yield(..)
             | ExprKind::Yeet(..)
             | ExprKind::Become(..)
-            | ExprKind::Err(..) => ASTNodeWeightKind::Leaf(kind_string),
+            | ExprKind::Err(..) => NodeWeightKind::Leaf(kind_string),
 
             // no weight
             ExprKind::Underscore
@@ -1207,7 +966,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::OffsetOf(..)
             | ExprKind::IncludedBytes(..)
             | ExprKind::FormatArgs(..)
-            | ExprKind::Dummy => ASTNodeWeightKind::NoWeight(kind_string),
+            | ExprKind::Dummy => NodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1218,9 +977,8 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit item, like functions, structs, enums
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
-        let node_id = NNodeId(cur_item.id);
-        let kind_string =
-            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
+        let node_id = cur_item.id;
+        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
             // blocks
             ItemKind::Fn(..)
@@ -1231,7 +989,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::Impl(..)
             | ItemKind::Union(..)
             | ItemKind::TraitAlias(..)
-            | ItemKind::MacroDef(..) => ASTNodeWeightKind::Block(kind_string),
+            | ItemKind::MacroDef(..) => NodeWeightKind::Block(kind_string),
 
             // calls
             ItemKind::MacCall(mac_call) => {
@@ -1244,21 +1002,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
             ItemKind::Static(..)
             | ItemKind::Const(..)
             | ItemKind::GlobalAsm(..)
-            | ItemKind::TyAlias(..) => ASTNodeWeightKind::Leaf(kind_string),
+            | ItemKind::TyAlias(..) => NodeWeightKind::Leaf(kind_string),
 
             // no weight
             ItemKind::Use(..)
             | ItemKind::ExternCrate(..)
             | ItemKind::ForeignMod(..)
             | ItemKind::Delegation(..)
-            | ItemKind::DelegationMac(..) => ASTNodeWeightKind::NoWeight(kind_string),
+            | ItemKind::DelegationMac(..) => NodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1269,12 +1027,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit associated items, like methods in impls
     fn visit_assoc_item(&mut self, cur_aitem: &'ast AssocItem, ctxt: AssocCtxt) -> Self::Result {
         let ident = Some(cur_aitem.ident.to_string());
-        let node_id = NNodeId(cur_aitem.id);
-        let kind_string =
-            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
+        let node_id = cur_aitem.id;
+        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
             // blocks
-            AssocItemKind::Fn(..) => ASTNodeWeightKind::Block(kind_string),
+            AssocItemKind::Fn(..) => NodeWeightKind::Block(kind_string),
 
             // calls
             AssocItemKind::MacCall(mac_call) => {
@@ -1287,16 +1044,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
-            AssocItemKind::Const(..) => ASTNodeWeightKind::Leaf(kind_string),
+            AssocItemKind::Const(..) => NodeWeightKind::Leaf(kind_string),
 
             // no weight
-            AssocItemKind::Type(..) => ASTNodeWeightKind::NoWeight(kind_string),
-            AssocItemKind::Delegation(..) => ASTNodeWeightKind::NoWeight(kind_string),
-            AssocItemKind::DelegationMac(..) => ASTNodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::Type(..) => NodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::Delegation(..) => NodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::DelegationMac(..) => NodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1307,12 +1064,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
-        let node_id = NNodeId(cur_stmt.id);
-        let kind_string =
-            ASTNodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
+        let node_id = cur_stmt.id;
+        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // blocks
-            StmtKind::Item(..) => ASTNodeWeightKind::Block(kind_string),
+            StmtKind::Item(..) => NodeWeightKind::Block(kind_string),
 
             // calls
             StmtKind::MacCall(mac_call) => {
@@ -1326,16 +1082,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                ASTNodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Call(kind_string, ident)
             }
 
             // leafs
             StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
-                ASTNodeWeightKind::Leaf(kind_string)
+                NodeWeightKind::Leaf(kind_string)
             }
 
             // no weight
-            StmtKind::Empty => ASTNodeWeightKind::NoWeight(kind_string),
+            StmtKind::Empty => NodeWeightKind::NoWeight(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1346,9 +1102,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit definition fields, like struct fields
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
-        let node_id = NNodeId(cur_field.id);
+        let node_id = cur_field.id;
         let kind_string = "FieldDef".to_string();
-        let kind = ASTNodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_field_def(self, cur_field);
@@ -1358,9 +1114,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit enum variant
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
-        let node_id = NNodeId(cur_var.id);
+        let node_id = cur_var.id;
         let kind_string = "Variant".to_string();
-        let kind = ASTNodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_variant(self, cur_var);
@@ -1370,9 +1126,9 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
-        let node_id = NNodeId(cur_arm.id);
+        let node_id = cur_arm.id;
         let kind_string = "Arm".to_string();
-        let kind = ASTNodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Leaf(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
@@ -1382,111 +1138,12 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits a function parameter
     fn visit_param(&mut self, cur_par: &'ast Param) -> Self::Result {
         let ident = None;
-        let node_id = NNodeId(cur_par.id);
+        let node_id = cur_par.id;
         let kind_string = "Param".to_string();
-        let kind = ASTNodeWeightKind::NoWeight(kind_string);
+        let kind = NodeWeightKind::NoWeight(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_param(self, cur_par);
         self.post_walk(node_id);
-    }
-}
-
-impl std::fmt::Display for ComplexFeature {
-    /// Complex feature to string
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ComplexFeature::None => write!(f, ""),
-            ComplexFeature::Feature(Feature { name, not }) => {
-                let name = match not {
-                    true => "!".to_string() + name,
-                    false => name.to_string(),
-                };
-                write!(f, "{}", name)
-            }
-            ComplexFeature::All(features) => write!(
-                f,
-                "all({})",
-                features
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            ComplexFeature::Any(features) => write!(
-                f,
-                "any({})",
-                features
-                    .iter()
-                    .map(|f| f.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-        }
-    }
-}
-
-impl ASTNodeWeightKind {
-    /// Parse the kind variant name from the debug string (keep only the Kind name)
-    fn parse_kind_variant_name(s: String) -> String {
-        s.split(['(', '{']).next().unwrap_or("").trim().to_string()
-    }
-}
-
-impl std::fmt::Display for ASTNodeWeightKind {
-    /// ASTNodeWeightKind to string
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ASTNodeWeightKind::Leaf(name) => write!(f, "Leaf({})", name),
-            ASTNodeWeightKind::Block(name) => write!(f, "Block({})", name),
-            ASTNodeWeightKind::Call(name, ident) => write!(
-                f,
-                "Call({})->{}",
-                name,
-                ident.clone().unwrap_or("??".to_string())
-            ),
-            ASTNodeWeightKind::NoWeight(name) => write!(f, "NoWeight({})", name),
-        }
-    }
-}
-
-impl std::fmt::Display for NodeWeight {
-    /// ASTNodeWeight to string
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NodeWeight::ToBeCalculated => write!(f, "w-"),
-            NodeWeight::Weight(w) => write!(f, "w{:.2}", w),
-            NodeWeight::Wait(wait_ident) => write!(f, "wait({})", wait_ident),
-        }
-    }
-}
-
-impl Copy for NNodeId {}
-
-impl std::fmt::Display for NNodeId {
-    /// NNodeId to string
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.as_u32())
-    }
-}
-
-impl Serialize for NNodeId {
-    /// Serialize NNodeId
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u32(self.0.as_u32())
-    }
-}
-
-impl<'de> Deserialize<'de> for NNodeId {
-    /// Deserialize NNodeId
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let value = u32::deserialize(deserializer)?;
-        Ok(NNodeId(NodeId::from_u32(value)))
     }
 }
