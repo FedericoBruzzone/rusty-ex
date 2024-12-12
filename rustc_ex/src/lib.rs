@@ -1,6 +1,6 @@
 #![feature(rustc_private)]
 
-pub mod graphs;
+pub mod types;
 pub mod instrument;
 
 extern crate rustc_ast;
@@ -12,7 +12,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use graphs::*;
+use types::*;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
