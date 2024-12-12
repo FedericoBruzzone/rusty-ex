@@ -144,6 +144,7 @@ impl PrintAstCallbacks {
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
         }
+        // TODO: aggiungere deserializzatore
     }
 }
 
@@ -705,8 +706,6 @@ impl CollectVisitor {
 
     /// Build the artifacts graph from the AST graph
     fn build_arti_graph(&mut self) {
-        // TODO: questo grafo è `ast_graph` senza i nodi senza features. Ci è utile?
-
         self.ast_graph
             .nodes
             .iter()
@@ -840,8 +839,20 @@ impl CollectVisitor {
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
-    // TODO: rilevare anche `cfg!` (trasformato a call `rustcex_cfg`, NON macro)
-    // TODO: rilevare features sulle call di macro
+    // TODO: le features sulle call di macro NON vengono correttamente rilevate,
+    // le macro hanno un comportamento particolare, in questo stato dell'AST
+    // sono già parzialmente espanse.
+    // Il banale workaround di trasformare tutte le chiamate a macro in funzioni
+    // (togliendo il `!`) non basta, dato che esistono anche le macro con `[]` e
+    // con `{}`, causando errori di sintassi.
+
+    // TODO: le feature vengono rilevate solo se scritte con sintassi `#[cfg(feature = ...)]`,
+    // la macro `cfg!` non è rilevata.
+    // Come descritto nel TODO precedente non basta fare il replace di `cfg!` con ad
+    // esempio `rustcex_cfg!` dato che anche questa macro viene già espansa (in un errore
+    // garantito, dato che non la trova).
+    // Un workaround potrebbe essere quello di rimpiazzarla con un nome di funzione valido
+    // come `rustcex_cfg`.
 
     // The features (cfg) are attributes, but attributes are (almost) always
     // at the same level of the Node they are annotating. So the features are (almost)

@@ -22,19 +22,24 @@ Run tests on all example workspaces:
 
 ```bash
 cd rustc_ex
-cargo test -- --test-threads=1
+cargo test --no-fail-fast -- --test-threads=1
 ```
+
+> [!WARNING]
+> Some tests _currently_ fail. Run with `--no-fail-fast` to always run all test (even if some early test fails).
 
 ### Cli (`cargo` wrapper)
 
 Available plugin args:
 
-- `--print-ast-graph`: print the AST graph in DOT format
-- `--print-features-graph`: print the features graph in DOT format
-- `--print-artifacts-graph`: print the artifacts graph in DOT format
-- `--print-crate`: print the crate AST
-- `--print-centrality`: print the (some) centrality of the features graph
-- `--print-serialized-graphs`: print the extracted graphs serialized
+- Graphs in DOT format:
+  - `--print-ast-graph`: print the AST graph, including all the AST nodes (both annotated with a feature and not)
+  - `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`)
+  - `--print-artifacts-graph`: print the artifacts graph, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
+- Other:
+  - `--print-crate`: print the crate AST
+  - `--print-centrality`: print some centralities of the features graph
+  - `--print-serialized-graphs`: print the extracted graphs serialized
 
 Use the cargo plugin:
 

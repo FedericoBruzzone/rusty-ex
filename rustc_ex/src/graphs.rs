@@ -138,8 +138,6 @@ pub struct ArtifactsGraph {
 
 // -------------------- Implementations --------------------
 
-// TODO: fare anche l'update per i 3 grafi e fare refactoring in lib.rs
-
 impl AstGraph {
     /// Create a new empty AST graph
     pub fn new() -> Self {
