@@ -819,9 +819,9 @@ impl CollectVisitor {
     /// Print all extracted graphs serialized
     fn print_serialized_graphs(&self) {
         let graphs = SimpleSerialization {
-            ast_graph: self.ast_graph.graph.clone(),
-            features_graph: self.features_graph.graph.clone(),
-            artifacts_graph: self.artifacts_graph.graph.clone(),
+            ast_graph: self.ast_graph.clone(),
+            features_graph: self.features_graph.clone(),
+            artifacts_graph: self.artifacts_graph.clone(),
         };
 
         println!(

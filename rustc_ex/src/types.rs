@@ -7,6 +7,7 @@ use std::cmp::Eq;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use std::panic;
 
 // -------------------- Features --------------------
 
@@ -72,7 +73,7 @@ pub struct SimpleAstKey(pub NodeId);
 
 /// SimpleASTKey, with support for multiple crates
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-struct SuperAstKey {
+pub struct SuperAstKey {
     node_id: SimpleAstKey,
     krate: String,
 }
@@ -99,9 +100,10 @@ pub struct AstNode<Key: AstKey> {
 /// AST graph: the actual graph and a map to get the index of a node from its key.
 ///
 /// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AstGraph<Key: AstKey> {
     pub graph: DiGraph<AstNode<Key>, Edge>,
+    #[serde(skip)]
     pub nodes: HashMap<Key, AstIndex>,
 }
 
@@ -125,9 +127,10 @@ pub struct FeatureNode {
 }
 
 /// Features graph: the actual graph and a map to get the index of a feature node from its key
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeaturesGraph {
     pub graph: DiGraph<FeatureNode, Edge>,
+    #[serde(skip)]
     pub nodes: HashMap<FeatureKey, FeatureIndex>,
 }
 
@@ -142,7 +145,7 @@ pub struct SimpleArtifactKey(pub NodeId);
 
 /// ArtifactKey, with support for multiple crates
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-struct SuperArtifactKey {
+pub struct SuperArtifactKey {
     artifact: SimpleArtifactKey,
     krate: String,
 }
@@ -167,9 +170,10 @@ pub struct ArtifactNode<Key: ArtifactKey> {
 /// Artifacts graph: the actual graph and a map to get the index of an artifact node from its key.
 ///
 /// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactsGraph<Key: ArtifactKey> {
     pub graph: DiGraph<ArtifactNode<Key>, Edge>,
+    #[serde(skip)]
     pub nodes: HashMap<Key, ArtifactIndex>,
 }
 
@@ -178,9 +182,9 @@ pub struct ArtifactsGraph<Key: ArtifactKey> {
 /// Serialization of a single crate graphs
 #[derive(Serialize, Deserialize)]
 pub struct SimpleSerialization {
-    pub ast_graph: DiGraph<AstNode<SimpleAstKey>, Edge>,
-    pub features_graph: DiGraph<FeatureNode, Edge>,
-    pub artifacts_graph: DiGraph<ArtifactNode<SimpleArtifactKey>, Edge>,
+    pub ast_graph: AstGraph<SimpleAstKey>,
+    pub features_graph: FeaturesGraph,
+    pub artifacts_graph: ArtifactsGraph<SimpleArtifactKey>,
 }
 
 // -------------------- Implementations --------------------
@@ -380,6 +384,18 @@ impl ArtifactsGraph<SimpleArtifactKey> {
 impl<Key: ArtifactKey + Hash + Eq + Clone + Debug> Default for ArtifactsGraph<Key> {
     fn default() -> Self {
         ArtifactsGraph::new()
+    }
+}
+
+impl Default for SimpleAstKey {
+    fn default() -> Self {
+        panic!("Serialization error: default SimpleAstKey required")
+    }
+}
+
+impl Default for SimpleArtifactKey {
+    fn default() -> Self {
+        panic!("Serialization error: default SimpleArtifactKey required")
     }
 }
 
