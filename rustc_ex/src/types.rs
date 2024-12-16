@@ -2,8 +2,11 @@ use rustc_ast::NodeId;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
+use std::clone::Clone;
+use std::cmp::Eq;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
+use std::hash::Hash;
 
 // -------------------- Features --------------------
 
@@ -65,25 +68,41 @@ pub type AstIndex = NodeIndex;
 
 /// Key to uniquely identify an AST node (used to get the index in the `nodes` map)
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct AstKey(pub NodeId);
+pub struct SimpleAstKey(pub NodeId);
+
+/// SimpleASTKey, with support for multiple crates
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+struct SuperAstKey {
+    node_id: SimpleAstKey,
+    krate: String,
+}
+
+/// Trait that identifies an AST key
+pub trait AstKey {}
+impl AstKey for SimpleAstKey {}
+impl AstKey for SuperAstKey {}
 
 /// AST node, with features (complex, already parsed) and weight (kind and value).
 /// The weight of an AST node is the sum of the weights of all its children plus
-/// its intrinsic weight (if it has one)
+/// its intrinsic weight (if it has one).
+///
+/// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AstNode {
-    pub node_id: AstKey,
+pub struct AstNode<Key: AstKey> {
+    pub node_id: Key,
     pub ident: Option<String>,
     pub features: ComplexFeature,
     pub weight_kind: NodeWeightKind,
     pub weight: NodeWeight,
 }
 
-/// AST graph: the actual graph and a map to get the index of a node from its key
+/// AST graph: the actual graph and a map to get the index of a node from its key.
+///
+/// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
 #[derive(Debug, Clone)]
-pub struct AstGraph {
-    pub graph: DiGraph<AstNode, Edge>,
-    pub nodes: HashMap<AstKey, AstIndex>,
+pub struct AstGraph<Key: AstKey> {
+    pub graph: DiGraph<AstNode<Key>, Edge>,
+    pub nodes: HashMap<Key, AstIndex>,
 }
 
 // -------------------- Features Graph --------------------
@@ -91,7 +110,9 @@ pub struct AstGraph {
 /// Index of a feature node in the features graph
 pub type FeatureIndex = NodeIndex;
 
-/// Key to uniquely identify a feature (used to get the index in the `nodes` map)
+/// Key to uniquely identify a feature (used to get the index in the `nodes` map).
+///
+/// Features are shared between crates, so a Simple/Super key is not needed
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct FeatureKey(pub Feature);
 
@@ -117,28 +138,54 @@ pub type ArtifactIndex = NodeIndex;
 
 /// Key to uniquely identify an artifact (used to get the index in the `nodes` map)
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub struct ArtifactKey(pub NodeId);
+pub struct SimpleArtifactKey(pub NodeId);
+
+/// ArtifactKey, with support for multiple crates
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+struct SuperArtifactKey {
+    artifact: SimpleArtifactKey,
+    krate: String,
+}
+
+/// Trait that identifies an AST node
+pub trait ArtifactKey {}
+impl ArtifactKey for SimpleArtifactKey {}
+impl ArtifactKey for SuperArtifactKey {}
 
 /// Artifact node, with features (indexes in the features graph) and weight (sum of the weights
-/// of all its children (even the not annotated ones) plus its intrinsic weight (if it has one))
+/// of all its children (even the not annotated ones) plus its intrinsic weight (if it has one)).
+///
+/// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ArtifactNode {
-    pub artifact: ArtifactKey,
+pub struct ArtifactNode<Key: ArtifactKey> {
+    pub artifact: Key,
     pub ident: Option<String>,
     pub features: Vec<FeatureIndex>, // index in features graph
     pub weight: NodeWeight,
 }
 
-/// Artifacts graph: the actual graph and a map to get the index of an artifact node from its key
+/// Artifacts graph: the actual graph and a map to get the index of an artifact node from its key.
+///
+/// Generic over the key type, to support both Simple (single crate) and Super (multiple crates) keys
 #[derive(Debug, Clone)]
-pub struct ArtifactsGraph {
-    pub graph: DiGraph<ArtifactNode, Edge>,
-    pub nodes: HashMap<ArtifactKey, ArtifactIndex>,
+pub struct ArtifactsGraph<Key: ArtifactKey> {
+    pub graph: DiGraph<ArtifactNode<Key>, Edge>,
+    pub nodes: HashMap<Key, ArtifactIndex>,
+}
+
+// -------------------- Serialization --------------------
+
+/// Serialization of a single crate graphs
+#[derive(Serialize, Deserialize)]
+pub struct SimpleSerialization {
+    pub ast_graph: DiGraph<AstNode<SimpleAstKey>, Edge>,
+    pub features_graph: DiGraph<FeatureNode, Edge>,
+    pub artifacts_graph: DiGraph<ArtifactNode<SimpleArtifactKey>, Edge>,
 }
 
 // -------------------- Implementations --------------------
 
-impl AstGraph {
+impl<Key: AstKey + Hash + Eq + Clone + Debug> AstGraph<Key> {
     /// Create a new empty AST graph
     pub fn new() -> Self {
         AstGraph {
@@ -151,7 +198,7 @@ impl AstGraph {
     /// Return the index of the created node
     pub fn create_node(
         &mut self,
-        node_id: AstKey,
+        node_id: Key,
         ident: Option<String>,
         features: ComplexFeature,
         weight_kind: NodeWeightKind,
@@ -175,7 +222,7 @@ impl AstGraph {
 
     /// Print AST graph in DOT format
     pub fn print_dot(&self) {
-        let get_node_attr = |_g: &DiGraph<AstNode, Edge>, node: (NodeIndex, &AstNode)| {
+        let get_node_attr = |_g: &DiGraph<AstNode<Key>, Edge>, node: (NodeIndex, &AstNode<Key>)| {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
@@ -201,7 +248,7 @@ impl AstGraph {
     }
 }
 
-impl Default for AstGraph {
+impl<Key: AstKey + Hash + Eq + Clone + Debug> Default for AstGraph<Key> {
     fn default() -> Self {
         AstGraph::new()
     }
@@ -261,7 +308,7 @@ impl Default for FeaturesGraph {
     }
 }
 
-impl ArtifactsGraph {
+impl<Key: ArtifactKey + Eq + Hash + Clone + Debug> ArtifactsGraph<Key> {
     /// Create a new empty artifacts graph
     pub fn new() -> Self {
         ArtifactsGraph {
@@ -274,7 +321,7 @@ impl ArtifactsGraph {
     /// Return the index of the created node
     pub fn create_node(
         &mut self,
-        artifact: ArtifactKey,
+        artifact: Key,
         ident: Option<String>,
         features: Vec<FeatureIndex>,
         weight: NodeWeight,
@@ -293,26 +340,30 @@ impl ArtifactsGraph {
 
         index
     }
+}
 
-    /// Print artifacts graph in DOT format
+impl ArtifactsGraph<SimpleArtifactKey> {
+    /// Print ONLY SIMPLE artifacts graph in DOT format
     pub fn print_dot(&self) {
-        let get_node_attr = |_g: &DiGraph<ArtifactNode, Edge>, node: (NodeIndex, &ArtifactNode)| {
-            let index = node.0.index();
-            let artifact = node.1;
-            format!(
-                "label=\"i{} node{} '{}' #[{}] {}\"",
-                index,
-                artifact.artifact.0,
-                artifact.ident.clone().unwrap_or("-".to_string()),
-                artifact
-                    .features
-                    .iter()
-                    .map(|f| f.index().to_string())
-                    .collect::<Vec<String>>()
-                    .join(", "),
-                artifact.weight
-            )
-        };
+        let get_node_attr =
+            |_g: &DiGraph<ArtifactNode<SimpleArtifactKey>, Edge>,
+             node: (NodeIndex, &ArtifactNode<SimpleArtifactKey>)| {
+                let index = node.0.index();
+                let artifact = node.1;
+                format!(
+                    "label=\"i{} node{} '{}' #[{}] {}\"",
+                    index,
+                    artifact.artifact.0,
+                    artifact.ident.clone().unwrap_or("-".to_string()),
+                    artifact
+                        .features
+                        .iter()
+                        .map(|f| f.index().to_string())
+                        .collect::<Vec<String>>()
+                        .join(", "),
+                    artifact.weight
+                )
+            };
 
         println!(
             "{:?}",
@@ -326,7 +377,7 @@ impl ArtifactsGraph {
     }
 }
 
-impl Default for ArtifactsGraph {
+impl<Key: ArtifactKey + Hash + Eq + Clone + Debug> Default for ArtifactsGraph<Key> {
     fn default() -> Self {
         ArtifactsGraph::new()
     }
@@ -401,8 +452,10 @@ impl Display for NodeWeight {
     }
 }
 
-impl Serialize for AstKey {
-    /// Serialize AstKey
+// -------------------- Simple Serialization --------------------
+
+impl Serialize for SimpleAstKey {
+    /// Serialize SimpleAstKey
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -411,19 +464,19 @@ impl Serialize for AstKey {
     }
 }
 
-impl<'de> Deserialize<'de> for AstKey {
-    /// Deserialize AstKey
+impl<'de> Deserialize<'de> for SimpleAstKey {
+    /// Deserialize SimpleAstKey
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let value = u32::deserialize(deserializer)?;
-        Ok(AstKey(NodeId::from_u32(value)))
+        Ok(SimpleAstKey(NodeId::from_u32(value)))
     }
 }
 
-impl Serialize for ArtifactKey {
-    /// Serialize ArtifactKey
+impl Serialize for SimpleArtifactKey {
+    /// Serialize SimpleArtifactKey
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -432,13 +485,13 @@ impl Serialize for ArtifactKey {
     }
 }
 
-impl<'de> Deserialize<'de> for ArtifactKey {
-    /// Deserialize ArtifactKey
+impl<'de> Deserialize<'de> for SimpleArtifactKey {
+    /// Deserialize SimpleArtifactKey
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let value = u32::deserialize(deserializer)?;
-        Ok(ArtifactKey(NodeId::from_u32(value)))
+        Ok(SimpleArtifactKey(NodeId::from_u32(value)))
     }
 }

@@ -1,7 +1,7 @@
 #![feature(rustc_private)]
 
-pub mod types;
 pub mod instrument;
+pub mod types;
 
 extern crate rustc_ast;
 extern crate rustc_driver;
@@ -12,7 +12,6 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use types::*;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -23,6 +22,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::{borrow::Cow, env};
 use std::{fs, io, panic};
+use types::*;
 
 // This struct is the plugin provided to the rustc_plugin framework,
 // and it must be exported for use by the CLI/driver binaries.
@@ -255,11 +255,11 @@ pub struct CollectVisitor {
     stack: Vec<(AstIndex, ComplexFeature)>,
 
     /// Relationships between all nodes of the AST (both annotated or not)
-    ast_graph: AstGraph,
+    ast_graph: AstGraph<SimpleAstKey>,
     /// Multigraph storing relationships between features
     features_graph: FeaturesGraph,
     /// Graph storing only annotated artifacts (AST nodes with features)
-    artifacts_graph: ArtifactsGraph,
+    artifacts_graph: ArtifactsGraph<SimpleArtifactKey>,
 
     /// Weights of the already weighted idents (needed to weight the Calls).
     /// The weights for a single ident can be multiple, because a function can
@@ -280,10 +280,10 @@ impl CollectVisitor {
             not: false,
         };
         let features = ComplexFeature::Feature(feature.clone());
-        let artifact = ArtifactKey(node_id);
+        let artifact = SimpleArtifactKey(node_id);
 
         let index = self.ast_graph.create_node(
-            AstKey(node_id),
+            SimpleAstKey(node_id),
             ident.clone(),
             features.clone(),
             NodeWeightKind::Block("Global".to_string()),
@@ -405,7 +405,7 @@ impl CollectVisitor {
         let node_index: &AstIndex = self
             .ast_graph
             .nodes
-            .get(&AstKey(node_id))
+            .get(&SimpleAstKey(node_id))
             .expect("Error: cannot find AST node updating features");
 
         self.ast_graph
@@ -461,7 +461,7 @@ impl CollectVisitor {
     /// Initialize a new AST node and update the stack
     fn pre_walk(&mut self, kind: NodeWeightKind, ident: Option<String>, node_id: NodeId) {
         let ast_index = self.ast_graph.create_node(
-            AstKey(node_id),
+            SimpleAstKey(node_id),
             ident,
             ComplexFeature::None,
             kind,
@@ -495,7 +495,7 @@ impl CollectVisitor {
             let features_indexes = self.rec_features_to_indexes(&features);
 
             self.artifacts_graph.create_node(
-                ArtifactKey(node_id),
+                SimpleArtifactKey(node_id),
                 ident,
                 features_indexes,
                 NodeWeight::ToBeCalculated,
@@ -509,7 +509,7 @@ impl CollectVisitor {
     /// Recursively fet the first parent node with features. The only node with no
     /// annotated parents is the global scope
     fn rec_get_annotated_parent(
-        graph: &DiGraph<AstNode, Edge>,
+        graph: &DiGraph<AstNode<SimpleAstKey>, Edge>,
         start_index: AstIndex,
     ) -> Option<AstIndex> {
         // global node (no parents)
@@ -628,7 +628,7 @@ impl CollectVisitor {
             let artifact_index = self
                 .artifacts_graph
                 .nodes
-                .get(&ArtifactKey(ast_node.node_id.0))
+                .get(&SimpleArtifactKey(ast_node.node_id.0))
                 .expect("Error: cannot find artifact index updating weight");
             let artifact_node = self
                 .artifacts_graph
@@ -747,12 +747,12 @@ impl CollectVisitor {
                 let child_arti_index = self
                     .artifacts_graph
                     .nodes
-                    .get(&ArtifactKey(child_ast_node.node_id.0))
+                    .get(&SimpleArtifactKey(child_ast_node.node_id.0))
                     .expect("Error: cannot find child artifact node creating artifacts graph");
                 let parent_arti_index = self
                     .artifacts_graph
                     .nodes
-                    .get(&ArtifactKey(parent_ast_node.node_id.0))
+                    .get(&SimpleArtifactKey(parent_ast_node.node_id.0))
                     .expect("Error: cannot find child artifact node creating artifacts graph");
 
                 self.artifacts_graph.graph.add_edge(
@@ -818,14 +818,7 @@ impl CollectVisitor {
 
     /// Print all extracted graphs serialized
     fn print_serialized_graphs(&self) {
-        #[derive(Serialize, Deserialize)]
-        struct Serialized {
-            ast_graph: DiGraph<AstNode, Edge>,
-            features_graph: DiGraph<FeatureNode, Edge>,
-            artifacts_graph: DiGraph<ArtifactNode, Edge>,
-        }
-
-        let graphs = Serialized {
+        let graphs = SimpleSerialization {
             ast_graph: self.ast_graph.graph.clone(),
             features_graph: self.features_graph.graph.clone(),
             artifacts_graph: self.artifacts_graph.graph.clone(),
