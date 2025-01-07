@@ -243,11 +243,11 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
 /// Constant for the global feature NodeId.
 /// 4294967040 is not used because it is used by the compiler for "Dummy" nodes
-const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
+pub const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
 /// Constant for the global feature name
-const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
+pub const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
-const GLOBAL_NODE_INDEX: usize = 0;
+pub const GLOBAL_NODE_INDEX: usize = 0;
 
 /// AST visitor to collect data to build the graphs
 pub struct CollectVisitor {

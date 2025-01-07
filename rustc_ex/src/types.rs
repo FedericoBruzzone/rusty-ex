@@ -74,12 +74,12 @@ pub struct SimpleAstKey(pub NodeId);
 /// SimpleASTKey, with support for multiple crates
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct SuperAstKey {
-    node_id: SimpleAstKey,
-    krate: String,
+    pub node_id: SimpleAstKey,
+    pub krate: String,
 }
 
 /// Trait that identifies an AST key
-pub trait AstKey {}
+pub trait AstKey: Hash + Eq + Clone + Debug + Display {}
 impl AstKey for SimpleAstKey {}
 impl AstKey for SuperAstKey {}
 
@@ -146,12 +146,12 @@ pub struct SimpleArtifactKey(pub NodeId);
 /// ArtifactKey, with support for multiple crates
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct SuperArtifactKey {
-    artifact: SimpleArtifactKey,
-    krate: String,
+    pub artifact: SimpleArtifactKey,
+    pub krate: String,
 }
 
 /// Trait that identifies an AST node
-pub trait ArtifactKey {}
+pub trait ArtifactKey: Hash + Eq + Clone + Debug + Display {}
 impl ArtifactKey for SimpleArtifactKey {}
 impl ArtifactKey for SuperArtifactKey {}
 
@@ -189,7 +189,35 @@ pub struct SimpleSerialization {
 
 // -------------------- Implementations --------------------
 
-impl<Key: AstKey + Hash + Eq + Clone + Debug> AstGraph<Key> {
+impl Display for SimpleAstKey {
+    /// SimpleAstKey to string
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for SuperAstKey {
+    /// SuperAstKey to string
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.krate, self.node_id)
+    }
+}
+
+impl Display for SimpleArtifactKey {
+    /// SimpleArtifactKey to string
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Display for SuperArtifactKey {
+    /// SuperArtifactKey to string
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.krate, self.artifact)
+    }
+}
+
+impl<Key: AstKey> AstGraph<Key> {
     /// Create a new empty AST graph
     pub fn new() -> Self {
         AstGraph {
@@ -230,7 +258,7 @@ impl<Key: AstKey + Hash + Eq + Clone + Debug> AstGraph<Key> {
             let index = node.0.index();
             let ast_node = node.1;
             format!(
-                "label=\"i{}: node{:?} ({}) '{}' #[{}] {}\"",
+                "label=\"i{}: node{} ({}) '{}' #[{}] {}\"",
                 index,
                 ast_node.node_id,
                 ast_node.weight_kind,
@@ -252,7 +280,7 @@ impl<Key: AstKey + Hash + Eq + Clone + Debug> AstGraph<Key> {
     }
 }
 
-impl<Key: AstKey + Hash + Eq + Clone + Debug> Default for AstGraph<Key> {
+impl<Key: AstKey> Default for AstGraph<Key> {
     fn default() -> Self {
         AstGraph::new()
     }
@@ -312,7 +340,7 @@ impl Default for FeaturesGraph {
     }
 }
 
-impl<Key: ArtifactKey + Eq + Hash + Clone + Debug> ArtifactsGraph<Key> {
+impl<Key: ArtifactKey> ArtifactsGraph<Key> {
     /// Create a new empty artifacts graph
     pub fn new() -> Self {
         ArtifactsGraph {
@@ -344,30 +372,27 @@ impl<Key: ArtifactKey + Eq + Hash + Clone + Debug> ArtifactsGraph<Key> {
 
         index
     }
-}
 
-impl ArtifactsGraph<SimpleArtifactKey> {
-    /// Print ONLY SIMPLE artifacts graph in DOT format
+    /// Print artifacts graph in DOT format
     pub fn print_dot(&self) {
-        let get_node_attr =
-            |_g: &DiGraph<ArtifactNode<SimpleArtifactKey>, Edge>,
-             node: (NodeIndex, &ArtifactNode<SimpleArtifactKey>)| {
-                let index = node.0.index();
-                let artifact = node.1;
-                format!(
-                    "label=\"i{} node{} '{}' #[{}] {}\"",
-                    index,
-                    artifact.artifact.0,
-                    artifact.ident.clone().unwrap_or("-".to_string()),
-                    artifact
-                        .features
-                        .iter()
-                        .map(|f| f.index().to_string())
-                        .collect::<Vec<String>>()
-                        .join(", "),
-                    artifact.weight
-                )
-            };
+        let get_node_attr = |_g: &DiGraph<ArtifactNode<Key>, Edge>,
+                             node: (NodeIndex, &ArtifactNode<Key>)| {
+            let index = node.0.index();
+            let artifact_node = node.1;
+            format!(
+                "label=\"i{} node{} '{}' #[{}] {}\"",
+                index,
+                artifact_node.artifact,
+                artifact_node.ident.clone().unwrap_or("-".to_string()),
+                artifact_node
+                    .features
+                    .iter()
+                    .map(|f| f.index().to_string())
+                    .collect::<Vec<String>>()
+                    .join(", "),
+                artifact_node.weight,
+            )
+        };
 
         println!(
             "{:?}",
@@ -381,7 +406,7 @@ impl ArtifactsGraph<SimpleArtifactKey> {
     }
 }
 
-impl<Key: ArtifactKey + Hash + Eq + Clone + Debug> Default for ArtifactsGraph<Key> {
+impl<Key: ArtifactKey> Default for ArtifactsGraph<Key> {
     fn default() -> Self {
         ArtifactsGraph::new()
     }
