@@ -4,6 +4,7 @@ use rustc_ex::types::*;
 use rustc_ex::{GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
+use std::env;
 use std::fs::File;
 
 pub struct SuperCollector {
@@ -162,8 +163,6 @@ impl SuperCollector {
                 .expect("Edge weight not found importing graph")
                 .clone();
 
-            eprintln!("{:?} -> {:?}", source.feature, target.feature);
-
             self.features_graph.graph.add_edge(
                 *index_map.get(&source.feature).expect("Feature not found"),
                 *index_map.get(&target.feature).expect("Feature not found"),
@@ -231,8 +230,13 @@ impl SuperCollector {
 }
 
 fn main() {
-    // TODO: prendere in maniera decente i file da unire
-    let results = vec!["collector1.json", "collector2.json"];
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        eprintln!("Usage: {} <file1> <file2>", args[0]);
+        std::process::exit(1);
+    }
+
+    let results = &args[1..];
 
     let mut super_collector = SuperCollector {
         ast_graph: AstGraph::new(),

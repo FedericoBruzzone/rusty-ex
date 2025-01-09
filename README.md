@@ -12,8 +12,24 @@ A `cargo` plugin to analyze and extract a dependency graph (between `cfg` featur
 Setup the nightly toolchain:
 
 ```bash
-rustup toolchain install nightly-2024-10-18
-rustup component add --toolchain nightly-2024-10-18 rust-src rustc-dev llvm-tools-preview rust-analyzer clippy
+rustup toolchain install nightly-2024-12-01
+rustup component add --toolchain nightly-2024-12-01 rust-src rustc-dev llvm-tools-preview rust-analyzer clippy
+```
+
+### Install the cargo plugin
+
+Install all the binaries:
+
+```bash
+cargo install --bins --path rustc_ex
+```
+
+Use the installed binaries:
+
+```bash
+cargo-rustc-ex [--PLUGIN_ARG]
+deserializer-merger [--PLUGIN_ARG]
+rustc-ex-driver [--PLUGIN_ARG]
 ```
 
 ### Test
@@ -28,7 +44,7 @@ cargo test --no-fail-fast -- --test-threads=1
 > [!WARNING]
 > Some tests _currently_ fail. Run with `--no-fail-fast` to always run all test (even if some early test fails).
 
-### Cli (`cargo` wrapper)
+### CLI (`cargo` wrapper): `cargo-rustc-ex`
 
 Available plugin args:
 
@@ -41,41 +57,48 @@ Available plugin args:
   - `--print-centrality`: print some centralities of the features graph
   - `--print-serialized-graphs`: print the extracted graphs serialized
 
-Use the cargo plugin:
+Use the installed cargo plugin:
+
+```bash
+cd [example_crate_name]
+cargo-rustc-ex [--PLUGIN_ARG]
+
+# example:
+cd crate_name
+cargo-rustc-ex --print-features-graph
+```
+
+Use the cargo plugin without installing (from the root of this repository):
 
 ```bash
 cd rustc_ex/tests/workspaces/[example_crate_name]
 cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG] -- [--PLUGIN_ARG]
+
+# example:
+cd rustc_ex/tests/workspaces/simple_feature_no_weights
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-graph
 ```
 
 > [!NOTE]
 > Additional logs can be enabled by setting the `RUST_LOG` environment variable to `debug`.
 
-> [!TIP]
-> Example:
-> ```bash
-> cd rustc_ex/tests/workspaces/simple_feature_no_weights
-> cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-graph
-> ```
-
 > [!NOTE]
 > The compilation of the example crates is going to fail. `error: could not compile [example_crate_name]` is expected.
 
-### Driver (`rustc` wrapper)
+### Run on multiple crates (and merge result): `deserializer-merger`
 
-> [!CAUTION]
-> It is not currently possible to pass the plugin args to the driver without using an environment variable. Using the CLI is advised.
-
-TODO: Find a way to pass to the driver the plugin args using "PLUGIN_ARGS" environment variable
+Serialize the graphs of the crates you want to analyze and save the results in a file:
 
 ```bash
-cd rustc_ex
-CARGO_PRIMARY_PACKAGE=1 cargo run --bin rustc-ex-driver -- ./tests/workspaces/simple_feature_no_weights/src/main.rs --cfg 'feature="test"'
+cd ~/crate_1
+cargo-rustc-ex --print-features-graph > crate_1.json
+
+cd ~/crate_2
+cargo-rustc-ex --print-features-graph > crate_2.json
 ```
 
-Or:
+Execute the `deserializer-merger`, passing as arguments the files containing the serialization:
 
 ```bash
-cd rustc_ex/tests/workspaces/simple_feature_no_weights
-CARGO_PRIMARY_PACKAGE=1 cargo run --manifest-path ../../../Cargo.toml --bin rustc-ex-driver -- ./src/main.rs
+deserializer-merger ~/crate_1/crate_1.json ~/crate_2/crate_2.json
 ```
