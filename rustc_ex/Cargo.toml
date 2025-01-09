@@ -12,6 +12,9 @@ rustc_private = true
 name = "cargo-rustc-ex"
 
 [[bin]]
+name = "rustc-ex-driver"
+
+[[bin]]
 name = "deserializer-merger"
 
 [features]
