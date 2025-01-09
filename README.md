@@ -97,8 +97,14 @@ cd ~/crate_2
 cargo-rustc-ex --print-features-graph > crate_2.json
 ```
 
-Execute the `deserializer-merger`, passing as arguments the files containing the serialization:
+Execute the `deserializer-merger`, passing as `-f` argument the files containing the serialization and a plugin arg:
+- `--print-ast-graph`: print the AST graph, including all the AST nodes (both annotated with a feature and not)
+- `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`)
+- `--print-artifacts-graph`: print the artifacts graph, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
 
 ```bash
-deserializer-merger ~/crate_1/crate_1.json ~/crate_2/crate_2.json
+deserializer-merger [--PLUGIN-ARG] -f crate_1.json -f crate_2.json
+
+# example:
+deserializer-merger --print-features-graph -f crate_1.json -f crate_2.json
 ```

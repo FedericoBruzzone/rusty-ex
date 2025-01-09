@@ -1,10 +1,10 @@
 #![feature(rustc_private)]
 
+use clap::Parser;
 use rustc_ex::types::*;
 use rustc_ex::{GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
-use std::env;
 use std::fs::File;
 
 pub struct SuperCollector {
@@ -86,7 +86,7 @@ impl SuperCollector {
             }
             let old_node = ast_graph
                 .node_weight(old_node_index)
-                .expect("Node not found importing graph");
+                .expect("Error: node not found importing AST graph");
 
             let new_node_index = self.ast_graph.create_node(
                 SuperAstKey {
@@ -105,18 +105,18 @@ impl SuperCollector {
         for old_edge_index in ast_graph.edge_indices() {
             let (source, target) = ast_graph
                 .edge_endpoints(old_edge_index)
-                .expect("Edge not found importing graph");
+                .expect("Error: edge not found importing AST graph");
 
             let new_source = index_map
                 .get(&source)
-                .expect("Source node not found in index map");
+                .expect("Error: source node not found in AST index map");
             let new_target = index_map
                 .get(&target)
-                .expect("Target node not found in index map");
+                .expect("Error: target node not found in AST index map");
 
             let edge_weight = ast_graph
                 .edge_weight(old_edge_index)
-                .expect("Edge weight not found importing graph")
+                .expect("Error: edge weight not found importing AST graph")
                 .clone();
 
             self.ast_graph
@@ -133,7 +133,7 @@ impl SuperCollector {
         for node_index in features_graph.node_indices() {
             let node = features_graph
                 .node_weight(node_index)
-                .expect("Node not found importing graph");
+                .expect("Error: node not found importing features graph");
 
             if index_map.contains_key(&node.feature) {
                 continue;
@@ -149,23 +149,27 @@ impl SuperCollector {
         for old_edge_index in features_graph.edge_indices() {
             let (source_index, target_index) = features_graph
                 .edge_endpoints(old_edge_index)
-                .expect("Edge not found importing graph");
+                .expect("Error: edge not found importing features graph");
 
             let source = features_graph
                 .node_weight(source_index)
-                .expect("Source node not found");
+                .expect("Error: source node not found in features index map");
             let target = features_graph
                 .node_weight(target_index)
-                .expect("Target node not found");
+                .expect("Error: target node not found in features index map");
 
             let edge_weight = features_graph
                 .edge_weight(old_edge_index)
-                .expect("Edge weight not found importing graph")
+                .expect("Error: edge weight not found importing features graph")
                 .clone();
 
             self.features_graph.graph.add_edge(
-                *index_map.get(&source.feature).expect("Feature not found"),
-                *index_map.get(&target.feature).expect("Feature not found"),
+                *index_map
+                    .get(&source.feature)
+                    .expect("Error: feature not found importing features graph"),
+                *index_map
+                    .get(&target.feature)
+                    .expect("Error: feature not found importing features graph"),
                 edge_weight,
             );
         }
@@ -190,7 +194,7 @@ impl SuperCollector {
             }
             let old_node = artifacts_graph
                 .node_weight(old_node_index)
-                .expect("Node not found importing graph");
+                .expect("Error: node not found importing artifacts graph");
 
             let new_node_index = self.artifacts_graph.create_node(
                 SuperArtifactKey {
@@ -208,18 +212,18 @@ impl SuperCollector {
         for old_edge_index in artifacts_graph.edge_indices() {
             let (source, target) = artifacts_graph
                 .edge_endpoints(old_edge_index)
-                .expect("Edge not found importing graph");
+                .expect("Error: edge not found importing artifacts graph");
 
             let new_source = index_map
                 .get(&source)
-                .expect("Source node not found in index map");
+                .expect("Error: source node not found in artifacts index map");
             let new_target = index_map
                 .get(&target)
-                .expect("Target node not found in index map");
+                .expect("Error: target node not found in artifacts index map");
 
             let edge_weight = artifacts_graph
                 .edge_weight(old_edge_index)
-                .expect("Edge weight not found importing graph")
+                .expect("Error: edge weight not found importing artifacts graph")
                 .clone();
 
             self.artifacts_graph
@@ -229,15 +233,58 @@ impl SuperCollector {
     }
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Usage: {} <file1> <file2>", args[0]);
-        std::process::exit(1);
+// To parse CLI arguments, we use Clap for this example. But that
+// detail is up to you.
+#[derive(Parser)]
+pub struct Args {
+    /// Files to be deserialized
+    #[clap(short, long)]
+    files: Vec<String>,
+
+    /// Pass --print-ast-graph to print the DOT graph
+    #[clap(long)]
+    print_ast_graph: bool,
+
+    /// Pass --print-features-graph to print the DOT graph
+    #[clap(long)]
+    print_features_graph: bool,
+
+    /// Pass --print-artifacts-graph to print the DOT graph
+    #[clap(long)]
+    print_artifacts_graph: bool,
+
+    /// Pass --print-centrality to print some feature graph centrality
+    #[clap(long)]
+    print_centrality: bool,
+
+    /// Pass --print-serialized-graphs to print all extracted data serialized
+    #[clap(long)]
+    print_serialized_graphs: bool,
+}
+
+impl Args {
+    fn process_cli_args(&self, collector: &SuperCollector) {
+        if self.print_ast_graph {
+            collector.ast_graph.print_dot();
+        }
+        if self.print_features_graph {
+            collector.features_graph.print_dot();
+        }
+        if self.print_artifacts_graph {
+            collector.artifacts_graph.print_dot();
+        }
+        // TODO: centralità
+        // if self.print_centrality {
+        //     collector.print_centrality();
+        // }
+        // TODO: serializazzione
+        // if self.print_serialized_graphs {
+        //     collector.print_serialized_graphs();
+        // }
     }
+}
 
-    let results = &args[1..];
-
+fn main() {
     let mut super_collector = SuperCollector {
         ast_graph: AstGraph::new(),
         features_graph: FeaturesGraph::new(),
@@ -246,14 +293,18 @@ fn main() {
 
     super_collector.init_global_scope();
 
-    for file_path in results {
-        let file = File::open(file_path).unwrap();
-        let collector: SimpleSerialization = serde_json::from_reader(file).unwrap();
+    let args = Args::parse();
+
+    for file_path in &args.files {
+        let file =
+            File::open(file_path).unwrap_or_else(|_| panic!("Error: file {} not found", file_path));
+        let collector: SimpleSerialization = serde_json::from_reader(file)
+            .unwrap_or_else(|_| panic!("Error: {} deserialization failed", file_path));
         super_collector.import_ast_graph(collector.ast_graph.graph, file_path.to_string());
         super_collector.import_features_graph(collector.features_graph.graph);
         super_collector
             .import_artifacts_graph(collector.artifacts_graph.graph, file_path.to_string());
     }
 
-    super_collector.features_graph.print_dot();
+    args.process_cli_args(&super_collector);
 }
