@@ -27,3 +27,4 @@ Cargo.lock
 ### Test workspaces ###
 temp
 more
+**/tests/local

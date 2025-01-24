@@ -603,7 +603,36 @@ impl CollectVisitor {
         while let Some(cur_index) = self.weights_to_resolve.pop_front() {
             // prevent infinte loop:
             // if the same index is seen with the same number of unsolved weights, then it's a loop
-            if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
+            
+            // ----- DA QUI -----
+            // if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
+            //     let resolved = seen.iter().fold(HashSet::new(), |mut acc, (index, _)| {
+            //         let kind = &self
+            //             .ast_graph
+            //             .graph
+            //             .node_weight(*index)
+            //             .expect("Error: cannot find AST node weighting AST graph")
+            //             .weight_kind;
+                    
+            //         if let NodeWeightKind::Call(_, Some(ident)) | NodeWeightKind::Leaf(ident) = kind {
+            //             self.idents_weights.entry(ident.clone()).or_default().push(1.0);
+            //             acc.insert(*index);
+            //         }
+            //         acc
+            //     });
+
+            //     // Remove the resolved nodes from the set
+            //     seen = seen
+            //         .iter()
+            //         .filter(|(index, _)| !resolved.contains(index))
+            //         .cloned()
+            //         .collect();
+
+            //     seen.iter().for_each(|(index, _)| {
+            //         self.rec_weight_ast_graph(*index);
+            //     });
+            // ----- A QUI -----
+
                 return;
             }
             seen.insert((cur_index, self.weights_to_resolve.len()));
@@ -1153,7 +1182,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
 
     /// Visits a function parameter
     fn visit_param(&mut self, cur_par: &'ast Param) -> Self::Result {
-        let ident = None;
+        let ident = cur_par.pat.descr();
         let node_id = cur_par.id;
         let kind_string = "Param".to_string();
         let kind = NodeWeightKind::NoWeight(kind_string);

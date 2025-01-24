@@ -40,6 +40,8 @@ pub enum NodeWeightKind {
     Block(String),
     /// A call to another node, like a function call.
     /// The weight is the weight of the called thing
+    /// The first argument is the name of the called, while the
+    /// the second argument is the identifier of the called thing (if it has one).
     Call(String, Option<String>),
     /// Items that have no weight, like `_`.
     /// The weight is 0.0
@@ -47,7 +49,7 @@ pub enum NodeWeightKind {
 }
 
 /// Weight of a node: not yet calculated, a float, or waiting for something to be resolved
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NodeWeight {
     ToBeCalculated,
     Weight(f64),
