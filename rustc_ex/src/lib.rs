@@ -248,6 +248,9 @@ pub const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
 pub const GLOBAL_NODE_INDEX: usize = 0;
 
+/// Weight assigned to AST nodes that cannot be resolved
+pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: stabilire bene questo peso
+
 /// AST visitor to collect data to build the graphs
 pub struct CollectVisitor {
     /// Stack to keep track of the AST nodes dependencies
@@ -601,40 +604,18 @@ impl CollectVisitor {
         let mut seen = HashSet::new();
 
         while let Some(cur_index) = self.weights_to_resolve.pop_front() {
-            // prevent infinte loop:
-            // if the same index is seen with the same number of unsolved weights, then it's a loop
-            
-            // ----- DA QUI -----
-            // if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
-            //     let resolved = seen.iter().fold(HashSet::new(), |mut acc, (index, _)| {
-            //         let kind = &self
-            //             .ast_graph
-            //             .graph
-            //             .node_weight(*index)
-            //             .expect("Error: cannot find AST node weighting AST graph")
-            //             .weight_kind;
-                    
-            //         if let NodeWeightKind::Call(_, Some(ident)) | NodeWeightKind::Leaf(ident) = kind {
-            //             self.idents_weights.entry(ident.clone()).or_default().push(1.0);
-            //             acc.insert(*index);
-            //         }
-            //         acc
-            //     });
+            // prevent infinte loop: if the same index is seen with the same number
+            // of unsolved weights, then it's a loop. Enter recovery mode: weight the
+            // deepest node and continue
+            if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
 
-            //     // Remove the resolved nodes from the set
-            //     seen = seen
-            //         .iter()
-            //         .filter(|(index, _)| !resolved.contains(index))
-            //         .cloned()
-            //         .collect();
+                // because of how the queue is formed, the node that first detects a loop
+                // is also the "deepest" one, the one that has all adjacents fully resolved
+                self.update_weight(cur_index, RECOVERY_WEIGHT);
 
-            //     seen.iter().for_each(|(index, _)| {
-            //         self.rec_weight_ast_graph(*index);
-            //     });
-            // ----- A QUI -----
-
-                return;
+                continue;
             }
+
             seen.insert((cur_index, self.weights_to_resolve.len()));
 
             // try to weight the node, if it's not possible, it will be added again to the queue
