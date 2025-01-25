@@ -296,7 +296,11 @@ impl CollectVisitor {
             AstIndex::new(GLOBAL_NODE_INDEX),
             "Error: global AST node has an index != 0"
         );
-        let index = self.features_graph.create_node(FeatureKey(feature), None);
+        let index = self.features_graph.create_node(
+            FeatureKey(feature),
+            None,
+            ComplexFeature::None, // TODO
+        );
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
@@ -332,8 +336,11 @@ impl CollectVisitor {
                         .to_string();
 
                     let feature = Feature { name, not };
-                    self.features_graph
-                        .create_node(FeatureKey(feature.clone()), None);
+                    self.features_graph.create_node(
+                        FeatureKey(feature.clone()),
+                        None,                 // to be valued later
+                        ComplexFeature::None, // to be valued later
+                    );
 
                     features.push(ComplexFeature::Feature(feature));
                 }
@@ -369,13 +376,10 @@ impl CollectVisitor {
     }
 
     /// Weight features horizontally, considering only the "siblings"
-    fn rec_weight_feature(features: &ComplexFeature) -> Vec<FeatureNode> {
+    fn rec_weight_feature(features: &ComplexFeature) -> Vec<(FeatureKey, f64)> {
         match features {
             ComplexFeature::None => Vec::new(),
-            ComplexFeature::Feature(feature) => Vec::from([FeatureNode {
-                feature: FeatureKey(feature.clone()),
-                weight: Some(1.0),
-            }]),
+            ComplexFeature::Feature(feature) => Vec::from([(FeatureKey(feature.clone()), 1.0)]),
             ComplexFeature::All(nested) => {
                 let size = nested.len() as f64;
 
@@ -384,12 +388,7 @@ impl CollectVisitor {
                     .flat_map(|features| {
                         CollectVisitor::rec_weight_feature(features)
                             .into_iter()
-                            .map(|feature| FeatureNode {
-                                feature: feature.feature,
-                                weight: Some(
-                                    feature.weight.expect("Error: feature without weight") / size,
-                                ),
-                            })
+                            .map(|(feature, weight)| (feature, weight / size))
                     })
                     .collect()
             }
@@ -608,7 +607,6 @@ impl CollectVisitor {
             // of unsolved weights, then it's a loop. Enter recovery mode: weight the
             // deepest node and continue
             if seen.contains(&(cur_index, self.weights_to_resolve.len())) {
-
                 // because of how the queue is formed, the node that first detects a loop
                 // is also the "deepest" one, the one that has all adjacents fully resolved
                 self.update_weight(cur_index, RECOVERY_WEIGHT);
@@ -691,22 +689,21 @@ impl CollectVisitor {
                     .iter()
                     // cartesian product
                     .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
-                    .for_each(|(child_feat, parent_feat)| {
+                    .for_each(|((child_feat, child_weight), (parent_feat, ..))| {
+                        // .for_each(|(child_feat, parent_feat)| {
                         self.features_graph.graph.add_edge(
                             *self
                                 .features_graph
                                 .nodes
-                                .get(&child_feat.feature)
+                                .get(child_feat)
                                 .expect("Error: cannot find feature node creating features graph"),
                             *self
                                 .features_graph
                                 .nodes
-                                .get(&parent_feat.feature)
+                                .get(parent_feat)
                                 .expect("Error: cannot find feature node creating features graph"),
                             Edge {
-                                weight: child_feat.weight.expect(
-                                    "Error: feature without weight creating features graph",
-                                ),
+                                weight: *child_weight,
                             },
                         );
                     });

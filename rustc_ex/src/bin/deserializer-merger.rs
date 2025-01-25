@@ -44,7 +44,9 @@ impl SuperCollector {
             "Error: global AST node has an index != 0"
         );
 
-        let index = self.features_graph.create_node(FeatureKey(feature), None);
+        let index =
+            self.features_graph
+                .create_node(FeatureKey(feature), None, ComplexFeature::None); // TODO
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
@@ -139,9 +141,11 @@ impl SuperCollector {
                 continue;
             }
 
-            let new_node_index = self
-                .features_graph
-                .create_node(node.feature.clone(), node.weight);
+            let new_node_index = self.features_graph.create_node(
+                node.feature.clone(),
+                node.weight,
+                ComplexFeature::None, // TODO
+            );
             index_map.insert(node.feature.clone(), new_node_index);
         }
 

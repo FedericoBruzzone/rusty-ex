@@ -121,11 +121,15 @@ pub type FeatureIndex = NodeIndex;
 pub struct FeatureKey(pub Feature);
 
 /// Feature node, with the feature and the weight (if calculated).
-/// The weight is calculated "horizontally", considering only the "siblings"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureNode {
     pub feature: FeatureKey,
+    /// The weight is calculated "horizontally", considering only the "siblings" (this weight is the
+    /// same weight that is on the outgoing edge to the parent node, it is duplicated for easier access).
     pub weight: Option<f64>,
+    /// The complex feature describes if the feature has some siblings, it is NOT relative to children.
+    /// Used to satifly `all` conditions climbing the tree.
+    pub complex_feature: ComplexFeature,
 }
 
 /// Features graph: the actual graph and a map to get the index of a feature node from its key
@@ -299,7 +303,12 @@ impl FeaturesGraph {
 
     /// Create a feature node in the features graph and add it to the features nodes hashmap.
     /// Return the index of the created node
-    pub fn create_node(&mut self, feature: FeatureKey, weight: Option<f64>) -> FeatureIndex {
+    pub fn create_node(
+        &mut self,
+        feature: FeatureKey,
+        weight: Option<f64>,
+        complex_feature: ComplexFeature,
+    ) -> FeatureIndex {
         if let Some(index) = self.nodes.get(&feature) {
             return *index;
         }
@@ -307,6 +316,7 @@ impl FeaturesGraph {
         let index = self.graph.add_node(FeatureNode {
             feature: feature.clone(),
             weight,
+            complex_feature,
         });
         self.nodes.insert(feature, index);
 
