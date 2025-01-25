@@ -233,6 +233,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.resolve_weights_in_wait();
                 collector.ast_graph.graph.reverse(); // restore graph
 
+                collector.add_dummy_centrality_node_edges();
+
                 self.process_cli_args(collector, krate);
             });
 
@@ -247,6 +249,11 @@ pub const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
 pub const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
 /// Index of the global ASTNode/Feature/Artifact in the graphs
 pub const GLOBAL_NODE_INDEX: usize = 0;
+
+/// Constant for the global dummy node name
+pub const GLOBAL_DUMMY_NAME: &str = "__DUMMY__";
+/// Index of the dummy feature node in the features graph
+pub const GLOBAL_DUMMY_INDEX: usize = 1;
 
 /// Weight assigned to AST nodes that cannot be resolved
 pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: stabilire bene questo peso
@@ -316,6 +323,28 @@ impl CollectVisitor {
             index,
             ArtifactIndex::new(GLOBAL_NODE_INDEX),
             "Error: global artifact node has an index != 0"
+        );
+
+        // create dummy node in features graph for centrality
+        let dummy_feature = Feature {
+            name: GLOBAL_DUMMY_NAME.to_string(),
+            not: false,
+        };
+        self.features_graph.create_node(
+            FeatureKey(dummy_feature.clone()),
+            Some(1.0),
+            ComplexFeature::Feature(dummy_feature),
+        );
+        assert_eq!(
+            index,
+            FeatureIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global AST node has an index != 0"
+        );
+
+        self.features_graph.graph.add_edge(
+            FeatureIndex::new(GLOBAL_NODE_INDEX),
+            FeatureIndex::new(GLOBAL_DUMMY_INDEX),
+            Edge { weight: 1.0 },
         );
     }
 
@@ -846,6 +875,27 @@ impl CollectVisitor {
             "{}",
             serde_json::to_string(&graphs).expect("Error: cannot serialize data")
         );
+    }
+
+    /// Add a dummy node in features graph, connected from the root (global feature)
+    /// to all nodes. This makes the graph strongly connected, so we can calculate
+    /// centrality measures, without affecting much the results because all nodes have
+    /// just one more incoming edge
+    fn add_dummy_centrality_node_edges(&mut self) {
+        self.features_graph
+            .graph
+            .node_indices()
+            .filter(|n| {
+                *n != FeatureIndex::new(GLOBAL_DUMMY_INDEX)
+                    && *n != FeatureIndex::new(GLOBAL_NODE_INDEX)
+            })
+            .for_each(|n| {
+                self.features_graph.graph.add_edge(
+                    FeatureIndex::new(GLOBAL_DUMMY_INDEX),
+                    n,
+                    Edge { weight: 1.0 },
+                );
+            });
     }
 }
 

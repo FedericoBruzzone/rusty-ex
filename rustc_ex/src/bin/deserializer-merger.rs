@@ -2,7 +2,9 @@
 
 use clap::Parser;
 use rustc_ex::types::*;
-use rustc_ex::{GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX};
+use rustc_ex::{
+    GLOBAL_DUMMY_INDEX, GLOBAL_DUMMY_NAME, GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX,
+};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use std::fs::File;
@@ -44,9 +46,11 @@ impl SuperCollector {
             "Error: global AST node has an index != 0"
         );
 
-        let index =
-            self.features_graph
-                .create_node(FeatureKey(feature.clone()), Some(1.0), ComplexFeature::Feature(feature));
+        let index = self.features_graph.create_node(
+            FeatureKey(feature.clone()),
+            Some(1.0),
+            ComplexFeature::Feature(feature),
+        );
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
@@ -66,6 +70,28 @@ impl SuperCollector {
             index,
             ArtifactIndex::new(GLOBAL_NODE_INDEX),
             "Error: global artifact node has an index != 0"
+        );
+
+        // create dummy node in features graph for centrality
+        let dummy_feature = Feature {
+            name: GLOBAL_DUMMY_NAME.to_string(),
+            not: false,
+        };
+        self.features_graph.create_node(
+            FeatureKey(dummy_feature.clone()),
+            Some(1.0),
+            ComplexFeature::Feature(dummy_feature),
+        );
+        assert_eq!(
+            index,
+            FeatureIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global AST node has an index != 0"
+        );
+
+        self.features_graph.graph.add_edge(
+            FeatureIndex::new(GLOBAL_NODE_INDEX),
+            FeatureIndex::new(GLOBAL_DUMMY_INDEX),
+            Edge { weight: 1.0 },
         );
     }
 
@@ -129,24 +155,33 @@ impl SuperCollector {
 
     /// Import a features graph into self SuperCollector
     fn import_features_graph(&mut self, features_graph: DiGraph<FeatureNode, Edge>) {
-        let mut index_map: HashMap<FeatureKey, NodeIndex> = HashMap::new();
-
         // create nodes (only features not already created) in new graph
-        for node_index in features_graph.node_indices() {
-            let node = features_graph
-                .node_weight(node_index)
-                .expect("Error: node not found importing features graph");
+        let nodes_to_add: Vec<_> = features_graph
+            .node_indices()
+            .map(|node_index| {
+                features_graph
+                    .node_weight(node_index)
+                    .expect("Error: node not found importing features graph")
+            })
+            .filter(|node| {
+                node.feature.0.name != GLOBAL_DUMMY_NAME
+                    && node.feature.0.name != GLOBAL_FEATURE_NAME
+            })
+            .filter(|node| !self.features_graph.nodes.contains_key(&node.feature))
+            .collect();
 
-            if index_map.contains_key(&node.feature) {
-                continue;
-            }
-
+        for node in nodes_to_add {
             let new_node_index = self.features_graph.create_node(
                 node.feature.clone(),
                 node.weight,
                 node.complex_feature.clone(),
             );
-            index_map.insert(node.feature.clone(), new_node_index);
+
+            self.features_graph.graph.add_edge(
+                NodeIndex::new(1),
+                new_node_index,
+                Edge { weight: 1.0 },
+            );
         }
 
         // create edges in new graph
@@ -162,16 +197,26 @@ impl SuperCollector {
                 .node_weight(target_index)
                 .expect("Error: target node not found in features index map");
 
+            if source.feature.0.name == GLOBAL_DUMMY_NAME
+                || target.feature.0.name == GLOBAL_DUMMY_NAME
+            {
+                continue;
+            }
+
             let edge_weight = features_graph
                 .edge_weight(old_edge_index)
                 .expect("Error: edge weight not found importing features graph")
                 .clone();
 
             self.features_graph.graph.add_edge(
-                *index_map
+                *self
+                    .features_graph
+                    .nodes
                     .get(&source.feature)
                     .expect("Error: feature not found importing features graph"),
-                *index_map
+                *self
+                    .features_graph
+                    .nodes
                     .get(&target.feature)
                     .expect("Error: feature not found importing features graph"),
                 edge_weight,
