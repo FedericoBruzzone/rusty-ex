@@ -13,11 +13,11 @@ fn test_declaration() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: declaration\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: declaration\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -28,13 +28,13 @@ fn test_constant() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: constant-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: constant-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: constant-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: constant-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -45,11 +45,11 @@ fn test_assignment() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: assignment\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: assignment\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -60,13 +60,13 @@ fn test_struct_declaration() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: struct-declaration-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: struct-declaration-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: struct-declaration-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: struct-declaration-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -78,17 +78,17 @@ fn test_struct_declaration_fields() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: struct-1-fields-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: struct-1-fields-2\"]"));
-    assert!(output.contains("3 [ label=\"i3: main\"]"));
-    assert!(output.contains("4 [ label=\"i4: struct-2-fields-1\"]"));
-    assert!(output.contains("5 [ label=\"i5: struct-2-fields-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: struct-1-fields-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: struct-1-fields-2\"]"));
+    assert!(output.contains("4 [ label=\"i4: main\"]"));
+    assert!(output.contains("5 [ label=\"i5: struct-2-fields-1\"]"));
+    assert!(output.contains("6 [ label=\"i6: struct-2-fields-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
-    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 4 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -99,13 +99,13 @@ fn test_enum_declaration() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: enum-declaration-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: enum-declaration-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: enum-declaration-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: enum-declaration-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -116,17 +116,17 @@ fn test_enum_declaration_fields() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: enum-1-fields-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: enum-1-fields-2\"]"));
-    assert!(output.contains("3 [ label=\"i3: main\"]"));
-    assert!(output.contains("4 [ label=\"i4: enum-2-fields-1\"]"));
-    assert!(output.contains("5 [ label=\"i5: enum-2-fields-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: enum-1-fields-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: enum-1-fields-2\"]"));
+    assert!(output.contains("4 [ label=\"i4: main\"]"));
+    assert!(output.contains("5 [ label=\"i5: enum-2-fields-1\"]"));
+    assert!(output.contains("6 [ label=\"i6: enum-2-fields-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
-    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 4 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -137,13 +137,13 @@ fn test_function_definition() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: function-definition-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: function-definition-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: function-definition-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: function-definition-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -154,17 +154,17 @@ fn test_function_call() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: function-call-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: function-call-2\"]"));
-    assert!(output.contains("4 [ label=\"i4: function-call-3\"]"));
-    assert!(output.contains("5 [ label=\"i5: function-call-4\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: function-call-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: function-call-2\"]"));
+    assert!(output.contains("5 [ label=\"i5: function-call-3\"]"));
+    assert!(output.contains("6 [ label=\"i6: function-call-4\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("5 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -175,13 +175,13 @@ fn test_trait() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: trait-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: trait-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: trait-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: trait-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -192,13 +192,13 @@ fn test_implementation() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: implementation-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: implementation-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: implementation-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: implementation-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -209,13 +209,13 @@ fn test_method_definition() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: method-definition\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: static-method-definition\"]"));
+    assert!(output.contains("2 [ label=\"i2: method-definition\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: static-method-definition\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -226,17 +226,17 @@ fn test_method_call() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: method-call-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: method-call-2\"]"));
-    assert!(output.contains("4 [ label=\"i4: method-call-3\"]"));
-    assert!(output.contains("5 [ label=\"i5: method-call-4\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: method-call-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: method-call-2\"]"));
+    assert!(output.contains("5 [ label=\"i5: method-call-3\"]"));
+    assert!(output.contains("6 [ label=\"i6: method-call-4\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("5 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -247,32 +247,31 @@ fn test_block() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: block-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: block-2\"]"));
-    assert!(output.contains("4 [ label=\"i4: block-3\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: block-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: block-2\"]"));
+    assert!(output.contains("5 [ label=\"i5: block-3\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
 
     Ok(())
 }
-
 #[test]
 fn test_closure() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/closure.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: closure-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: closure-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: closure-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: closure-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -283,11 +282,11 @@ fn test_extern_crate() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: extern-crate\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("2 [ label=\"i2: extern-crate\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -298,11 +297,11 @@ fn test_module() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: module\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("2 [ label=\"i2: module\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -313,11 +312,11 @@ fn test_use() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: use\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("2 [ label=\"i2: use\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -328,13 +327,13 @@ fn test_if() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: if-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: if-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: if-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: if-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -345,17 +344,17 @@ fn test_loop() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: for\"]"));
-    assert!(output.contains("3 [ label=\"i3: while\"]"));
-    assert!(output.contains("4 [ label=\"i4: loop-1\"]"));
-    assert!(output.contains("5 [ label=\"i5: loop-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: for\"]"));
+    assert!(output.contains("4 [ label=\"i4: while\"]"));
+    assert!(output.contains("5 [ label=\"i5: loop-1\"]"));
+    assert!(output.contains("6 [ label=\"i6: loop-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
     assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
-    assert!(output.contains("5 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -366,13 +365,13 @@ fn test_match() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: match-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: match-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: match-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: match-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -383,13 +382,13 @@ fn test_match_branch() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: match-branch-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: match-branch-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: match-branch-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: match-branch-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -400,15 +399,15 @@ fn test_return() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: return-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: return-2\"]"));
-    assert!(output.contains("4 [ label=\"i4: return-3\"]"));
+    assert!(output.contains("2 [ label=\"i2: return-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: return-2\"]"));
+    assert!(output.contains("5 [ label=\"i5: return-3\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -419,13 +418,13 @@ fn test_type_alias() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: type-alias-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: type-alias-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: type-alias-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: type-alias-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -436,13 +435,13 @@ fn test_union() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: union-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: union-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: union-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: union-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -453,13 +452,13 @@ fn test_macro_call() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: main\"]"));
-    assert!(output.contains("2 [ label=\"i2: macro-call-1\"]"));
-    assert!(output.contains("3 [ label=\"i3: macro-call-2\"]"));
+    assert!(output.contains("2 [ label=\"i2: main\"]"));
+    assert!(output.contains("3 [ label=\"i3: macro-call-1\"]"));
+    assert!(output.contains("4 [ label=\"i4: macro-call-2\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -470,15 +469,15 @@ fn test_macro_definition() -> Result<(), String> {
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-features-graph"])?;
 
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: macro-definition-1\"]"));
-    assert!(output.contains("2 [ label=\"i2: main\"]"));
-    assert!(output.contains("3 [ label=\"i3: macro-definition-2\"]"));
-    assert!(output.contains("4 [ label=\"i4: macro-definition-3\"]"));
+    assert!(output.contains("2 [ label=\"i2: macro-definition-1\"]"));
+    assert!(output.contains("3 [ label=\"i3: main\"]"));
+    assert!(output.contains("4 [ label=\"i4: macro-definition-2\"]"));
+    assert!(output.contains("5 [ label=\"i5: macro-definition-3\"]"));
 
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
+    assert!(output.contains("5 -> 3 [ label=\"1.00\"]"));
 
     Ok(())
 }

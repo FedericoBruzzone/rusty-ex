@@ -35,20 +35,20 @@ fn test_simple_feature_no_weigths_features_graph() -> Result<(), String> {
 
     // nodes
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: aa\"]"));
-    assert!(output.contains("2 [ label=\"i2: !bb\"]"));
-    assert!(output.contains("3 [ label=\"i3: cc\"]"));
-    assert!(output.contains("4 [ label=\"i4: dd\"]"));
-    assert!(output.contains("5 [ label=\"i5: ee\"]"));
-    assert!(output.contains("6 [ label=\"i6: !ff\"]"));
+    assert!(output.contains("2 [ label=\"i2: aa\"]"));
+    assert!(output.contains("3 [ label=\"i3: !bb\"]"));
+    assert!(output.contains("4 [ label=\"i4: cc\"]"));
+    assert!(output.contains("5 [ label=\"i5: dd\"]"));
+    assert!(output.contains("6 [ label=\"i6: ee\"]"));
+    assert!(output.contains("7 [ label=\"i7: !ff\"]"));
 
     // edges
+    assert!(output.contains("6 -> 5 [ label=\"1.00\"]"));
     assert!(output.contains("5 -> 4 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 3 [ label=\"1.00\"]"));
-    assert!(output.contains("6 -> 4 [ label=\"1.00\"]"));
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("7 -> 5 [ label=\"1.00\"]"));
     assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("3 -> 0 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 0 [ label=\"1.00\"]"));
 
     Ok(())
 }
@@ -63,21 +63,21 @@ fn test_simple_feature_weigths_features_graph() -> Result<(), String> {
 
     // nodes
     assert!(output.contains("0 [ label=\"i0: __GLOBAL__\"]"));
-    assert!(output.contains("1 [ label=\"i1: aa\"]"));
-    assert!(output.contains("2 [ label=\"i2: bb\"]"));
-    assert!(output.contains("3 [ label=\"i3: cc\"]"));
-    assert!(output.contains("4 [ label=\"i4: ee\"]"));
-    assert!(output.contains("5 [ label=\"i5: !ff\"]"));
-    assert!(output.contains("6 [ label=\"i6: dd\"]"));
+    assert!(output.contains("2 [ label=\"i2: aa\"]"));
+    assert!(output.contains("3 [ label=\"i3: bb\"]"));
+    assert!(output.contains("4 [ label=\"i4: cc\"]"));
+    assert!(output.contains("5 [ label=\"i5: ee\"]"));
+    assert!(output.contains("6 [ label=\"i6: !ff\"]"));
+    assert!(output.contains("7 [ label=\"i7: dd\"]"));
 
     // edges
-    assert!(output.contains("2 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("3 -> 1 [ label=\"1.00\"]"));
-    assert!(output.contains("1 -> 0 [ label=\"1.00\"]"));
-    assert!(output.contains("4 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("3 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("4 -> 2 [ label=\"1.00\"]"));
+    assert!(output.contains("2 -> 0 [ label=\"1.00\"]"));
     assert!(output.contains("5 -> 0 [ label=\"0.50\"]"));
-    assert!(output.contains("6 -> 4 [ label=\"1.00\"]"));
-    assert!(output.contains("6 -> 5 [ label=\"1.00\"]"));
+    assert!(output.contains("6 -> 0 [ label=\"0.50\"]"));
+    assert!(output.contains("7 -> 5 [ label=\"1.00\"]"));
+    assert!(output.contains("7 -> 6 [ label=\"1.00\"]"));
 
     Ok(())
 }
