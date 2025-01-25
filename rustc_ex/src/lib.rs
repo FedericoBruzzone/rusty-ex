@@ -297,9 +297,9 @@ impl CollectVisitor {
             "Error: global AST node has an index != 0"
         );
         let index = self.features_graph.create_node(
-            FeatureKey(feature),
-            None,
-            ComplexFeature::None, // TODO
+            FeatureKey(feature.clone()),
+            Some(1.0),
+            ComplexFeature::Feature(feature),
         );
         assert_eq!(
             index,
@@ -665,22 +665,24 @@ impl CollectVisitor {
             .iter()
             // ignore global node
             .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
-            .for_each(|(.., child_index)| {
-                let child_node = &self
+            .for_each(|(.., child_ast_index)| {
+                let child_ast_node = &self
                     .ast_graph
                     .graph
-                    .node_weight(*child_index)
+                    .node_weight(*child_ast_index)
                     .expect("Error: cannot find child node creating features graph");
-                let child_features = CollectVisitor::rec_weight_feature(&child_node.features);
+                let child_features = CollectVisitor::rec_weight_feature(&child_ast_node.features);
 
-                let parent_index =
-                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph.graph, *child_index)
-                        .expect("Error: cannot find parent creating features graph");
+                let parent_ast_index = CollectVisitor::rec_get_annotated_parent(
+                    &self.ast_graph.graph,
+                    *child_ast_index,
+                )
+                .expect("Error: cannot find parent creating features graph");
                 let parent_features = CollectVisitor::rec_weight_feature(
                     &self
                         .ast_graph
                         .graph
-                        .node_weight(parent_index)
+                        .node_weight(parent_ast_index)
                         .expect("Error: cannot find parent node creating features graph")
                         .features,
                 );
@@ -690,13 +692,23 @@ impl CollectVisitor {
                     // cartesian product
                     .flat_map(|x| parent_features.iter().map(move |y| (x, y)))
                     .for_each(|((child_feat, child_weight), (parent_feat, ..))| {
-                        // .for_each(|(child_feat, parent_feat)| {
+                        let child_index = self
+                            .features_graph
+                            .nodes
+                            .get(child_feat)
+                            .expect("Error: cannot find feature node creating features graph");
+
+                        let child_node = self
+                            .features_graph
+                            .graph
+                            .node_weight_mut(*child_index)
+                            .expect("Error: cannot find feature node creating features graph");
+
+                        child_node.weight = Some(*child_weight);
+                        child_node.complex_feature = child_ast_node.features.clone();
+
                         self.features_graph.graph.add_edge(
-                            *self
-                                .features_graph
-                                .nodes
-                                .get(child_feat)
-                                .expect("Error: cannot find feature node creating features graph"),
+                            *child_index,
                             *self
                                 .features_graph
                                 .nodes

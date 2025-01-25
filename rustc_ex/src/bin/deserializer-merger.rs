@@ -46,7 +46,7 @@ impl SuperCollector {
 
         let index =
             self.features_graph
-                .create_node(FeatureKey(feature), None, ComplexFeature::None); // TODO
+                .create_node(FeatureKey(feature.clone()), Some(1.0), ComplexFeature::Feature(feature));
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
@@ -144,7 +144,7 @@ impl SuperCollector {
             let new_node_index = self.features_graph.create_node(
                 node.feature.clone(),
                 node.weight,
-                ComplexFeature::None, // TODO
+                node.complex_feature.clone(),
             );
             index_map.insert(node.feature.clone(), new_node_index);
         }
