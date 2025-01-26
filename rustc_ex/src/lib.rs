@@ -256,7 +256,7 @@ pub const GLOBAL_DUMMY_NAME: &str = "__DUMMY__";
 pub const GLOBAL_DUMMY_INDEX: usize = 1;
 
 /// Weight assigned to AST nodes that cannot be resolved
-pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: stabilire bene questo peso
+pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: this should be the mean of all external function weights. This, of course, needs to be calculated a priori and passed as an argument. For now, we use `7.0` because of its intrinsic beauty.
 
 /// AST visitor to collect data to build the graphs
 pub struct CollectVisitor {
@@ -1043,11 +1043,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Yield(..)
             | ExprKind::Yeet(..)
             | ExprKind::Become(..)
+            | ExprKind::Path(..)
             | ExprKind::Err(..) => NodeWeightKind::Leaf(kind_string),
 
             // no weight
             ExprKind::Underscore
-            | ExprKind::Path(..)
             | ExprKind::OffsetOf(..)
             | ExprKind::IncludedBytes(..)
             | ExprKind::FormatArgs(..)
@@ -1153,7 +1153,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // blocks
-            StmtKind::Item(..) => NodeWeightKind::Block(kind_string),
+            StmtKind::Item(..) | StmtKind::Semi(..) => NodeWeightKind::Block(kind_string),
 
             // calls
             StmtKind::MacCall(mac_call) => {
@@ -1171,7 +1171,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             }
 
             // leafs
-            StmtKind::Let(..) | StmtKind::Expr(..) | StmtKind::Semi(..) => {
+            StmtKind::Let(..) | StmtKind::Expr(..) => {
                 NodeWeightKind::Leaf(kind_string)
             }
 
@@ -1213,7 +1213,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = None;
         let node_id = cur_arm.id;
         let kind_string = "Arm".to_string();
-        let kind = NodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Block(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
