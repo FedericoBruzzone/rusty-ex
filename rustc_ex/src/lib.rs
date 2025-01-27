@@ -306,7 +306,7 @@ impl CollectVisitor {
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(feature)],
+            vec![ComplexFeature::Feature(feature.clone())],
         );
         assert_eq!(
             index,
@@ -316,6 +316,7 @@ impl CollectVisitor {
         let index = self.artifacts_graph.create_node(
             artifact,
             ident,
+            ComplexFeature::Feature(feature.clone()),
             self.rec_features_to_indexes(&features),
             NodeWeight::ToBeCalculated,
         );
@@ -527,6 +528,7 @@ impl CollectVisitor {
             self.artifacts_graph.create_node(
                 SimpleArtifactKey(node_id),
                 ident,
+                features.clone(),
                 features_indexes,
                 NodeWeight::ToBeCalculated,
             );

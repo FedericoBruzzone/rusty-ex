@@ -169,7 +169,8 @@ impl ArtifactKey for SuperArtifactKey {}
 pub struct ArtifactNode<Key: ArtifactKey> {
     pub artifact: Key,
     pub ident: Option<String>,
-    pub features: Vec<FeatureIndex>, // index in features graph
+    pub complex_feature: ComplexFeature, // how the features are combined
+    pub features_indexes: Vec<FeatureIndex>, // index in features graph
     pub weight: NodeWeight,
 }
 
@@ -389,7 +390,8 @@ impl<Key: ArtifactKey> ArtifactsGraph<Key> {
         &mut self,
         artifact: Key,
         ident: Option<String>,
-        features: Vec<FeatureIndex>,
+        complex_feature: ComplexFeature,
+        features_indexes: Vec<FeatureIndex>,
         weight: NodeWeight,
     ) -> ArtifactIndex {
         if let Some(index) = self.nodes.get(&artifact) {
@@ -399,7 +401,8 @@ impl<Key: ArtifactKey> ArtifactsGraph<Key> {
         let index = self.graph.add_node(ArtifactNode {
             artifact: artifact.clone(),
             ident,
-            features,
+            complex_feature,
+            features_indexes,
             weight,
         });
         self.nodes.insert(artifact, index);
@@ -414,16 +417,11 @@ impl<Key: ArtifactKey> ArtifactsGraph<Key> {
             let index = node.0.index();
             let artifact_node = node.1;
             format!(
-                "label=\"i{} node{} '{}' #[{}] {}\"",
+                "label=\"i{} node{} '{}' [{}] {}\"",
                 index,
                 artifact_node.artifact,
                 artifact_node.ident.clone().unwrap_or("-".to_string()),
-                artifact_node
-                    .features
-                    .iter()
-                    .map(|f| f.index().to_string())
-                    .collect::<Vec<String>>()
-                    .join(", "),
+                artifact_node.complex_feature,
                 artifact_node.weight,
             )
         };

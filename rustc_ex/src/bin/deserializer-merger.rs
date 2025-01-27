@@ -49,7 +49,7 @@ impl SuperCollector {
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(feature)],
+            vec![ComplexFeature::Feature(feature.clone())],
         );
         assert_eq!(
             index,
@@ -63,6 +63,7 @@ impl SuperCollector {
                 krate: GLOBAL_FEATURE_NAME.to_string(),
             },
             ident,
+            ComplexFeature::Feature(feature.clone()),
             vec![0.into()],
             NodeWeight::ToBeCalculated,
         );
@@ -254,7 +255,8 @@ impl SuperCollector {
                     krate: crate_name.clone(),
                 },
                 old_node.ident.clone(),
-                old_node.features.clone(),
+                old_node.complex_feature.clone(),
+                old_node.features_indexes.clone(),
                 old_node.weight.clone(),
             );
             index_map.insert(old_node_index, new_node_index);
