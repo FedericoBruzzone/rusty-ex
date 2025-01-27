@@ -49,7 +49,7 @@ impl SuperCollector {
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            ComplexFeature::Feature(feature),
+            vec![ComplexFeature::Feature(feature)],
         );
         assert_eq!(
             index,
@@ -80,7 +80,7 @@ impl SuperCollector {
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
-            ComplexFeature::Feature(dummy_feature),
+            vec![ComplexFeature::Feature(dummy_feature)],
         );
         assert_eq!(
             index,
@@ -155,6 +155,9 @@ impl SuperCollector {
 
     /// Import a features graph into self SuperCollector
     fn import_features_graph(&mut self, features_graph: DiGraph<FeatureNode, Edge>) {
+        // FIXME: stiamo perdendo informazione sulla composizione delle feature
+        // viene perso il compelx feature delle feature che già esistono
+
         // create nodes (only features not already created) in new graph
         let nodes_to_add: Vec<_> = features_graph
             .node_indices()

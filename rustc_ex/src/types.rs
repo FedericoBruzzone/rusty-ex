@@ -127,9 +127,9 @@ pub struct FeatureNode {
     /// The weight is calculated "horizontally", considering only the "siblings" (this weight is the
     /// same weight that is on the outgoing edge to the parent node, it is duplicated for easier access).
     pub weight: Option<f64>,
-    /// The complex feature describes if the feature has some siblings, it is NOT relative to children.
-    /// Used to satifly `all` conditions climbing the tree.
-    pub complex_feature: ComplexFeature,
+    /// If this feature has some siblings, they must be satisfied (all), so we must track
+    /// the nature of each single feature.
+    pub complex_feature: Vec<ComplexFeature>,
 }
 
 /// Features graph: the actual graph and a map to get the index of a feature node from its key
@@ -307,7 +307,7 @@ impl FeaturesGraph {
         &mut self,
         feature: FeatureKey,
         weight: Option<f64>,
-        complex_feature: ComplexFeature,
+        complex_feature: Vec<ComplexFeature>,
     ) -> FeatureIndex {
         if let Some(index) = self.nodes.get(&feature) {
             return *index;
@@ -329,8 +329,30 @@ impl FeaturesGraph {
             let index = node.0.index();
             let feature = node.1;
             match feature.feature.0.not {
-                true => format!("label=\"i{}: !{}\"", index, feature.feature.0.name),
-                false => format!("label=\"i{}: {}\"", index, feature.feature.0.name),
+                true => format!(
+                    "label=\"i{}: !{} [{}]\"",
+                    index,
+                    feature.feature.0.name,
+                    feature
+                        .complex_feature
+                        .iter()
+                        .map(|f| f.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                false => format!(
+                    "label=\"i{}: {} [{}]\"",
+                    index,
+                    feature.feature.0.name,
+                    feature
+                        .complex_feature
+                        .iter()
+                        .map(|f| f.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+                // true => format!("label=\"i{}: !{}\"", index, feature.feature.0.name),
+                // false => format!("label=\"i{}: {}\"", index, feature.feature.0.name),
             }
         };
 

@@ -306,7 +306,7 @@ impl CollectVisitor {
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            ComplexFeature::Feature(feature),
+            vec![ComplexFeature::Feature(feature)],
         );
         assert_eq!(
             index,
@@ -333,7 +333,7 @@ impl CollectVisitor {
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
-            ComplexFeature::Feature(dummy_feature),
+            vec![ComplexFeature::Feature(dummy_feature)],
         );
         assert_eq!(
             index,
@@ -367,8 +367,8 @@ impl CollectVisitor {
                     let feature = Feature { name, not };
                     self.features_graph.create_node(
                         FeatureKey(feature.clone()),
-                        None,                 // to be valued later
-                        ComplexFeature::None, // to be valued later
+                        None,   // to be valued later
+                        vec![], // to be valued later
                     );
 
                     features.push(ComplexFeature::Feature(feature));
@@ -733,8 +733,11 @@ impl CollectVisitor {
                             .node_weight_mut(*child_index)
                             .expect("Error: cannot find feature node creating features graph");
 
+                        // TODO: vedere se rimuovere weight o accumularlo in qualche modo
                         child_node.weight = Some(*child_weight);
-                        child_node.complex_feature = child_ast_node.features.clone();
+                        child_node
+                            .complex_feature
+                            .push(child_ast_node.features.clone());
 
                         self.features_graph.graph.add_edge(
                             *child_index,
@@ -1171,9 +1174,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             }
 
             // leafs
-            StmtKind::Let(..) | StmtKind::Expr(..) => {
-                NodeWeightKind::Leaf(kind_string)
-            }
+            StmtKind::Let(..) | StmtKind::Expr(..) => NodeWeightKind::Leaf(kind_string),
 
             // no weight
             StmtKind::Empty => NodeWeightKind::NoWeight(kind_string),
