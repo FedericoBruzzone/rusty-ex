@@ -2,6 +2,7 @@
 
 pub mod instrument;
 pub mod types;
+pub mod configs;
 
 extern crate rustc_ast;
 extern crate rustc_driver;

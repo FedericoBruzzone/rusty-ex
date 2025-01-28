@@ -1,0 +1,62 @@
+#![feature(rustc_private)]
+
+mod utils;
+
+use pretty_assertions::assert_eq;
+use rustc_ex::configs::{ConfigGenerator, ConfigGeneratorUtils};
+
+#[test]
+fn test_zero_with_zero_true() -> Result<(), String> {
+    let cnf = vec![vec![(0, true)]];
+    let mut generator = ConfigGenerator::default();
+    generator.add_cnf(cnf);
+    let var = (0, true); // The literal that must be true
+    let configs = generator.all_configs_given_a_var(var);
+    let configs_str = ConfigGeneratorUtils::pretty_print(&configs);
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs_str, "(0)\n");
+
+    Ok(())
+}
+
+#[test]
+fn test_zero_with_zero_false() -> Result<(), String> {
+    let cnf = vec![vec![(0, true)]];
+    let mut generator = ConfigGenerator::default();
+    generator.add_cnf(cnf);
+    let var = (0, false); // The literal that must be true
+    let configs = generator.all_configs_given_a_var(var);
+    let configs_str = ConfigGeneratorUtils::pretty_print(&configs);
+
+    assert_eq!(configs.len(), 0);
+    assert_eq!(configs_str, "");
+
+    Ok(())
+}
+
+#[test]
+fn complex_1() -> Result<(), String> {
+    let cnf = vec![
+        vec![(0, true), (1, false), (2, true)],
+        vec![(0, false), (1, true)],
+        vec![(2, true), (3, false)],
+    ];
+    let mut generator = ConfigGenerator::default();
+    generator.add_cnf(cnf);
+    let var = (1, true); // The literal that must be true
+    let configs = generator.all_configs_given_a_var(var);
+    let configs_str = ConfigGeneratorUtils::pretty_print(&configs);
+
+    assert_eq!(configs.len(), 5);
+    assert_eq!(
+        configs_str,
+        "(0 & 1 & 2 & 3)\n\
+         (0 & 1 & 2 & !3)\n\
+         (!0 & 1 & 2 & !3)\n\
+         (!0 & 1 & 2 & 3)\n\
+         (0 & 1 & !2 & !3)\n"
+    );
+
+    Ok(())
+}
