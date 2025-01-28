@@ -32,6 +32,8 @@ cargo_metadata = "0.14"
 serde_json = "1"
 rustc_tools_util = "0.1"
 linked_hash_set = "0.1.4"
+rustsat-minisat = "0.4.3"
+rustsat = "0.6.3"
 # rustc_plugin = "0.10.0-nightly-2024-05-20"
 # rustc-instrument = { path = "../rustc-instrument/rustc-instrument" }
 
