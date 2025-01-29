@@ -103,7 +103,7 @@ where
 }
 
 impl ConfigGeneratorUtils {
-    pub fn pretty_print(configs: &Vec<Vec<(u32, bool)>>) -> String {
+    pub fn to_string(configs: &Vec<Vec<(u32, bool)>>) -> String {
         let mut s = String::new();
         for clause in configs {
             let clause_str: Vec<String> = clause
