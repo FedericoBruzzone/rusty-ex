@@ -191,9 +191,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         }));
     }
 
-    /// Called after expansion. Return value instructs the compiler whether to
-    /// continue the compilation afterwards (defaults to `Compilation::Continue`)
-    fn after_expansion<'tcx>(
+    fn after_crate_root_parsing<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
         queries: &'tcx rustc_interface::Queries<'tcx>,
@@ -202,9 +200,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .global_ctxt()
             .expect("Error: global context not found")
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
-                // extract AST
-                let resolver_and_krate = tcx.resolver_for_lowering().borrow();
-                let krate = &*resolver_and_krate.1;
+                let krate = &tcx.crate_for_resolver(()).steal().0;
+                println!("{:#?}", krate);
 
                 // visit AST
                 let collector = &mut CollectVisitor {
@@ -239,8 +236,59 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 self.process_cli_args(collector, krate);
             });
 
-        rustc_driver::Compilation::Stop
+        return rustc_driver::Compilation::Continue;
     }
+
+    ///// Called after expansion. Return value instructs the compiler whether to
+    ///// continue the compilation afterwards (defaults to `Compilation::Continue`)
+    //fn after_expansion<'tcx>(
+    //    &mut self,
+    //    _compiler: &rustc_interface::interface::Compiler,
+    //    queries: &'tcx rustc_interface::Queries<'tcx>,
+    //) -> rustc_driver::Compilation {
+    //    queries
+    //        .global_ctxt()
+    //        .expect("Error: global context not found")
+    //        .enter(|tcx: rustc_middle::ty::TyCtxt| {
+    //            // extract AST
+    //            let resolver_and_krate = tcx.resolver_for_lowering().borrow();
+    //            let krate = &*resolver_and_krate.1;
+    //
+    //            // visit AST
+    //            let collector = &mut CollectVisitor {
+    //                stack: Vec::new(),
+    //
+    //                ast_graph: AstGraph::new(),
+    //                features_graph: FeaturesGraph::new(),
+    //                artifacts_graph: ArtifactsGraph::new(),
+    //
+    //                idents_weights: HashMap::new(),
+    //                weights_to_resolve: LinkedHashSet::new(),
+    //            };
+    //
+    //            // initialize global scope (global feature and artifact)
+    //            collector.init_global_scope();
+    //
+    //            // visit AST and build AST graph
+    //            collector.visit_crate(krate);
+    //
+    //            // build features and artifacts graphs visiting AST graph
+    //            collector.build_feat_graph();
+    //            collector.build_arti_graph();
+    //
+    //            // calculate weights of AST nodes
+    //            collector.ast_graph.graph.reverse(); // reverse graph
+    //            collector.rec_weight_ast_graph(AstIndex::new(GLOBAL_NODE_INDEX));
+    //            collector.resolve_weights_in_wait();
+    //            collector.ast_graph.graph.reverse(); // restore graph
+    //
+    //            collector.add_dummy_centrality_node_edges();
+    //
+    //            self.process_cli_args(collector, krate);
+    //        });
+    //
+    //     rustc_driver::Compilation::Stop
+    // }
 }
 
 /// Constant for the global feature NodeId.
@@ -401,7 +449,10 @@ impl CollectVisitor {
                 )),
                 name => {
                     // Covering built-in cfg, e.g.,#[cfg(linux)]
-                    let feature = Feature { name: name.to_ident_string(), not };
+                    let feature = Feature {
+                        name: name.to_ident_string(),
+                        not,
+                    };
                     self.features_graph.create_node(
                         FeatureKey(feature.clone()),
                         None,   // to be valued later
