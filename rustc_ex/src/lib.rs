@@ -16,6 +16,7 @@ use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
 use rustc_span::symbol::*;
+use rustworkx_core::dag_algo::longest_path;
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -55,6 +56,10 @@ pub struct PrintAstArgs {
     /// Pass --print-serialized-graphs to print all extracted data serialized
     #[clap(long)]
     print_serialized_graphs: bool,
+
+    /// Pass --print-metadata to print the metadata of the extracted data
+    #[clap(long)]
+    print_metadata: bool,
 
     #[clap(last = true)]
     // mytool --allcaps -- some extra args here
@@ -144,6 +149,9 @@ impl PrintAstCallbacks {
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
         }
+        if self.args.print_metadata {
+            collector.print_metadata();
+        }
     }
 }
 
@@ -162,11 +170,11 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 Ok(content
                     // Features are discarded before the `after_expansion` hook, so are lost.
                     // To avoid this, we replace all `cfg` directives with a custom config.
-                    .replace("#[cfg(", "#[rustcex_cfg(")
+                    .replace("#[cfg(", "#[rustex_cfg(")
                     // The `cfg!` macro is evaluated before the `after_expansion` hook, so we replace it with a custom one.
                     // The replacement is not a macro because the macro would still be evaluated before the hook,
                     // giving an error in the AST.
-                    .replace("cfg!", "rustcex_cfg"))
+                    .replace("cfg!", "rustex_cfg"))
             }
 
             fn read_binary_file(&self, _path: &std::path::Path) -> io::Result<Arc<[u8]>> {
@@ -549,11 +557,6 @@ impl CollectVisitor {
             return None;
         }
 
-        assert!(
-            graph.neighbors(start_index).count() == 1,
-            "Error: node has multiple parents"
-        );
-
         let parent = graph
             .neighbors(start_index)
             .next()
@@ -902,6 +905,32 @@ impl CollectVisitor {
                 );
             });
     }
+
+    /// Print metadata about the graphs in json format
+    fn print_metadata(&self) {
+        #[derive(Serialize)]
+        struct Metadata {
+            ast_nodes: usize,
+            ast_height: i64,
+            features_nodes: usize,
+            artifacts_nodes: usize,
+        }
+
+        let metadata = Metadata {
+            ast_nodes: self.ast_graph.graph.node_count(),
+            ast_height: longest_path(&self.ast_graph.graph, |_| Ok::<i64, &str>(1))
+                .expect("Error: cannot calculate longest path")
+                .expect("Error: cannot calculate longest path")
+                .1,
+            features_nodes: self.features_graph.graph.node_count(),
+            artifacts_nodes: self.artifacts_graph.graph.node_count(),
+        };
+
+        println!(
+            "{}",
+            serde_json::to_string(&metadata).expect("Error: cannot serialize metadata")
+        );
+    }
 }
 
 impl<'ast> Visitor<'ast> for CollectVisitor {
@@ -915,10 +944,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     // TODO: le feature vengono rilevate solo se scritte con sintassi `#[cfg(feature = ...)]`,
     // la macro `cfg!` non è rilevata.
     // Come descritto nel TODO precedente non basta fare il replace di `cfg!` con ad
-    // esempio `rustcex_cfg!` dato che anche questa macro viene già espansa (in un errore
+    // esempio `rustex_cfg!` dato che anche questa macro viene già espansa (in un errore
     // garantito, dato che non la trova).
     // Un workaround potrebbe essere quello di rimpiazzarla con un nome di funzione valido
-    // come `rustcex_cfg`.
+    // come `rustex_cfg`.
 
     // The features (cfg) are attributes, but attributes are (almost) always
     // at the same level of the Node they are annotating. So the features are (almost)
@@ -936,7 +965,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit attribute: features are attributes
     fn visit_attribute(&mut self, attr: &'ast Attribute) {
         if let Some(meta) = attr.meta() {
-            if meta.name_or_empty() == Symbol::intern("rustcex_cfg") {
+            if meta.name_or_empty() == Symbol::intern("rustex_cfg") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     match self.stack.pop() {
                         Some((astnode_index, ComplexFeature::None)) => {
