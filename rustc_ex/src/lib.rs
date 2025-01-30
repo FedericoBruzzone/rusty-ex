@@ -1,8 +1,8 @@
 #![feature(rustc_private)]
 
+pub mod configs;
 pub mod instrument;
 pub mod types;
-pub mod configs;
 
 extern crate rustc_ast;
 extern crate rustc_driver;
@@ -399,7 +399,16 @@ impl CollectVisitor {
                         not,
                     ),
                 )),
-                _ => (),
+                name => {
+                    // Covering built-in cfg, e.g.,#[cfg(linux)]
+                    let feature = Feature { name: name.to_ident_string(), not };
+                    self.features_graph.create_node(
+                        FeatureKey(feature.clone()),
+                        None,   // to be valued later
+                        vec![], // to be valued later
+                    );
+                    features.push(ComplexFeature::Feature(feature));
+                }
             }
         }
 
@@ -942,12 +951,15 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     match self.stack.pop() {
                         Some((astnode_index, ComplexFeature::None)) => {
                             let parsed_features = self.rec_expand_features(list.to_vec(), false);
+                            log::info!("Parsed features: {:?}", parsed_features);
 
                             match parsed_features.len() {
-                                // well-formed without feature (we can ignore): #[cfg(windows)]
+                                // This should be `unreachable!()` because in `rec_expand_features`
+                                // we always return at least one feature
                                 0 => {
                                     self.stack.push((astnode_index, ComplexFeature::None));
                                 }
+                                // well-formed with built-in feature (we need the ignore): #[cfg(windows)]
                                 // well-formed with feature (we need the feature): #[cfg(feature = "a"))]
                                 1 => {
                                     self.stack
