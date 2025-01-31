@@ -251,7 +251,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 self.process_cli_args(collector, krate);
             });
 
-        return rustc_driver::Compilation::Continue;
+        rustc_driver::Compilation::Continue
     }
 
     ///// Called after expansion. Return value instructs the compiler whether to
@@ -993,27 +993,30 @@ impl CollectVisitor {
     fn print_metadata(&self) {
         #[derive(Serialize)]
         struct Metadata {
-            ast_nodes: usize,
-            ast_height: i64,
-            features_nodes: usize,
-            artifacts_nodes: usize,
+            ast_nodes: u32,
+            ast_edges: u32,
+            ast_height: u32,
 
-            ast_edges: usize,
-            features_edges: usize,
-            artifacts_edges: usize,
+            features_nodes: u32,
+            features_edges: u32,
+
+            artifacts_nodes: u32,
+            artifacts_edges: u32,
         }
 
         let metadata = Metadata {
-            ast_nodes: self.ast_graph.graph.node_count(),
+            ast_nodes: self.ast_graph.graph.node_count() as u32,
+            ast_edges: self.ast_graph.graph.edge_count() as u32,
             ast_height: longest_path(&self.ast_graph.graph, |_| Ok::<i64, &str>(1))
                 .expect("Error: cannot calculate longest path")
                 .expect("Error: cannot calculate longest path")
-                .1,
-            features_nodes: self.features_graph.graph.node_count(),
-            artifacts_nodes: self.artifacts_graph.graph.node_count(),
-            ast_edges: self.ast_graph.graph.edge_count(),
-            features_edges: self.features_graph.graph.edge_count(),
-            artifacts_edges: self.artifacts_graph.graph.edge_count(),
+                .1 as u32,
+
+            features_nodes: self.features_graph.graph.node_count() as u32,
+            features_edges: self.features_graph.graph.edge_count() as u32,
+
+            artifacts_nodes: self.artifacts_graph.graph.node_count() as u32,
+            artifacts_edges: self.artifacts_graph.graph.edge_count() as u32,
         };
 
         println!(
@@ -1028,7 +1031,11 @@ impl CollectVisitor {
 
         for node in self.features_graph.graph.node_indices() {
             let node_weight = self.features_graph.graph.node_weight(node).unwrap().clone();
-            new_graph.create_node(node_weight.feature, node_weight.weight, node_weight.complex_feature);
+            new_graph.create_node(
+                node_weight.feature,
+                node_weight.weight,
+                node_weight.complex_feature,
+            );
         }
 
         for edge in self.features_graph.graph.edge_indices() {
