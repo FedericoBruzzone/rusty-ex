@@ -76,8 +76,8 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
 
     try:
         process = subprocess.Popen(["cargo-rustc-ex", "--print-metadata"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
-        # stdout, stderr = process.communicate(timeout=600) # 10 minutes timeout
-        stdout, stderr = process.communicate(timeout=10) # test timeout
+        stdout, stderr = process.communicate(timeout=600) # 10 minutes timeout
+        # stdout, stderr = process.communicate(timeout=10) # test timeout
     except subprocess.TimeoutExpired:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         printt(f"Error: {repo_name} timed out.")
