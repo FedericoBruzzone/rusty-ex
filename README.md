@@ -50,12 +50,14 @@ Available plugin args:
 
 - Graphs in DOT format:
   - `--print-ast-graph`: print the AST graph, including all the AST nodes (both annotated with a feature and not)
-  - `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`)
+  - `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`). Between two nodes there can be at most 1 edge
+  - `--print-features-multigraph`: print the features multigraph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`). Between two nodes there can be multiple edges
   - `--print-artifacts-graph`: print the artifacts graph, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
 - Other:
   - `--print-crate`: print the crate AST
   - `--print-centrality`: print some centralities of the features graph
   - `--print-serialized-graphs`: print the extracted graphs serialized
+  - `--print-metadata`: print metadata of extracted graphs in JSON format
 
 Use the installed cargo plugin:
 

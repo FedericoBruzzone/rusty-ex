@@ -38,6 +38,10 @@ pub struct PrintAstArgs {
     #[clap(long)]
     print_ast_graph: bool,
 
+    /// Pass --print-features-multigraph to print the DOT graph
+    #[clap(long)]
+    print_features_multigraph: bool,
+
     /// Pass --print-features-graph to print the DOT graph
     #[clap(long)]
     print_features_graph: bool,
@@ -139,6 +143,9 @@ impl PrintAstCallbacks {
             collector.ast_graph.print_dot();
         }
         if self.args.print_features_graph {
+            collector.squash_feature_graph_edges().print_dot();
+        }
+        if self.args.print_features_multigraph {
             collector.features_graph.print_dot();
         }
         if self.args.print_artifacts_graph {
@@ -1013,6 +1020,30 @@ impl CollectVisitor {
             "{}",
             serde_json::to_string(&metadata).expect("Error: cannot serialize metadata")
         );
+    }
+
+    /// Squash the edges making the multigraph a graph. Edges weight is summed up
+    fn squash_feature_graph_edges(&self) -> FeaturesGraph {
+        let mut new_graph = FeaturesGraph::new();
+
+        for node in self.features_graph.graph.node_indices() {
+            let node_weight = self.features_graph.graph.node_weight(node).unwrap().clone();
+            new_graph.create_node(node_weight.feature, node_weight.weight, node_weight.complex_feature);
+        }
+
+        for edge in self.features_graph.graph.edge_indices() {
+            let (source, target) = self.features_graph.graph.edge_endpoints(edge).unwrap();
+            let weight = self.features_graph.graph.edge_weight(edge).unwrap().weight;
+
+            if let Some(existing_edge) = new_graph.graph.find_edge(source, target) {
+                let existing_weight = new_graph.graph.edge_weight_mut(existing_edge).unwrap();
+                existing_weight.weight += weight;
+            } else {
+                new_graph.graph.add_edge(source, target, Edge { weight });
+            }
+        }
+
+        new_graph
     }
 }
 
