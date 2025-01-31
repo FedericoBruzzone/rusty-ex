@@ -914,6 +914,10 @@ impl CollectVisitor {
             ast_height: i64,
             features_nodes: usize,
             artifacts_nodes: usize,
+
+            ast_edges: usize,
+            features_edges: usize,
+            artifacts_edges: usize,
         }
 
         let metadata = Metadata {
@@ -924,6 +928,9 @@ impl CollectVisitor {
                 .1,
             features_nodes: self.features_graph.graph.node_count(),
             artifacts_nodes: self.artifacts_graph.graph.node_count(),
+            ast_edges: self.ast_graph.graph.edge_count(),
+            features_edges: self.features_graph.graph.edge_count(),
+            artifacts_edges: self.artifacts_graph.graph.edge_count(),
         };
 
         println!(
