@@ -209,10 +209,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
             .expect("Error: global context not found")
             .enter(|tcx: rustc_middle::ty::TyCtxt| {
                 let krate = &tcx.crate_for_resolver(()).steal().0;
-                println!("{:#?}", krate);
 
                 // visit AST
                 let collector = &mut CollectVisitor {
+                    node_id_incr: 2,
                     stack: Vec::new(),
 
                     ast_graph: AstGraph::new(),
@@ -317,6 +317,8 @@ pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: this s
 
 /// AST visitor to collect data to build the graphs
 pub struct CollectVisitor {
+    /// NodeId in nodes are not resolved yet, so we need to increment it manually
+    node_id_incr: u32,
     /// Stack to keep track of the AST nodes dependencies
     stack: Vec<(AstIndex, ComplexFeature)>,
 
@@ -337,6 +339,14 @@ pub struct CollectVisitor {
 }
 
 impl CollectVisitor {
+    /// Returns the next NodeId and increments the counter. This is needed because
+    /// the compiler has not resolved the ids yet
+    fn get_node_id(&mut self) -> NodeId {
+        let node_id = self.node_id_incr;
+        self.node_id_incr += 1;
+        NodeId::from_u32(node_id)
+    }
+
     /// Initialize the global scope (AST node, feature node, artifact node)
     fn init_global_scope(&mut self) {
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
@@ -617,6 +627,11 @@ impl CollectVisitor {
         if start_index == NodeIndex::new(GLOBAL_NODE_INDEX) {
             return None;
         }
+
+        assert!(
+            graph.neighbors(start_index).count() == 1,
+            "Error: node has multiple parents"
+        );
 
         let parent = graph
             .neighbors(start_index)
@@ -1075,7 +1090,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit expression, like function calls
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
-        let node_id = cur_ex.id;
+        let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
             // blocks
@@ -1167,7 +1182,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit item, like functions, structs, enums
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
-        let node_id = cur_item.id;
+        let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
             // blocks
@@ -1217,7 +1232,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit associated items, like methods in impls
     fn visit_assoc_item(&mut self, cur_aitem: &'ast AssocItem, ctxt: AssocCtxt) -> Self::Result {
         let ident = Some(cur_aitem.ident.to_string());
-        let node_id = cur_aitem.id;
+        let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
             // blocks
@@ -1254,7 +1269,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit statement, like let, if, while
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
-        let node_id = cur_stmt.id;
+        let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // blocks
@@ -1290,7 +1305,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit definition fields, like struct fields
     fn visit_field_def(&mut self, cur_field: &'ast FieldDef) -> Self::Result {
         let ident = None;
-        let node_id = cur_field.id;
+        let node_id = self.get_node_id();
         let kind_string = "FieldDef".to_string();
         let kind = NodeWeightKind::Leaf(kind_string);
 
@@ -1302,7 +1317,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visit enum variant
     fn visit_variant(&mut self, cur_var: &'ast Variant) -> Self::Result {
         let ident = Some(cur_var.ident.to_string());
-        let node_id = cur_var.id;
+        let node_id = self.get_node_id();
         let kind_string = "Variant".to_string();
         let kind = NodeWeightKind::Leaf(kind_string);
 
@@ -1314,7 +1329,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits match arm
     fn visit_arm(&mut self, cur_arm: &'ast Arm) -> Self::Result {
         let ident = None;
-        let node_id = cur_arm.id;
+        let node_id = self.get_node_id();
         let kind_string = "Arm".to_string();
         let kind = NodeWeightKind::Block(kind_string);
 
@@ -1326,7 +1341,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     /// Visits a function parameter
     fn visit_param(&mut self, cur_par: &'ast Param) -> Self::Result {
         let ident = cur_par.pat.descr();
-        let node_id = cur_par.id;
+        let node_id = self.get_node_id();
         let kind_string = "Param".to_string();
         let kind = NodeWeightKind::NoWeight(kind_string);
 
