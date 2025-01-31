@@ -212,7 +212,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 // visit AST
                 let collector = &mut CollectVisitor {
-                    node_id_incr: 2,
+                    node_id_incr: 1, // 0 is reserved for global scope
                     stack: Vec::new(),
 
                     ast_graph: AstGraph::new(),

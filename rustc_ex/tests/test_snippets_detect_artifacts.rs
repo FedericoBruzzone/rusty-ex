@@ -46,7 +46,7 @@ fn test_use() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/use.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
 
-    assert_eq!(count_line(&output, vec!["Use"]), 10 + 1); // 10 from the snippet + 1 always present
+    assert_eq!(count_line(&output, vec!["Use"]), 10);
 
     Ok(())
 }
@@ -233,13 +233,13 @@ fn test_block() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/block.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
 
-    assert_eq!(count_line(&output, vec!["Block("]), 13);
+    assert_eq!(count_line(&output, vec!["Block("]), 5);
 
     Ok(())
 }
 
 #[test]
-fn test_opeartor() -> Result<(), String> {
+fn test_operator() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/operator.rs")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
 
