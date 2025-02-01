@@ -2,5 +2,5 @@
 
 fn main() {
     env_logger::init();
-    rustc_ex::instrument::driver_main(rustc_ex::RustcEx);
+    rusty_ex::instrument::driver_main(rusty_ex::RustcEx);
 }

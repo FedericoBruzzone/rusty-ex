@@ -80,7 +80,7 @@ impl RustcPlugin for RustcEx {
     }
 
     fn driver_name(&self) -> Cow<'static, str> {
-        "rustc-ex-driver".into()
+        "rusty-ex-driver".into()
     }
 
     fn modify_cargo(&self, cargo: &mut std::process::Command, args: &Self::Args) {
@@ -99,12 +99,12 @@ impl RustcPlugin for RustcEx {
         //
         // ## Test
         //
-        // In tests we run something like `cargo rustc-ex --print-dot` because the plugin is installed as a binary in a temporary directory.
-        // It is expanded to `/tmp/rustc-ex/bin/cargo-rustc-ex rustc-ex --print-dot`, so we need to skip the first argument because it is the `cargo` command.
+        // In tests we run something like `cargo rusty-ex --print-dot` because the plugin is installed as a binary in a temporary directory.
+        // It is expanded to `/tmp/rusty-ex/bin/cargo-rusty-ex rusty-ex --print-dot`, so we need to skip the first argument because it is the `cargo` command.
         //
         // ## Cli
-        // In the CLI we run something like `cargo run --bin rustc-ex -- --print-dot` or `./target/debug/cargo-rustc-ex --print-dot`.
-        // It is expanded to `.target/debug/cargo-rustc-ex --print-dot`, so we don't need to skip the first argument.
+        // In the CLI we run something like `cargo run --bin rusty-ex -- --print-dot` or `./target/debug/cargo-rusty-ex --print-dot`.
+        // It is expanded to `.target/debug/cargo-rusty-ex --print-dot`, so we don't need to skip the first argument.
         #[cfg(feature = "test-mode")]
         let args = PrintAstArgs::parse_from(env::args().skip(1));
 

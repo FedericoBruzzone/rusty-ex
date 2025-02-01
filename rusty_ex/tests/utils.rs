@@ -4,13 +4,13 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Once;
 
-const PLUGIN_NAME: &str = "rustc-ex";
+const PLUGIN_NAME: &str = "rusty-ex";
 const TEST_MODE_FEATURE: &str = "test-mode";
 static INSTALL_PLUGIN: Once = Once::new();
 
 /// Run the plugin with the `cargo` command
 ///
-/// This function will install the plugin (cargo-rustc-ex binary) in a temporary directory and run it with the `cargo` command.
+/// This function will install the plugin (cargo-rusty-ex binary) in a temporary directory and run it with the `cargo` command.
 /// The plugin will be installed only once.
 ///
 /// # Arguments
@@ -23,7 +23,7 @@ pub fn run_with_cargo_bin(
     plugin_args: &[&str],
 ) -> Result<(String, Option<String>), String> {
     // Install the plugin
-    let root_dir = env::temp_dir().join("rustc-ex");
+    let root_dir = env::temp_dir().join("rusty-ex");
     let current_dir = Path::new(".").canonicalize().unwrap();
     INSTALL_PLUGIN.call_once(|| {
         let mut cargo_cmd = Command::new("cargo");

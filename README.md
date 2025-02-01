@@ -3,7 +3,7 @@
 A `cargo` plugin to analyze and extract a dependency graph (between `cfg` features) from a Rust program.
 
 > [!NOTE]
-> `rustc_ex` uses [`rustc-instrument`](https://github.com/FedericoBruzzone/rustc-instrument) to extract and analyze the AST of the Rust program.
+> `rusty_ex` uses [`rustc-instrument`](https://github.com/FedericoBruzzone/rustc-instrument) to extract and analyze the AST of the Rust program.
 
 ## Usage
 
@@ -21,15 +21,16 @@ rustup component add --toolchain nightly-2024-12-01 rust-src rustc-dev llvm-tool
 Install all the binaries:
 
 ```bash
-cargo install --bins --path rustc_ex
+cd rusty_ex
+cargo install --bins --path .
 ```
 
 Use the installed binaries:
 
 ```bash
-cargo-rustc-ex [--PLUGIN_ARG]
+cargo-rusty-ex [--PLUGIN_ARG]
 deserializer-merger [--PLUGIN_ARG]
-rustc-ex-driver [--PLUGIN_ARG]
+rusty-ex-driver [--PLUGIN_ARG]
 ```
 
 ### Test
@@ -37,14 +38,14 @@ rustc-ex-driver [--PLUGIN_ARG]
 Run tests on all example workspaces:
 
 ```bash
-cd rustc_ex
+cd rusty_ex
 cargo test --no-fail-fast -- --test-threads=1
 ```
 
 > [!WARNING]
 > Some tests _currently_ fail. Run with `--no-fail-fast` to always run all test (even if some early test fails).
 
-### CLI (`cargo` wrapper): `cargo-rustc-ex`
+### CLI (`cargo` wrapper): `cargo-rusty-ex`
 
 Available plugin args:
 
@@ -63,22 +64,22 @@ Use the installed cargo plugin:
 
 ```bash
 cd [example_crate_name]
-cargo-rustc-ex [--PLUGIN_ARG]
+cargo-rusty-ex [--PLUGIN_ARG]
 
 # example:
 cd crate_name
-cargo-rustc-ex --print-features-graph
+cargo-rusty-ex --print-features-graph
 ```
 
 Use the cargo plugin without installing (from the root of this repository):
 
 ```bash
-cd rustc_ex/tests/workspaces/[example_crate_name]
-cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex [--CARGO_ARG] -- [--PLUGIN_ARG]
+cd rusty_ex/tests/workspaces/[example_crate_name]
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-rusty-ex [--CARGO_ARG] -- [--PLUGIN_ARG]
 
 # example:
-cd rustc_ex/tests/workspaces/simple_feature_no_weights
-cargo run --manifest-path ../../../Cargo.toml --bin cargo-rustc-ex -- --print-features-graph
+cd rusty_ex/tests/workspaces/simple_feature_no_weights
+cargo run --manifest-path ../../../Cargo.toml --bin cargo-rusty-ex -- --print-features-graph
 ```
 
 > [!NOTE]
@@ -93,10 +94,10 @@ Serialize the graphs of the crates you want to analyze and save the results in a
 
 ```bash
 cd ~/crate_1
-cargo-rustc-ex --print-features-graph > crate_1.json
+cargo-rusty-ex --print-features-graph > crate_1.json
 
 cd ~/crate_2
-cargo-rustc-ex --print-features-graph > crate_2.json
+cargo-rusty-ex --print-features-graph > crate_2.json
 ```
 
 Execute the `deserializer-merger`, passing as `-f` argument the files containing the serialization and a plugin arg:

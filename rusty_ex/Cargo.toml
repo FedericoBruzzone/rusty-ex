@@ -1,5 +1,5 @@
 [package]
-name = "rustc-ex"
+name = "rusty-ex"
 version = "0.1.0-nightly-2024-12-01"
 edition = "2021"
 
@@ -9,10 +9,10 @@ edition = "2021"
 rustc_private = true
 
 [[bin]]
-name = "cargo-rustc-ex"
+name = "cargo-rusty-ex"
 
 [[bin]]
-name = "rustc-ex-driver"
+name = "rusty-ex-driver"
 
 [[bin]]
 name = "deserializer-merger"

@@ -3,7 +3,7 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rustc_ex::configs::{ConfigGenerator, ConfigGeneratorUtils};
+use rusty_ex::configs::{ConfigGenerator, ConfigGeneratorUtils};
 
 #[test]
 fn test_zero_with_zero_true() -> Result<(), String> {
