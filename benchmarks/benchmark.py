@@ -2,13 +2,13 @@ import subprocess
 import time
 import os
 import json
-import sys
 import requests
 import toml
 import shutil
 from datetime import datetime
 import signal
 
+# print with timestamp
 def printt(message):
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
 
@@ -95,7 +95,7 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
             results.append({
                 "url": repo_url,
                 "crate": crate_name,
-                "member": repo_name,
+                "member": repo_name.replace("MEMBER-", ""),
                 "github_stars": stars,
                 "cratesio_downloads": downloads,
                 "lines_of_code": loc,
@@ -128,6 +128,7 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
 
 # launch the analysis for each member of the workspace
 def analyze_members(repo_name, repo_url, members, stars, downloads):
+
     res = []
     for member in members:
         try:
@@ -135,14 +136,14 @@ def analyze_members(repo_name, repo_url, members, stars, downloads):
                 printt(f"Error: Member {member} does not exist.")
                 continue
 
-            base = os.path.basename(member)
+            base = "MEMBER-" + os.path.basename(member)
 
             if os.path.exists(base):
                 shutil.rmtree(base)
 
-            shutil.move(f"{repo_name}/{member}", ".")
+            shutil.copytree(f"{repo_name}/{member}", base)
             res += analyze(repo_name, repo_url, base, stars, downloads, True)
-            shutil.move(base, repo_name)
+            shutil.rmtree(base)
 
         except Exception as e:
             printt(f"Error analyzing member {member}: {e}")
@@ -188,6 +189,8 @@ def main(repo_url):
         results = analyze(repo_name, repo_url, repo_name, stars, downloads)
         results += analyze_members(repo_name, repo_url, members, stars, downloads)
 
+        shutil.rmtree(repo_name)
+
         print("Crate, Member, GH Stars, Crates.io Downloads, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
 
         for res in results:
@@ -197,55 +200,7 @@ def main(repo_url):
         printt(f"Error: {e}")
 
 TO_ANALYZE = [
-    "https://github.com/GitoxideLabs/gitoxide",
-    "https://github.com/denoland/deno",
-    "https://github.com/tauri-apps/tauri",
-    "https://github.com/rustdesk/rustdesk",
-    "https://github.com/FuelLabs/sway",
-    "https://github.com/FuelLabs/fuel-core",
-    "https://github.com/alacritty/alacritty",
-    "https://github.com/rust-lang/rustlings",
-    "https://github.com/zed-industries/zed",
-    "https://github.com/lencx/ChatGPT",
-    "https://github.com/sharkdp/bat",
-    "https://github.com/BurntSushi/ripgrep",
-    "https://github.com/meilisearch/meilisearch",
-    "https://github.com/starship/starship",
-    "https://github.com/FuelLabs/fuels-rs",
-    "https://github.com/dani-garcia/vaultwarden",
-    "https://github.com/bevyengine/bevy",
-    "https://github.com/pdm-project/pdm",
-    "https://github.com/typst/typst",
-    "https://github.com/helix-editor/helix",
-    "https://github.com/sharkdp/fd",
-    "https://github.com/charliermarsh/ruff",
-    "https://github.com/lapce/lapce",
-    "https://github.com/tw93/Pake",
-    "https://github.com/nushell/nushell",
-    "https://github.com/pola-rs/polars",
-    "https://github.com/swc-project/swc",
-    "https://github.com/influxdata/influxdb",
-    "https://github.com/TabbyML/tabby",
-    "https://github.com/servo/servo",
-    "https://github.com/wasmerio/wasmer",
-    "https://github.com/ogham/exa",
-    "https://github.com/diem/diem",
-    "https://github.com/EmbarkStudios/texture-synthesis",
-    "https://github.com/EmbarkStudios/kajiya",
-    "https://github.com/EmbarkStudios/rust-gpu",
-    "https://github.com/paritytech/substrate",
-    "https://github.com/wasmEdge/wasmedge",
-    "https://github.com/XAMPPRocky/tokei",
-    "https://github.com/quickwit-oss/tantivy",
-    "https://github.com/facebook/relay",
-    "https://github.com/boa-dev/boa",
-    "https://github.com/rerun-io/rerun",
-    "https://github.com/containers/podman",
-    "https://github.com/hyperium/tonic",
-    "https://github.com/tokio-rs/axum",
-    "https://github.com/cross-rs/cross",
-    "https://github.com/pyroscope-io/pyroscope",
-    "https://github.com/bottlerocket-os/bottlerocket"
+    # "https://github.com/.../...",
 ]
 
 if __name__ == "__main__":
