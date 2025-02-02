@@ -10,7 +10,7 @@ import signal
 
 # print with timestamp
 def printt(message):
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}")
+    print(f"[{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {message}")
 
 # get the number of stars of a GitHub repository
 def get_github_stars(repo_url):
@@ -48,8 +48,22 @@ def parse_cargo_toml(subdir="."):
         except Exception as e:
             printt(f"Error reading Cargo.toml: {e}")
 
-# analyze the folder at `repo_name` and return a list of formatted LaTeX rows
-def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False):
+# expand members with wildcard
+def expand_members(repo_name, members):
+    expanded_members = []
+    for member in members:
+        if member.endswith("/*"):
+            member_dir = os.path.join(repo_name, member[:-2])
+            if os.path.exists(member_dir):
+                expanded_members.extend([os.path.join(member[:-2], subdir) for subdir in os.listdir(member_dir) if os.path.isdir(os.path.join(member_dir, subdir))])
+            else:
+                printt(f"Warning: Directory {member_dir} does not exist.")
+        else:
+            expanded_members.append(member)
+    return expanded_members
+
+# analyze the folder at `repo_name` and return a list of result dicts
+def analyze(repo_name, reset_cargo=False):
     printt(f"Analyzing {repo_name}.")
 
     os.chdir(repo_name)
@@ -62,6 +76,14 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
                 result = subprocess.run(["wc", "-l", os.path.join(root, file)], capture_output=True, text=True)
                 loc += int(result.stdout.split()[0])
 
+    result = {
+        "error": True,
+        "member": repo_name.replace("MEMBER-", ""),
+        "lines_of_code": loc,
+        "dependencies": len(cargo_toml.get("dependencies", {})),
+        "defined_features": len(cargo_toml.get("features", {})),
+    }
+
     if reset_cargo:
         try:
             os.rename("Cargo.toml", "Cargo.toml.bak")
@@ -69,7 +91,7 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
         except Exception as e:
             printt(f"Error resetting Cargo.toml: {e}")
             os.chdir("..")
-            return []
+            return result
     subprocess.run(["cargo", "clean"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     start_time = time.time()
@@ -82,54 +104,38 @@ def analyze(crate_name, repo_url, repo_name, stars, downloads, reset_cargo=False
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         printt(f"Error: {repo_name} timed out.")
         os.chdir("..")
-        return []
+        return result
 
     execution_time = time.time() - start_time
 
     results = []
-    for line in stdout.decode().splitlines():
-        if not line.strip(): continue
-        try:
-            parsed_line = json.loads(line)
+    try:
+        parsed_line = json.loads(stdout.decode().strip())
 
-            results.append({
-                "url": repo_url,
-                "crate": crate_name,
-                "member": repo_name.replace("MEMBER-", ""),
-                "github_stars": stars,
-                "cratesio_downloads": downloads,
-                "lines_of_code": loc,
-                "dependencies": len(cargo_toml.get("dependencies", {})),
-                "defined_features": len(cargo_toml.get("features", {})),
-                "ast_nodes": parsed_line.get("ast_nodes", "N/A"),
-                "ast_edges": parsed_line.get("ast_edges", "N/A"),
-                "ast_height": parsed_line.get("ast_height", "N/A"),
-                "feature_nodes": parsed_line.get("features_nodes", "N/A"),
-                "feature_edges": parsed_line.get("features_edges", "N/A"),
-                "artifact_nodes": parsed_line.get("artifacts_nodes", "N/A"),
-                "artifact_edges": parsed_line.get("artifacts_edges", "N/A"),
-                "execution_time": execution_time,
-                "peak_memory_usage": None,
-            })
+        result |= {
+            "ast_nodes": parsed_line.get("ast_nodes", "N/A"),
+            "ast_edges": parsed_line.get("ast_edges", "N/A"),
+            "ast_height": parsed_line.get("ast_height", "N/A"),
+            "feature_nodes": parsed_line.get("features_nodes", "N/A"),
+            "feature_edges": parsed_line.get("features_edges", "N/A"),
+            "feature_squashed_edges": parsed_line.get("features_squashed_edges", "N/A"),
+            "artifact_nodes": parsed_line.get("artifacts_nodes", "N/A"),
+            "artifact_edges": parsed_line.get("artifacts_edges", "N/A"),
+            "execution_time": execution_time,
+            "peak_memory_usage": None,
+        }
 
-        except json.JSONDecodeError:
-            printt(f"Error: Line is not a valid JSON.")
-            continue
-
-    if reset_cargo:
-        try:
-            os.remove("Cargo.toml")
-            os.rename("Cargo.toml.bak", "Cargo.toml")
-        except Exception as e:
-            printt(f"Error resetting Cargo.toml: {e}")
+    except json.JSONDecodeError:
+        printt(f"Error: Line is not a valid JSON.")
+        os.chdir("..")
+        return result
 
     os.chdir("..")
-    return results
+    return result | {"error": False}
 
 # launch the analysis for each member of the workspace
-def analyze_members(repo_name, repo_url, members, stars, downloads):
-
-    res = []
+def analyze_members(repo_name, members):
+    results = []
     for member in members:
         try:
             if not os.path.exists(f"{repo_name}/{member}"):
@@ -142,19 +148,40 @@ def analyze_members(repo_name, repo_url, members, stars, downloads):
                 shutil.rmtree(base)
 
             shutil.copytree(f"{repo_name}/{member}", base)
-            res += analyze(repo_name, repo_url, base, stars, downloads, True)
+            results.append(analyze(base, reset_cargo=True))
             shutil.rmtree(base)
 
         except Exception as e:
             printt(f"Error analyzing member {member}: {e}")
             continue
-
-    return res
+    return results
 
 # format the results as a LaTeX row
-def format(res):
-    def g(x): return res.get(x, "N/A")
-    return f"\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}} & {g('member')} & {g('github_stars')} & {g('cratesio_downloads')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f}s & {g('peak_memory_usage')} \\\\ \\hline"
+def latex_format(results):
+    print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
+
+    formatted = []
+
+    for i, res in enumerate(results):
+        def g(x):
+            r = res.get(x, "N/A")
+            return r.replace("_", "\\_") if isinstance(r, str) else r
+
+        if i == 0 and res["error"]:
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ \\hline")
+            continue
+
+        if i == 0:
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f}s & {g('peak_memory_usage')} \\\\ \\hline")
+            continue
+
+        if res["error"]:
+            formatted.append(f"{g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ \\hline")
+            continue
+
+        formatted.append(f"{g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f}s & {g('peak_memory_usage')} \\\\ \\hline")
+
+    return "\n".join(formatted)
 
 def main(repo_url):
     try:
@@ -166,35 +193,24 @@ def main(repo_url):
             shutil.rmtree(repo_name)
 
         printt(f"Cloning the repository from {repo_url}.")
-        subprocess.run(["git", "clone", "--recurse-submodules", "-j8", repo_url], check=True)
+        subprocess.run(["git", "clone", "--recurse-submodules", "-j8", repo_url], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         cargo_toml = parse_cargo_toml(repo_name)
         members = cargo_toml.get("workspace", {}).get("members", [])
-
-        # expand members with wildcard
-        expanded_members = []
-        for member in members:
-            if member.endswith("/*"):
-                member_dir = os.path.join(repo_name, member[:-2])
-                if os.path.exists(member_dir):
-                    expanded_members.extend([os.path.join(member[:-2], subdir) for subdir in os.listdir(member_dir) if os.path.isdir(os.path.join(member_dir, subdir))])
-                else:
-                    printt(f"Warning: Directory {member_dir} does not exist.")
-            else:
-                expanded_members.append(member)
-        members = expanded_members
+        members = expand_members(repo_name, members)
 
         printt(f"Members: {members}")
 
-        results = analyze(repo_name, repo_url, repo_name, stars, downloads)
-        results += analyze_members(repo_name, repo_url, members, stars, downloads)
+        results = []
+
+        results.append(analyze(repo_name))
+        results += analyze_members(repo_name, members)
+
+        results = [r | {"url": repo_url, "crate": repo_name, "github_stars": stars, "cratesio_downloads": downloads} for r in results]
 
         shutil.rmtree(repo_name)
 
-        print("Crate, Member, GH Stars, Crates.io Downloads, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
-
-        for res in results:
-            print(format(res))
+        print(latex_format(results))
 
     except Exception as e:
         printt(f"Error: {e}")

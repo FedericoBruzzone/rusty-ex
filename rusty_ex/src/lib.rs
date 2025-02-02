@@ -964,6 +964,7 @@ impl CollectVisitor {
 
             features_nodes: u32,
             features_edges: u32,
+            features_squashed_edges: u32,
 
             artifacts_nodes: u32,
             artifacts_edges: u32,
@@ -979,6 +980,7 @@ impl CollectVisitor {
 
             features_nodes: self.features_graph.graph.node_count() as u32,
             features_edges: self.features_graph.graph.edge_count() as u32,
+            features_squashed_edges: self.squash_feature_graph_edges().graph.edge_count() as u32,
 
             artifacts_nodes: self.artifacts_graph.graph.node_count() as u32,
             artifacts_edges: self.artifacts_graph.graph.edge_count() as u32,
