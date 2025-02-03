@@ -4,14 +4,11 @@ use rustsat::{
 };
 use rustsat_minisat::core::Minisat;
 
-pub struct ConfigGenerator<T> {
-    solver: T,
-}
+use super::{Cnf, CnfClause, CnfLit};
 
-/// ZST for ConfigGenerator
-///
-/// We need this struct to implement the static function for the `ConfigGenerator`.
-pub struct ConfigGeneratorUtils;
+pub struct ConfigGenerator<S> {
+    solver: S,
+}
 
 impl Default for ConfigGenerator<Minisat> {
     fn default() -> Self {
@@ -19,11 +16,11 @@ impl Default for ConfigGenerator<Minisat> {
     }
 }
 
-impl<T> ConfigGenerator<T>
+impl<S> ConfigGenerator<S>
 where
-    T: Solve + SolveStats,
+    S: Solve + SolveStats,
 {
-    fn new(solver: T) -> Self {
+    fn new(solver: S) -> Self {
         Self { solver }
     }
 
@@ -34,7 +31,7 @@ where
     /// vec![(0, true), (1, false), (2, true)]
     /// ```
     /// is the clause `(x0 | !x1 | x2)` in DIMACS format.
-    fn add_clause(&mut self, clause: Vec<(u32, bool)>) -> &mut Self {
+    fn add_clause(&mut self, clause: CnfClause<u32>) -> &mut Self {
         let mut c = Clause::new();
         for (var, neg) in clause {
             c.add(Lit::new(var, neg));
@@ -52,7 +49,7 @@ where
     ///     vec![(0, false), (1, true)],
     /// ]
     /// is the CNF `((x0 | !x1 | x2) & (!x0 | x1))` in DIMACS format.
-    pub fn add_cnf(&mut self, cnf: Vec<Vec<(u32, bool)>>) {
+    pub fn add_cnf(&mut self, cnf: Cnf<u32>) {
         for clause in cnf {
             self.add_clause(clause);
         }
@@ -64,7 +61,7 @@ where
     /// (0, true)
     /// ```
     /// is the variable `x0` that must be true.
-    pub fn all_configs_given_a_var(&mut self, var: (u32, bool)) -> Vec<Vec<(u32, bool)>> {
+    pub fn all_configs_given_a_var(&mut self, var: CnfLit<u32>) -> Cnf<u32> {
         // Set the variable to the given value.
         self.add_clause(vec![var]);
 
@@ -102,8 +99,13 @@ where
     }
 }
 
+/// ZST for ConfigGenerator
+///
+/// We need this struct to implement the static function for the `ConfigGenerator`.
+pub struct ConfigGeneratorUtils;
+
 impl ConfigGeneratorUtils {
-    pub fn to_string(configs: &Vec<Vec<(u32, bool)>>) -> String {
+    pub fn to_string(configs: &Cnf<u32>) -> String {
         let mut s = String::new();
         for clause in configs {
             let clause_str: Vec<String> = clause
