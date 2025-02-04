@@ -84,6 +84,7 @@ impl<T: Clone + Debug> PropFormula<T> {
     }
 
     /// Push negation inwards (De Morgan's laws).
+    /// It operate recursively on the formula until it reaches a fixed point.
     ///
     /// NOTE: `eliminate_implies` and `eliminate_iff` functions should be called first.
     ///
@@ -91,12 +92,12 @@ impl<T: Clone + Debug> PropFormula<T> {
     /// !(P & Q) is equivalent to !P | !Q
     /// !(P | Q) is equivalent to !P & !Q
     /// !!P is equivalent to P
-    fn push_negation_inwards(&mut self) {
+    pub fn push_negation_inwards(&mut self) {
         use PropFormula::*;
         match self {
             Var(_) => {}
             Not(p) => {
-                // p.push_negation_inwards(); // FIXME
+                p.push_negation_inwards();
                 match **p {
                     Var(_) => {}
                     Not(ref p) => {
@@ -106,11 +107,13 @@ impl<T: Clone + Debug> PropFormula<T> {
                         let p = bx!(Not(p.clone()));
                         let q = bx!(Not(q.clone()));
                         *self = Or(p, q);
+                        self.push_negation_inwards();
                     }
                     Or(ref p, ref q) => {
                         let p = bx!(Not(p.clone()));
                         let q = bx!(Not(q.clone()));
                         *self = And(p, q);
+                        self.push_negation_inwards();
                     }
                     _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
                 }
