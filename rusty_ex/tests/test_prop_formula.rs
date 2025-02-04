@@ -3,7 +3,7 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rusty_ex::configs::prop_formula::PropFormula;
+use rusty_ex::configs::prop_formula::{self, PropFormula};
 use utils::bx;
 
 #[test]
@@ -191,5 +191,30 @@ fn test_push_negation_inwards_or_add() -> Result<(), String> {
         )
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_distribute_over_conjunction_1() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P | (Q & R)
+    let mut prop_formula = Or(bx!(Var(0)), bx!(And(bx!(Var(1)), bx!(Var(2)))));
+
+    // (P | Q) & (P | R)
+    prop_formula.distribute_disjunction_over_conjunction();
+
+    assert_eq!(
+        prop_formula,
+        And(
+            bx!(Or(bx!(Var(0)), bx!(Var(1)))),
+            bx!(Or(bx!(Var(0)), bx!(Var(2))))
+        )
+    );
+
+    Ok(())
+}
+
+fn test_distribute_over_conjunction_2() -> Result<(), String> {
     Ok(())
 }

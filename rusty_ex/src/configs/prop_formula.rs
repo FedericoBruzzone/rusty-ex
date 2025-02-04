@@ -138,7 +138,7 @@ impl<T: Clone + Debug> PropFormula<T> {
     /// For instance:
     /// P | (Q & R) is equivalent to (P | Q) & (P | R)
     /// (P & Q) | R is equivalent to (P | R) & (Q | R)
-    fn distribute_disjunction_over_conjunction(&mut self) {
+    pub fn distribute_disjunction_over_conjunction(&mut self) {
         use PropFormula::*;
         match self {
             Var(_) => {}
