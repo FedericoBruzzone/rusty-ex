@@ -215,6 +215,54 @@ fn test_distribute_over_conjunction_1() -> Result<(), String> {
     Ok(())
 }
 
+#[test]
 fn test_distribute_over_conjunction_2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // (P & Q) | R
+    let mut prop_formula = Or(bx!(And(bx!(Var(0)), bx!(Var(1)))), bx!(Var(2)));
+
+    // (P | R) & (Q | R)
+    prop_formula.distribute_disjunction_over_conjunction();
+
+    assert_eq!(
+        prop_formula,
+        And(
+            bx!(Or(bx!(Var(0)), bx!(Var(2)))),
+            bx!(Or(bx!(Var(1)), bx!(Var(2))))
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_distribute_over_conjunction_add() -> Result<(), String> {
+    use PropFormula::*;
+
+    // (P & Q) | (R & S)
+    let mut prop_formula = Or(
+        bx!(And(bx!(Var(0)), bx!(Var(1)))),
+        bx!(And(bx!(Var(2)), bx!(Var(3)))),
+    );
+
+    // (P | (R & S)) & (Q | (R & S))
+    // (P | R) & (P | S) & (Q | R) & (Q | S)
+    prop_formula.distribute_disjunction_over_conjunction();
+
+    assert_eq!(
+        prop_formula,
+        And(
+            bx!(And(
+                bx!(Or(bx!(Var(0)), bx!(Var(2)))),
+                bx!(Or(bx!(Var(0)), bx!(Var(3))))
+            )),
+            bx!(And(
+                bx!(Or(bx!(Var(1)), bx!(Var(2)))),
+                bx!(Or(bx!(Var(1)), bx!(Var(3))))
+            ))
+        )
+    );
+
     Ok(())
 }

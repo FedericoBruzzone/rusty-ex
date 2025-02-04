@@ -97,7 +97,7 @@ impl<T: Clone + Debug> PropFormula<T> {
         match self {
             Var(_) => {}
             Not(p) => {
-                p.push_negation_inwards();
+                p.push_negation_inwards(); // FIXME: Check correctness
                 match **p {
                     Var(_) => {}
                     Not(ref p) => {
@@ -147,25 +147,23 @@ impl<T: Clone + Debug> PropFormula<T> {
                 q.distribute_disjunction_over_conjunction();
             }
             Or(p, q) => {
-                p.distribute_disjunction_over_conjunction();
-                q.distribute_disjunction_over_conjunction();
                 match (&mut **p, &mut **q) {
-                    (And(p1, q1), And(p2, q2)) => {
-                        let p1 = bx!(Or(p1.clone(), p2.clone()));
-                        let q1 = bx!(Or(q1.clone(), q2.clone()));
-                        *self = And(p1, q1);
-                    }
                     (And(p1, q1), _) => {
                         let p1 = bx!(Or(p1.clone(), q.clone()));
                         let q1 = bx!(Or(q1.clone(), q.clone()));
                         *self = And(p1, q1);
+                        self.distribute_disjunction_over_conjunction();
                     }
                     (_, And(p2, q2)) => {
                         let p2 = bx!(Or(p.clone(), p2.clone()));
                         let q2 = bx!(Or(p.clone(), q2.clone()));
                         *self = And(p2, q2);
+                        self.distribute_disjunction_over_conjunction();
                     }
-                    _ => {}
+                    _ => {
+                        p.distribute_disjunction_over_conjunction();
+                        q.distribute_disjunction_over_conjunction();
+                    }
                 }
             }
             _ => unreachable!("The `distribute_disjunction_over_conjunction` function should call only after the `eliminate_iff`, `eliminate_implies`, and `push_negation_inwards` functions."),
