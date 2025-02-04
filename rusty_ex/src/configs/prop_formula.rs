@@ -51,11 +51,11 @@ impl<T: Clone + Debug> PropFormula<T> {
 
     /// Eliminate the implication operator.
     ///
-    /// NODE: `eliminate_iff` function should be called first.
+    /// NOTE: `eliminate_iff` function should be called first.
     ///
     /// For instance:
     /// P -> Q is equivalent to !P | Q
-    fn eliminate_implies(&mut self) {
+    pub fn eliminate_implies(&mut self) {
         use PropFormula::*;
         match self {
             Var(_) => {}
