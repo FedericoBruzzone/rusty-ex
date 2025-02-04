@@ -4,21 +4,22 @@ mod utils;
 
 use pretty_assertions::assert_eq;
 use rusty_ex::configs::prop_formula::PropFormula;
+use utils::bx;
 
 #[test]
 fn test_eliminate_iff() -> Result<(), String> {
     use PropFormula::*;
 
     // P <-> Q
-    let mut prop_formula = Iff(Box::new(Var(0)), Box::new(Var(1)));
+    let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
     // (P -> Q) & (Q -> P)
     prop_formula.eliminate_iff();
 
     assert_eq!(
         prop_formula,
         And(
-            Box::new(Implies(Box::new(Var(0)), Box::new(Var(1)))),
-            Box::new(Implies(Box::new(Var(1)), Box::new(Var(0))))
+            bx!(Implies(bx!(Var(0)), bx!(Var(1)))),
+            bx!(Implies(bx!(Var(1)), bx!(Var(0))))
         )
     );
 
@@ -30,28 +31,25 @@ fn test_eliminate_iff_nested() -> Result<(), String> {
     use PropFormula::*;
 
     // (P <-> Q) <-> R
-    let mut prop_formula = Iff(
-        Box::new(Iff(Box::new(Var(0)), Box::new(Var(1)))),
-        Box::new(Var(2)),
-    );
+    let mut prop_formula = Iff(bx!(Iff(bx!(Var(0)), bx!(Var(1)))), bx!(Var(2)));
     // (((P -> Q) & (Q -> P)) -> R) & (R -> ((P -> Q) & (Q -> P)))
     prop_formula.eliminate_iff();
 
     assert_eq!(
         prop_formula,
         And(
-            Box::new(Implies(
-                Box::new(And(
-                    Box::new(Implies(Box::new(Var(0)), Box::new(Var(1)))),
-                    Box::new(Implies(Box::new(Var(1)), Box::new(Var(0))))
+            bx!(Implies(
+                bx!(And(
+                    bx!(Implies(bx!(Var(0)), bx!(Var(1)))),
+                    bx!(Implies(bx!(Var(1)), bx!(Var(0))))
                 )),
-                Box::new(Var(2))
+                bx!(Var(2))
             )),
-            Box::new(Implies(
-                Box::new(Var(2)),
-                Box::new(And(
-                    Box::new(Implies(Box::new(Var(0)), Box::new(Var(1)))),
-                    Box::new(Implies(Box::new(Var(1)), Box::new(Var(0))))
+            bx!(Implies(
+                bx!(Var(2)),
+                bx!(And(
+                    bx!(Implies(bx!(Var(0)), bx!(Var(1)))),
+                    bx!(Implies(bx!(Var(1)), bx!(Var(0))))
                 ))
             ))
         )
@@ -65,14 +63,11 @@ fn test_eliminate_implies() -> Result<(), String> {
     use PropFormula::*;
 
     // P -> Q
-    let mut prop_formula = Implies(Box::new(Var(0)), Box::new(Var(1)));
+    let mut prop_formula = Implies(bx!(Var(0)), bx!(Var(1)));
     // !P | Q
     prop_formula.eliminate_implies();
 
-    assert_eq!(
-        prop_formula,
-        Or(Box::new(Not(Box::new(Var(0)))), Box::new(Var(1)))
-    );
+    assert_eq!(prop_formula, Or(bx!(Not(bx!(Var(0)))), bx!(Var(1))));
 
     Ok(())
 }
@@ -82,21 +77,15 @@ fn test_eliminate_implies_nested() -> Result<(), String> {
     use PropFormula::*;
 
     // (P -> Q) -> R
-    let mut prop_formula = Implies(
-        Box::new(Implies(Box::new(Var(0)), Box::new(Var(1)))),
-        Box::new(Var(2)),
-    );
+    let mut prop_formula = Implies(bx!(Implies(bx!(Var(0)), bx!(Var(1)))), bx!(Var(2)));
     // !(!P | Q) | R
     prop_formula.eliminate_implies();
 
     assert_eq!(
         prop_formula,
         PropFormula::Or(
-            Box::new(Not(Box::new(Or(
-                Box::new(Not(Box::new(Var(0)))),
-                Box::new(Var(1))
-            )))),
-            Box::new(Var(2))
+            bx!(Not(bx!(Or(bx!(Not(bx!(Var(0)))), bx!(Var(1)))))),
+            bx!(Var(2))
         )
     );
 

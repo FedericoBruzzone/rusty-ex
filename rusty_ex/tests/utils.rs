@@ -4,6 +4,14 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Once;
 
+macro_rules! bx {
+    ($e:expr) => {
+        Box::new($e)
+    };
+}
+
+pub(crate) use bx;
+
 const PLUGIN_NAME: &str = "rusty-ex";
 const TEST_MODE_FEATURE: &str = "test-mode";
 static INSTALL_PLUGIN: Once = Once::new();

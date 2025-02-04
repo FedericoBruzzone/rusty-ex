@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::utils::bx;
+
 use super::Cnf;
 
 /// Trait for converting a type to a propositional formula.
@@ -42,8 +44,8 @@ impl<T: Clone + Debug> PropFormula<T> {
             Iff(p, q) => {
                 p.eliminate_iff();
                 q.eliminate_iff();
-                let new_p = Box::new(Implies(p.clone(), q.clone()));
-                let new_q = Box::new(Implies(q.clone(), p.clone()));
+                let new_p = bx!(Implies(p.clone(), q.clone()));
+                let new_q = bx!(Implies(q.clone(), p.clone()));
                 *self = And(new_p, new_q);
             }
         }
@@ -71,7 +73,7 @@ impl<T: Clone + Debug> PropFormula<T> {
             Implies(p, q) => {
                 p.eliminate_implies();
                 q.eliminate_implies();
-                let p = Box::new(Not(p.clone()));
+                let p = bx!(Not(p.clone()));
                 *self = Or(p, q.clone());
             }
             Iff(p, q) => {
@@ -101,13 +103,13 @@ impl<T: Clone + Debug> PropFormula<T> {
                         *self = *p.clone();
                     }
                     And(ref p, ref q) => {
-                        let p = Box::new(Not(p.clone()));
-                        let q = Box::new(Not(q.clone()));
+                        let p = bx!(Not(p.clone()));
+                        let q = bx!(Not(q.clone()));
                         *self = Or(p, q);
                     }
                     Or(ref p, ref q) => {
-                        let p = Box::new(Not(p.clone()));
-                        let q = Box::new(Not(q.clone()));
+                        let p = bx!(Not(p.clone()));
+                        let q = bx!(Not(q.clone()));
                         *self = And(p, q);
                     }
                     _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
@@ -146,18 +148,18 @@ impl<T: Clone + Debug> PropFormula<T> {
                 q.distribute_disjunction_over_conjunction();
                 match (&mut **p, &mut **q) {
                     (And(p1, q1), And(p2, q2)) => {
-                        let p1 = Box::new(Or(p1.clone(), p2.clone()));
-                        let q1 = Box::new(Or(q1.clone(), q2.clone()));
+                        let p1 = bx!(Or(p1.clone(), p2.clone()));
+                        let q1 = bx!(Or(q1.clone(), q2.clone()));
                         *self = And(p1, q1);
                     }
                     (And(p1, q1), _) => {
-                        let p1 = Box::new(Or(p1.clone(), q.clone()));
-                        let q1 = Box::new(Or(q1.clone(), q.clone()));
+                        let p1 = bx!(Or(p1.clone(), q.clone()));
+                        let q1 = bx!(Or(q1.clone(), q.clone()));
                         *self = And(p1, q1);
                     }
                     (_, And(p2, q2)) => {
-                        let p2 = Box::new(Or(p.clone(), p2.clone()));
-                        let q2 = Box::new(Or(p.clone(), q2.clone()));
+                        let p2 = bx!(Or(p.clone(), p2.clone()));
+                        let q2 = bx!(Or(p.clone(), q2.clone()));
                         *self = And(p2, q2);
                     }
                     _ => {}
