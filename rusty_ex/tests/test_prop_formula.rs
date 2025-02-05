@@ -3,7 +3,8 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rusty_ex::configs::prop_formula::{self, PropFormula};
+use rusty_ex::configs::prop_formula::PropFormula;
+use rusty_ex::configs::Cnf;
 use utils::bx;
 
 #[test]
@@ -263,6 +264,78 @@ fn test_distribute_over_conjunction_add() -> Result<(), String> {
             ))
         )
     );
+
+    Ok(())
+}
+
+#[test]
+fn test_to_cnf() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P | (Q & R)
+    let mut prop_formula = Or(bx!(Var(0)), bx!(And(bx!(Var(1)), bx!(Var(2)))));
+
+    // (P | Q) & (P | R)
+    prop_formula.to_cnf();
+
+    assert_eq!(
+        prop_formula,
+        And(
+            bx!(Or(bx!(Var(0)), bx!(Var(1)))),
+            bx!(Or(bx!(Var(0)), bx!(Var(2))))
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_to_cnf_2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P <-> Q
+    let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
+
+    // (!P | Q) & (!Q | P)
+    prop_formula.to_cnf();
+
+    assert_eq!(
+        prop_formula,
+        And(
+            bx!(Or(bx!(Not(bx!(Var(0)))), bx!(Var(1)))),
+            bx!(Or(bx!(Not(bx!(Var(1)))), bx!(Var(0))))
+        )
+    );
+
+    Ok(())
+}
+
+#[test]
+fn test_to_cnf_repr() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P | (Q & R)
+    let mut prop_formula = Or(bx!(Var(0)), bx!(And(bx!(Var(1)), bx!(Var(2)))));
+
+    // (P | Q) & (P | R)
+    let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
+
+    assert_eq!(cnf, [[(0, true), (1, true)], [(0, true), (2, true)]]);
+
+    Ok(())
+}
+
+#[test]
+fn test_to_cnf_repr_2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P <-> Q
+    let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
+
+    // (!P | Q) & (!Q | P)
+    let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
+
+    assert_eq!(cnf, [[(0, false), (1, true)], [(1, false), (0, true)]]);
 
     Ok(())
 }

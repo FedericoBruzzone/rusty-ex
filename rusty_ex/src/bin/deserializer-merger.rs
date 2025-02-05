@@ -1,11 +1,11 @@
 #![feature(rustc_private)]
 
 use clap::Parser;
+use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use rusty_ex::types::*;
 use rusty_ex::{
     GLOBAL_DUMMY_INDEX, GLOBAL_DUMMY_NAME, GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX,
 };
-use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use std::collections::HashMap;
 use std::fs::File;
 

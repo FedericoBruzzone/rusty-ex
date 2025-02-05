@@ -17,6 +17,14 @@ pub enum PropFormula<T> {
     Or(Box<PropFormula<T>>, Box<PropFormula<T>>),
     Implies(Box<PropFormula<T>>, Box<PropFormula<T>>),
     Iff(Box<PropFormula<T>>, Box<PropFormula<T>>),
+    // Used to indicate an invalid formula or to invalidate a formula.
+    None,
+}
+
+impl<T: Clone + Debug> Default for PropFormula<T> {
+    fn default() -> Self {
+        PropFormula::None
+    }
 }
 
 impl<T: Clone + Debug> PropFormula<T> {
@@ -48,6 +56,7 @@ impl<T: Clone + Debug> PropFormula<T> {
                 let new_q = bx!(Implies(q.clone(), p.clone()));
                 *self = And(new_p, new_q);
             }
+            None => panic!("Invalid formula."),
         }
     }
 
@@ -80,6 +89,7 @@ impl<T: Clone + Debug> PropFormula<T> {
                 p.eliminate_implies();
                 q.eliminate_implies();
             }
+            None => panic!("Invalid formula."),
         }
     }
 
@@ -126,6 +136,7 @@ impl<T: Clone + Debug> PropFormula<T> {
                 p.push_negation_inwards();
                 q.push_negation_inwards();
             }
+            None => panic!("Invalid formula."),
             _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
         }
     }
@@ -142,6 +153,7 @@ impl<T: Clone + Debug> PropFormula<T> {
         use PropFormula::*;
         match self {
             Var(_) => {}
+            Not(v) => assert!(matches!(**v, Var(_))),
             And(p, q) => {
                 p.distribute_disjunction_over_conjunction();
                 q.distribute_disjunction_over_conjunction();
@@ -166,6 +178,7 @@ impl<T: Clone + Debug> PropFormula<T> {
                     }
                 }
             }
+            None => panic!("Invalid formula."),
             _ => unreachable!("The `distribute_disjunction_over_conjunction` function should call only after the `eliminate_iff`, `eliminate_implies`, and `push_negation_inwards` functions."),
         }
     }
@@ -174,22 +187,53 @@ impl<T: Clone + Debug> PropFormula<T> {
     ///
     /// NOTE: `distribute_disjunction_over_conjunction`, `push_negation_inwards`,
     /// `eliminate_implies`, and `eliminate_iff` functions should be called first.
-    ///
-    /// This is an inner function for the public `to_cnf` function.
-    fn to_cnf_inner(&self) -> Cnf<T> {
-        use PropFormula::*;
-        match self {
-            Var(var) => vec![vec![(var.clone(), true)]],
-            Not(var) => {
-                assert!(matches!(**var, Var(_)));
-                todo!()
-            }
-            _ => todo!(),
-        }
+    pub fn to_cnf(&mut self) {
+        self.eliminate_iff();
+        self.eliminate_implies();
+        self.push_negation_inwards();
+        self.distribute_disjunction_over_conjunction();
     }
 
-    /// Convert the propositional formula to CNF.
-    pub fn to_cnf(&mut self) -> Cnf<T> {
-        self.to_cnf_inner()
+    /// Convert the propositional formula to CNF representation.
+    ///
+    /// It calls the `to_cnf` function first. So, it is safe to call this function directly.
+    ///
+    /// This ivalidates the formula.
+    pub fn to_cnf_repr(&mut self) -> Cnf<T> {
+        self.to_cnf();
+
+        use PropFormula::*;
+        // Invalidates the formula.
+        match std::mem::take(self) {
+            Var(var) => vec![vec![(var.clone(), true)]],
+            Not(var) => {
+                assert!(matches!(*var, Var(_)));
+                if let PropFormula::Var(v) = (*var).clone() {
+                    vec![vec![(v.clone(), false)]]
+                } else {
+                    unreachable!()
+                }
+            }
+            And(mut p, mut q) => {
+                let mut cnf = p.to_cnf_repr();
+                cnf.extend(q.to_cnf_repr());
+                cnf
+            }
+            Or(mut p, mut q) => {
+                let mut cnf = vec![];
+                let p_cnf = p.to_cnf_repr();
+                let q_cnf = q.to_cnf_repr();
+                for p_clause in p_cnf {
+                    for q_clause in q_cnf.iter() {
+                        let mut clause = p_clause.clone();
+                        clause.extend_from_slice(q_clause);
+                        cnf.push(clause);
+                    }
+                }
+                cnf
+            }
+            None => panic!("Invalid formula."),
+            _ => unreachable!(),
+        }
     }
 }
