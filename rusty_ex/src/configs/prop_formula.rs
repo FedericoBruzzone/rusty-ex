@@ -13,8 +13,8 @@ pub trait ToPropFormula<T> {
 pub enum PropFormula<T> {
     Var(T),
     Not(Box<PropFormula<T>>),
-    And(Box<PropFormula<T>>, Box<PropFormula<T>>),
-    Or(Box<PropFormula<T>>, Box<PropFormula<T>>),
+    And(Vec<PropFormula<T>>),
+    Or(Vec<PropFormula<T>>),
     Implies(Box<PropFormula<T>>, Box<PropFormula<T>>),
     Iff(Box<PropFormula<T>>, Box<PropFormula<T>>),
     // Used to indicate an invalid formula or to invalidate a formula.
@@ -37,13 +37,15 @@ impl<T: Clone + Debug> PropFormula<T> {
         match self {
             Var(_) => {}
             Not(p) => p.eliminate_iff(),
-            And(p, q) => {
-                p.eliminate_iff();
-                q.eliminate_iff();
+            And(v) => {
+                for f in v.iter_mut() {
+                    f.eliminate_iff();
+                }
             }
-            Or(p, q) => {
-                p.eliminate_iff();
-                q.eliminate_iff();
+            Or(v) => {
+                for f in v.iter_mut() {
+                    f.eliminate_iff();
+                }
             }
             Implies(p, q) => {
                 p.eliminate_iff();
@@ -52,9 +54,9 @@ impl<T: Clone + Debug> PropFormula<T> {
             Iff(p, q) => {
                 p.eliminate_iff();
                 q.eliminate_iff();
-                let new_p = bx!(Implies(p.clone(), q.clone()));
-                let new_q = bx!(Implies(q.clone(), p.clone()));
-                *self = And(new_p, new_q);
+                let new_p = Implies(p.clone(), q.clone());
+                let new_q = Implies(q.clone(), p.clone());
+                *self = And(vec![new_p, new_q]);
             }
             None => panic!("Invalid formula."),
         }
@@ -71,19 +73,21 @@ impl<T: Clone + Debug> PropFormula<T> {
         match self {
             Var(_) => {}
             Not(p) => p.eliminate_implies(),
-            And(p, q) => {
-                p.eliminate_implies();
-                q.eliminate_implies();
+            And(v) => {
+                for f in v.iter_mut() {
+                    f.eliminate_implies();
+                }
             }
-            Or(p, q) => {
-                p.eliminate_implies();
-                q.eliminate_implies();
+            Or(v) => {
+                for f in v.iter_mut() {
+                    f.eliminate_implies();
+                }
             }
             Implies(p, q) => {
                 p.eliminate_implies();
                 q.eliminate_implies();
-                let p = bx!(Not(p.clone()));
-                *self = Or(p, q.clone());
+                let not_p = Not((*p).clone());
+                *self = Or(vec![not_p, *q.clone()]);
             }
             Iff(p, q) => {
                 p.eliminate_implies();
@@ -108,33 +112,39 @@ impl<T: Clone + Debug> PropFormula<T> {
             Var(_) => {}
             Not(p) => {
                 p.push_negation_inwards(); // FIXME: Check correctness
-                match **p {
+                match (**p).clone() {
                     Var(_) => {}
                     Not(ref p) => {
                         *self = *p.clone();
                     }
-                    And(ref p, ref q) => {
-                        let p = bx!(Not(p.clone()));
-                        let q = bx!(Not(q.clone()));
-                        *self = Or(p, q);
+                    And(v) => {
+                        let mut not_v = Vec::new();
+                        for f in v.iter() {
+                            not_v.push(Not(bx!(f.clone())));
+                        }
+                        *self = Or(not_v);
                         self.push_negation_inwards();
                     }
-                    Or(ref p, ref q) => {
-                        let p = bx!(Not(p.clone()));
-                        let q = bx!(Not(q.clone()));
-                        *self = And(p, q);
+                    Or(v) => {
+                        let mut not_v = Vec::new();
+                        for f in v.iter() {
+                            not_v.push(Not(bx!(f.clone())));
+                        }
+                        *self = And(not_v);
                         self.push_negation_inwards();
                     }
                     _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
                 }
             }
-            And(p, q) => {
-                p.push_negation_inwards();
-                q.push_negation_inwards();
+            And(v) => {
+                for f in v.iter_mut() {
+                    f.push_negation_inwards();
+                }
             }
-            Or(p, q) => {
-                p.push_negation_inwards();
-                q.push_negation_inwards();
+            Or(v) =>  {
+                for f in v.iter_mut() {
+                    f.push_negation_inwards();
+                }
             }
             None => panic!("Invalid formula."),
             _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
@@ -154,27 +164,53 @@ impl<T: Clone + Debug> PropFormula<T> {
         match self {
             Var(_) => {}
             Not(v) => assert!(matches!(**v, Var(_))),
-            And(p, q) => {
-                p.distribute_disjunction_over_conjunction();
-                q.distribute_disjunction_over_conjunction();
+            And(v) => {
+                for f in v.iter_mut() {
+                    f.distribute_disjunction_over_conjunction();
+                }
             }
-            Or(p, q) => {
-                match (&mut **p, &mut **q) {
-                    (And(p1, q1), _) => {
-                        let p1 = bx!(Or(p1.clone(), q.clone()));
-                        let q1 = bx!(Or(q1.clone(), q.clone()));
-                        *self = And(p1, q1);
-                        self.distribute_disjunction_over_conjunction();
+            Or(v) => {
+                // Check if there is a conjunction inside the disjunction.
+                if v.iter().any(|f| matches!(f, And(_))) {
+                    // (a & b & c) | (d & e & f) => (a | d) & (a | e) & (a | f) & (b | d) & (b | e)
+                    // & (b | f) & (c | d) & (c | e) & (c | f)
+                    let mut new_v = Vec::new();
+                    for f in v.iter() {
+                        match f {
+                            And(v) => new_v.push(v.clone()),
+                            Var(_) => new_v.push(vec![f.clone()]),
+                            Not(v) => {
+                                assert!(matches!(**v, Var(_)));
+                                new_v.push(vec![f.clone()]);
+                            }
+                            _ => unreachable!(),
+                        }
                     }
-                    (_, And(p2, q2)) => {
-                        let p2 = bx!(Or(p.clone(), p2.clone()));
-                        let q2 = bx!(Or(p.clone(), q2.clone()));
-                        *self = And(p2, q2);
-                        self.distribute_disjunction_over_conjunction();
+
+                    fn cartesian_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+                        let mut result = vec![vec![]];
+                        for i in v {
+                            let mut new_result = vec![];
+                            for j in i {
+                                for k in result.iter() {
+                                    let mut new_k = k.clone();
+                                    new_k.push(j.clone());
+                                    new_result.push(new_k);
+                                }
+                            }
+                            result = new_result;
+                        }
+                        result
                     }
-                    _ => {
-                        p.distribute_disjunction_over_conjunction();
-                        q.distribute_disjunction_over_conjunction();
+
+                    let new_or = cartesian_product(new_v);
+
+                    *self = And(new_or.into_iter().map(|v| Or(v)).collect());
+                } else {
+                    // FIXME: Check correctness
+                    // If there is a disjunction inside the disjunction, then distribute it.
+                    for f in v.iter_mut() {
+                        f.distribute_disjunction_over_conjunction();
                     }
                 }
             }
@@ -201,6 +237,7 @@ impl<T: Clone + Debug> PropFormula<T> {
     /// This ivalidates the formula.
     pub fn to_cnf_repr(&mut self) -> Cnf<T> {
         self.to_cnf();
+        println!("cnf: {:?}", self);
 
         use PropFormula::*;
         // Invalidates the formula.
@@ -214,21 +251,19 @@ impl<T: Clone + Debug> PropFormula<T> {
                     unreachable!()
                 }
             }
-            And(mut p, mut q) => {
-                let mut cnf = p.to_cnf_repr();
-                cnf.extend(q.to_cnf_repr());
+            And(v) => {
+                let mut cnf = vec![];
+                for mut f in v {
+                    let f_cnf = f.to_cnf_repr();
+                    cnf.extend(f_cnf);
+                }
                 cnf
             }
-            Or(mut p, mut q) => {
+            Or(v) => {
                 let mut cnf = vec![];
-                let p_cnf = p.to_cnf_repr();
-                let q_cnf = q.to_cnf_repr();
-                for p_clause in p_cnf {
-                    for q_clause in q_cnf.iter() {
-                        let mut clause = p_clause.clone();
-                        clause.extend_from_slice(q_clause);
-                        cnf.push(clause);
-                    }
+                for mut f in v {
+                    let f_cnf = f.to_cnf_repr();
+                    cnf.extend(f_cnf);
                 }
                 cnf
             }
