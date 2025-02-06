@@ -252,14 +252,16 @@ impl<T: Clone + Debug> PropFormula<T> {
                 }
             }
             And(v) => {
+                assert!(v.iter().all(|f| matches!(f, Or(_))));
                 let mut cnf = vec![];
                 for mut f in v {
                     let f_cnf = f.to_cnf_repr();
-                    cnf.extend(f_cnf);
+                    cnf.push(f_cnf.into_iter().flatten().collect());
                 }
                 cnf
             }
             Or(v) => {
+                assert!(v.iter().all(|f| matches!(f, Var(_) | Not(_))));
                 let mut cnf = vec![];
                 for mut f in v {
                     let f_cnf = f.to_cnf_repr();

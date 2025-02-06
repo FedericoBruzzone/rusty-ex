@@ -292,27 +292,25 @@ fn test_to_cnf_repr() -> Result<(), String> {
     // P | (Q & R)
     let mut prop_formula = Or(vec![Var(0), And(vec![Var(1), Var(2)])]);
 
-
     // (P | Q) & (P | R)
     let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
-
 
     assert_eq!(cnf, [[(0, true), (1, true)], [(0, true), (2, true)]]);
 
     Ok(())
 }
 
-// #[test]
-// fn test_to_cnf_repr_2() -> Result<(), String> {
-//     use PropFormula::*;
-//
-//     // P <-> Q
-//     let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
-//
-//     // (!P | Q) & (!Q | P)
-//     let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
-//
-//     assert_eq!(cnf, [[(0, false), (1, true)], [(1, false), (0, true)]]);
-//
-//     Ok(())
-// }
+#[test]
+fn test_to_cnf_repr_2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P <-> Q
+    let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
+
+    // (!P | Q) & (!Q | P)
+    let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
+
+    assert_eq!(cnf, [[(0, false), (1, true)], [(1, false), (0, true)]]);
+
+    Ok(())
+}
