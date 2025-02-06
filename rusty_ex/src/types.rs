@@ -30,22 +30,21 @@ pub enum ComplexFeature {
 // -------------------- Weights --------------------
 
 /// Type of the weight of a node (not the actual weight, only the type)
+/// The first String parameter of each variant is a debug string to identify the kind of item
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NodeWeightKind {
-    /// Leaf, a literal or something that does NOT calls anything.
-    /// The weight is 1.0
-    Leaf(String),
-    /// A block of statements, expressions or items. Has no intrinsic weight.
-    /// The weight is the sum of the children
-    Block(String),
-    /// A call to another node, like a function call.
-    /// The weight is the weight of the called thing
-    /// The first argument is the name of the called, while the
-    /// the second argument is the identifier of the called thing (if it has one).
-    Call(String, Option<String>),
+    /// Item that has an intrinsic weight, like a literal or something that does NOT calls anything.
+    /// The intrinsic weight is 1.0
+    Intrinsic(String),
+    /// Item which weight is determined by its children, like a block of statements, expressions or items.
+    /// Has no intrinsic weight, the weight is the sum of the children
+    Children(String),
+    /// A reference to another item, like a function or a method call.
+    /// The weight is the weight of the called thing, saved in the second parameter.
+    Reference(String, Option<String>),
     /// Items that have no weight, like `_`.
     /// The weight is 0.0
-    NoWeight(String),
+    No(String),
 }
 
 /// Weight of a node: not yet calculated, a float, or waiting for something to be resolved
@@ -501,15 +500,15 @@ impl Display for NodeWeightKind {
     /// NodeWeightKind to string
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            NodeWeightKind::Leaf(name) => write!(f, "Leaf({})", name),
-            NodeWeightKind::Block(name) => write!(f, "Block({})", name),
-            NodeWeightKind::Call(name, ident) => write!(
+            NodeWeightKind::Intrinsic(name) => write!(f, "Intrinsic({})", name),
+            NodeWeightKind::Children(name) => write!(f, "Children({})", name),
+            NodeWeightKind::Reference(name, ident) => write!(
                 f,
-                "Call({})->{}",
+                "Reference({})->{}",
                 name,
                 ident.clone().unwrap_or("??".to_string())
             ),
-            NodeWeightKind::NoWeight(name) => write!(f, "NoWeight({})", name),
+            NodeWeightKind::No(name) => write!(f, "No({})", name),
         }
     }
 }

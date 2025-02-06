@@ -334,7 +334,7 @@ impl CollectVisitor {
             SimpleAstKey(node_id),
             ident.clone(),
             features.clone(),
-            NodeWeightKind::Block("Global".to_string()),
+            NodeWeightKind::Children("Global".to_string()),
             NodeWeight::ToBeCalculated,
         );
         assert_eq!(
@@ -661,9 +661,9 @@ impl CollectVisitor {
             .expect("Error: cannot find AST node weighting AST graph")
             .weight_kind
         {
-            NodeWeightKind::Leaf(..) => NodeWeight::Weight(1.0 + child_weight),
-            NodeWeightKind::Block(..) => NodeWeight::Weight(child_weight),
-            NodeWeightKind::Call(.., Some(to)) => match self.idents_weights.get(to) {
+            NodeWeightKind::Intrinsic(..) => NodeWeight::Weight(1.0 + child_weight),
+            NodeWeightKind::Children(..) => NodeWeight::Weight(child_weight),
+            NodeWeightKind::Reference(.., Some(to)) => match self.idents_weights.get(to) {
                 Some(vec_fn_weight) => NodeWeight::Weight(
                     (vec_fn_weight.iter().sum::<f64>() / vec_fn_weight.len() as f64) + child_weight,
                 ),
@@ -672,8 +672,8 @@ impl CollectVisitor {
                     NodeWeight::Wait(to.to_string())
                 }
             },
-            NodeWeightKind::Call(.., None) => NodeWeight::Weight(child_weight),
-            NodeWeightKind::NoWeight(..) => NodeWeight::Weight(0.0),
+            NodeWeightKind::Reference(.., None) => NodeWeight::Weight(child_weight),
+            NodeWeightKind::No(..) => NodeWeight::Weight(0.0),
         };
 
         self.update_weight(start_index, weight.clone());
@@ -1126,7 +1126,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
             | ExprKind::Paren(..)
-            | ExprKind::Try(..) => NodeWeightKind::Block(kind_string),
+            | ExprKind::Try(..) => NodeWeightKind::Children(kind_string),
 
             // calls
             ExprKind::Call(call, ..) => {
@@ -1140,11 +1140,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     ),
                     _ => None,
                 };
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
             ExprKind::MethodCall(method_call) => {
                 let ident = Some(method_call.seg.ident.to_string());
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
             ExprKind::MacCall(mac_call) => {
                 let ident = Some(
@@ -1156,7 +1156,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
 
             // leafs
@@ -1169,14 +1169,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Yeet(..)
             | ExprKind::Become(..)
             | ExprKind::Path(..)
-            | ExprKind::Err(..) => NodeWeightKind::Leaf(kind_string),
+            | ExprKind::Err(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
             ExprKind::Underscore
             | ExprKind::OffsetOf(..)
             | ExprKind::IncludedBytes(..)
             | ExprKind::FormatArgs(..)
-            | ExprKind::Dummy => NodeWeightKind::NoWeight(kind_string),
+            | ExprKind::Dummy => NodeWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1199,7 +1199,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::Impl(..)
             | ItemKind::Union(..)
             | ItemKind::TraitAlias(..)
-            | ItemKind::MacroDef(..) => NodeWeightKind::Block(kind_string),
+            | ItemKind::MacroDef(..) => NodeWeightKind::Children(kind_string),
 
             // calls
             ItemKind::MacCall(mac_call) => {
@@ -1212,21 +1212,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
 
             // leafs
             ItemKind::Static(..)
             | ItemKind::Const(..)
             | ItemKind::GlobalAsm(..)
-            | ItemKind::TyAlias(..) => NodeWeightKind::Leaf(kind_string),
+            | ItemKind::TyAlias(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
             ItemKind::Use(..)
             | ItemKind::ExternCrate(..)
             | ItemKind::ForeignMod(..)
             | ItemKind::Delegation(..)
-            | ItemKind::DelegationMac(..) => NodeWeightKind::NoWeight(kind_string),
+            | ItemKind::DelegationMac(..) => NodeWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1241,7 +1241,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
             // blocks
-            AssocItemKind::Fn(..) => NodeWeightKind::Block(kind_string),
+            AssocItemKind::Fn(..) => NodeWeightKind::Children(kind_string),
 
             // calls
             AssocItemKind::MacCall(mac_call) => {
@@ -1254,16 +1254,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
 
             // leafs
-            AssocItemKind::Const(..) => NodeWeightKind::Leaf(kind_string),
+            AssocItemKind::Const(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
-            AssocItemKind::Type(..) => NodeWeightKind::NoWeight(kind_string),
-            AssocItemKind::Delegation(..) => NodeWeightKind::NoWeight(kind_string),
-            AssocItemKind::DelegationMac(..) => NodeWeightKind::NoWeight(kind_string),
+            AssocItemKind::Type(..) => NodeWeightKind::No(kind_string),
+            AssocItemKind::Delegation(..) => NodeWeightKind::No(kind_string),
+            AssocItemKind::DelegationMac(..) => NodeWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1278,7 +1278,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // blocks
-            StmtKind::Item(..) | StmtKind::Semi(..) => NodeWeightKind::Block(kind_string),
+            StmtKind::Item(..) | StmtKind::Semi(..) => NodeWeightKind::Children(kind_string),
 
             // calls
             StmtKind::MacCall(mac_call) => {
@@ -1292,14 +1292,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Call(kind_string, ident)
+                NodeWeightKind::Reference(kind_string, ident)
             }
 
             // leafs
-            StmtKind::Let(..) | StmtKind::Expr(..) => NodeWeightKind::Leaf(kind_string),
+            StmtKind::Let(..) | StmtKind::Expr(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
-            StmtKind::Empty => NodeWeightKind::NoWeight(kind_string),
+            StmtKind::Empty => NodeWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1312,7 +1312,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = None;
         let node_id = self.get_node_id();
         let kind_string = "FieldDef".to_string();
-        let kind = NodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Intrinsic(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_field_def(self, cur_field);
@@ -1324,7 +1324,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = Some(cur_var.ident.to_string());
         let node_id = self.get_node_id();
         let kind_string = "Variant".to_string();
-        let kind = NodeWeightKind::Leaf(kind_string);
+        let kind = NodeWeightKind::Intrinsic(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_variant(self, cur_var);
@@ -1336,7 +1336,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = None;
         let node_id = self.get_node_id();
         let kind_string = "Arm".to_string();
-        let kind = NodeWeightKind::Block(kind_string);
+        let kind = NodeWeightKind::Children(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
@@ -1348,7 +1348,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = cur_par.pat.descr();
         let node_id = self.get_node_id();
         let kind_string = "Param".to_string();
-        let kind = NodeWeightKind::NoWeight(kind_string);
+        let kind = NodeWeightKind::No(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_param(self, cur_par);

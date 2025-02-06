@@ -37,7 +37,7 @@ impl SuperCollector {
             },
             ident.clone(),
             features.clone(),
-            NodeWeightKind::Block("Global".to_string()),
+            NodeWeightKind::Children("Global".to_string()),
             NodeWeight::ToBeCalculated,
         );
         assert_eq!(
