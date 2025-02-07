@@ -624,7 +624,7 @@ impl CollectVisitor {
 
     /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
     fn rec_weight_ast_graph(&mut self, start_index: AstIndex) -> NodeWeight {
-        // TODO: ci sono altre cose fa considerare come Call?
+        // TODO: ci sono altre cose fa considerare come Reference weight?
 
         // IMPORTANT! We cannot skip already weighted nodes because a re-evaluation may be needed.
         // For example, if the weight an ident has changed (multiple definitions), then we need to
@@ -1099,7 +1099,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
-            // blocks
+            // children weight
             ExprKind::Array(..)
             | ExprKind::ConstBlock(..)
             | ExprKind::Tup(..)
@@ -1129,7 +1129,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Paren(..)
             | ExprKind::Try(..) => NodeWeightKind::Children(kind_string),
 
-            // calls
+            // reference weight
             ExprKind::Call(call, ..) => {
                 let ident = match &call.kind {
                     ExprKind::Path(None, Path { segments, .. }) => Some(
@@ -1160,7 +1160,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 NodeWeightKind::Reference(kind_string, ident)
             }
 
-            // leafs
+            // intrinsic weight
             ExprKind::Lit(..)
             | ExprKind::Break(..)
             | ExprKind::Continue(..)
@@ -1191,7 +1191,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
-            // blocks
+            // children weight
             ItemKind::Fn(..)
             | ItemKind::Mod(..)
             | ItemKind::Enum(..)
@@ -1202,7 +1202,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::TraitAlias(..)
             | ItemKind::MacroDef(..) => NodeWeightKind::Children(kind_string),
 
-            // calls
+            // reference weight
             ItemKind::MacCall(mac_call) => {
                 let ident = Some(
                     mac_call
@@ -1216,7 +1216,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 NodeWeightKind::Reference(kind_string, ident)
             }
 
-            // leafs
+            // intrinsic weight
             ItemKind::Static(..)
             | ItemKind::Const(..)
             | ItemKind::GlobalAsm(..)
@@ -1241,10 +1241,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
-            // blocks
+            // children weight
             AssocItemKind::Fn(..) => NodeWeightKind::Children(kind_string),
 
-            // calls
+            // reference weight
             AssocItemKind::MacCall(mac_call) => {
                 let ident = Some(
                     mac_call
@@ -1258,7 +1258,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 NodeWeightKind::Reference(kind_string, ident)
             }
 
-            // leafs
+            // instrinsic weight
             AssocItemKind::Const(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
@@ -1278,10 +1278,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let node_id = self.get_node_id();
         let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
-            // blocks
+            // children weight
             StmtKind::Item(..) | StmtKind::Semi(..) => NodeWeightKind::Children(kind_string),
 
-            // calls
+            // reference weight
             StmtKind::MacCall(mac_call) => {
                 let ident = Some(
                     mac_call
@@ -1296,7 +1296,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                 NodeWeightKind::Reference(kind_string, ident)
             }
 
-            // leafs
+            // intrinsic weight
             StmtKind::Let(..) | StmtKind::Expr(..) => NodeWeightKind::Intrinsic(kind_string),
 
             // no weight
