@@ -4,7 +4,7 @@ use rustsat::{
 };
 use rustsat_minisat::core::Minisat;
 
-use super::{Cnf, CnfClause, CnfLit};
+use super::{CnfFormula, CnfClause, CnfLit};
 
 pub struct ConfigGenerator<S> {
     solver: S,
@@ -49,7 +49,7 @@ where
     ///     vec![(0, false), (1, true)],
     /// ]
     /// is the CNF `((x0 | !x1 | x2) & (!x0 | x1))` in DIMACS format.
-    pub fn add_cnf(&mut self, cnf: Cnf<u32>) {
+    pub fn add_cnf(&mut self, cnf: CnfFormula<u32>) {
         for clause in cnf {
             self.add_clause(clause);
         }
@@ -61,7 +61,7 @@ where
     /// (0, true)
     /// ```
     /// is the variable `x0` that must be true.
-    pub fn all_configs_given_a_var(&mut self, var: CnfLit<u32>) -> Cnf<u32> {
+    pub fn all_configs_given_a_var(&mut self, var: CnfLit<u32>) -> CnfFormula<u32> {
         // Set the variable to the given value.
         self.add_clause(vec![var]);
 
@@ -105,7 +105,7 @@ where
 pub struct ConfigGeneratorUtils;
 
 impl ConfigGeneratorUtils {
-    pub fn to_string(configs: &Cnf<u32>) -> String {
+    pub fn to_string(configs: &CnfFormula<u32>) -> String {
         let mut s = String::new();
         for clause in configs {
             let clause_str: Vec<String> = clause

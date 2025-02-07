@@ -1,12 +1,37 @@
-use std::fmt::Debug;
+use std::collections::HashMap;
+use std::hash::Hash;
+use std::{fmt::Debug, ops::Add};
 
 use crate::utils::bx;
 
-use super::Cnf;
+use super::CnfFormula;
 
 /// Trait for converting a type to a propositional formula.
 pub trait ToPropFormula<T> {
     fn to_prop_formula(&self) -> PropFormula<T>;
+}
+
+/// Trait to represent an ordinal type, it aims to extend `Enumerable` to infinite sets.
+///
+/// An ordinal type is a type that can be incremented and decremented.
+/// The identity of the type is the `Default` trait.
+///
+/// Note that, not all `Ordinals` are `Countable`, because of the "first uncountable ordinal" (w1)
+/// which contains all countable ordinals.
+/// But all `Countables` are `Ordinals`.
+pub trait Ordinal: Default + Add<Output = Self> {
+    fn suc(&mut self);
+    fn pred(&mut self);
+}
+
+impl Ordinal for u32 {
+    fn suc(&mut self) {
+        *self += 1;
+    }
+
+    fn pred(&mut self) {
+        *self -= 1;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,7 +52,7 @@ impl<T: Clone + Debug> Default for PropFormula<T> {
     }
 }
 
-impl<T: Clone + Debug> PropFormula<T> {
+impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     /// Eliminate the biconditional operator.
     ///
     /// For instance:
@@ -235,42 +260,84 @@ impl<T: Clone + Debug> PropFormula<T> {
     /// It calls the `to_cnf` function first. So, it is safe to call this function directly.
     ///
     /// This ivalidates the formula.
-    pub fn to_cnf_repr(&mut self) -> Cnf<T> {
-        self.to_cnf();
-        println!("cnf: {:?}", self);
-
-        use PropFormula::*;
-        // Invalidates the formula.
-        match std::mem::take(self) {
-            Var(var) => vec![vec![(var.clone(), true)]],
-            Not(var) => {
-                assert!(matches!(*var, Var(_)));
-                if let PropFormula::Var(v) = (*var).clone() {
-                    vec![vec![(v.clone(), false)]]
-                } else {
-                    unreachable!()
-                }
+    pub fn to_cnf_repr<U>(&mut self) -> CnfFormula<U>
+    where
+        U: Ordinal + Clone,
+    {
+        fn get_or_insert_and_increment<T: Clone + Eq + Hash, U: Ordinal + Clone>(
+            mapping: &mut std::collections::HashMap<T, U>,
+            key: T,
+            value: &mut U,
+        ) -> U {
+            if let Some(v) = mapping.get(&key) {
+                v.clone()
+            } else {
+                let res = value.clone();
+                mapping.insert(key, res.clone());
+                value.suc();
+                res
             }
-            And(v) => {
-                assert!(v.iter().all(|f| matches!(f, Or(_))));
-                let mut cnf = vec![];
-                for mut f in v {
-                    let f_cnf = f.to_cnf_repr();
-                    cnf.push(f_cnf.into_iter().flatten().collect());
-                }
-                cnf
-            }
-            Or(v) => {
-                assert!(v.iter().all(|f| matches!(f, Var(_) | Not(_))));
-                let mut cnf = vec![];
-                for mut f in v {
-                    let f_cnf = f.to_cnf_repr();
-                    cnf.extend(f_cnf);
-                }
-                cnf
-            }
-            None => panic!("Invalid formula."),
-            _ => unreachable!(),
         }
+
+        // Convert the propositional formula to CNF representation.
+        //
+        // A likely values for `T` and `U` are `String` and `u32`, respectively.
+        // That is, `PropFormula<String>` to `CnfFormula<u32>`.
+        //
+        // # Arguments
+        //
+        // * `f` - The propositional formula.
+        // * `mapping` - The mapping from variables to a countable type.
+        // * `curr_value` - The current value to be used for the countable type.
+        fn rec_to_cnf_repr<T, U>(
+            f: &PropFormula<T>,
+            mapping: &mut HashMap<T, U>,
+            curr_value: &mut U,
+        ) -> CnfFormula<U>
+        where
+            T: Clone + Eq + Hash,
+            U: Ordinal + Clone,
+        {
+            use PropFormula::*;
+            match f {
+                Var(var) => {
+                    let value = get_or_insert_and_increment(mapping, (*var).clone(), curr_value);
+                    vec![vec![(value, true)]]
+                }
+                Not(var) => {
+                    assert!(matches!(**var, Var(_)));
+                    if let PropFormula::Var(v) = (**var).clone() {
+                        let value = get_or_insert_and_increment(mapping, v.clone(), curr_value);
+                        vec![vec![(value, false)]]
+                    } else {
+                        unreachable!()
+                    }
+                }
+                And(prop) => {
+                    assert!(prop.iter().all(|f| matches!(f, Or(_))));
+                    let mut cnf = vec![];
+                    for f in prop {
+                        let f_cnf = rec_to_cnf_repr(f, mapping, curr_value);
+                        cnf.push(f_cnf.into_iter().flatten().collect());
+                    }
+                    cnf
+                }
+                Or(prop) => {
+                    assert!(prop.iter().all(|f| matches!(f, Var(_) | Not(_))));
+                    let mut cnf = vec![];
+                    for f in prop {
+                        let f_cnf = rec_to_cnf_repr(f, mapping, curr_value);
+                        cnf.extend(f_cnf);
+                    }
+                    cnf
+                }
+                None => panic!("Invalid formula."),
+                _ => unreachable!(),
+            }
+        }
+
+        self.to_cnf();
+        let mut mapping = HashMap::<T, U>::new();
+        rec_to_cnf_repr(self, &mut mapping, &mut U::default())
     }
 }

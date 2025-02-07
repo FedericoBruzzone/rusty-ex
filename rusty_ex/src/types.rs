@@ -9,6 +9,9 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::panic;
 
+use crate::configs::prop_formula::{PropFormula, ToPropFormula};
+use crate::configs::CnfFormula;
+
 // -------------------- Features --------------------
 
 /// Simple feature
@@ -371,6 +374,14 @@ impl FeaturesGraph {
 impl Default for FeaturesGraph {
     fn default() -> Self {
         FeaturesGraph::new()
+    }
+}
+
+impl<T> ToPropFormula<T> for FeaturesGraph {
+    fn to_prop_formula(&self) -> PropFormula<T> {
+        let mut cnf = CnfFormula::new();
+
+        todo!()
     }
 }
 
