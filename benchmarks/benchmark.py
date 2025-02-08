@@ -7,6 +7,8 @@ import toml
 import shutil
 from datetime import datetime
 import signal
+import psutil
+import io
 
 # print with timestamp
 def printt(message):
@@ -62,6 +64,23 @@ def expand_members(repo_name, members):
             expanded_members.append(member)
     return expanded_members
 
+def max_memory():
+    current_process = psutil.Process()
+    children = current_process.children(recursive=True)
+    max_memory = 0
+    for child in children:
+        try:
+            memory_info = child.memory_full_info()
+            memory_mb = memory_info.rss / (1024 * 1024)
+            max_memory = max(max_memory, memory_mb)
+        except psutil.NoSuchProcess as e:
+            break
+        except psutil.AccessDenied as e:
+            pass
+        except Exception as e:
+            return 0
+    return max_memory
+
 # analyze the folder at `repo_name` and return a list of result dicts
 def analyze(repo_name, reset_cargo=False):
     printt(f"Analyzing {repo_name}.")
@@ -98,8 +117,11 @@ def analyze(repo_name, reset_cargo=False):
 
     try:
         process = subprocess.Popen(["cargo-rusty-ex", "--print-metadata"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
-        stdout, stderr = process.communicate(timeout=600) # 10 minutes timeout
-        # stdout, stderr = process.communicate(timeout=10) # test timeout
+        max_mem = 0
+        while not process.poll() and (time.time() - start_time) < 600: # 10 minutes timeout
+            max_mem = max(max_mem, max_memory())
+            time.sleep(0.01)
+        stdout, stderr = process.communicate()
     except subprocess.TimeoutExpired:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
         printt(f"Error: {repo_name} timed out.")
@@ -122,7 +144,7 @@ def analyze(repo_name, reset_cargo=False):
             "artifact_nodes": parsed_line.get("artifacts_nodes", "N/A"),
             "artifact_edges": parsed_line.get("artifacts_edges", "N/A"),
             "execution_time": execution_time,
-            "peak_memory_usage": None,
+            "peak_memory_usage": max_mem,
         }
 
     except json.JSONDecodeError:
@@ -163,23 +185,25 @@ def latex_format(results):
     formatted = []
 
     for i, res in enumerate(results):
+        linebreak = "\\cline{4-17}" if i != len(results) - 1 else "\\hline"
+
         def g(x):
             r = res.get(x, "N/A")
             return r.replace("_", "\\_") if isinstance(r, str) else r
 
         if i == 0 and res["error"]:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ \\hline")
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
             continue
 
         if i == 0:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f}s & {g('peak_memory_usage')} \\\\ \\hline")
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
             continue
 
         if res["error"]:
-            formatted.append(f"{g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ \\hline")
+            formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
             continue
 
-        formatted.append(f"{g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f}s & {g('peak_memory_usage')} \\\\ \\hline")
+        formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
 
     return "\n".join(formatted)
 
@@ -216,7 +240,56 @@ def main(repo_url):
         printt(f"Error: {e}")
 
 TO_ANALYZE = [
-    # "https://github.com/.../...",
+    # "https://github.com/rustdesk/rustdesk",
+    # "https://github.com/GitoxideLabs/gitoxide",
+    # "https://github.com/denoland/deno",
+    # "https://github.com/tauri-apps/tauri",
+    # "https://github.com/FuelLabs/sway",
+    # "https://github.com/FuelLabs/fuel-core",
+    # "https://github.com/alacritty/alacritty",
+    # "https://github.com/rust-lang/rustlings",
+    # "https://github.com/zed-industries/zed",
+    # "https://github.com/lencx/ChatGPT",
+    # "https://github.com/sharkdp/bat",
+    # "https://github.com/BurntSushi/ripgrep",
+    # "https://github.com/meilisearch/meilisearch",
+    # "https://github.com/starship/starship",
+    # "https://github.com/FuelLabs/fuels-rs",
+    # "https://github.com/dani-garcia/vaultwarden",
+    # "https://github.com/bevyengine/bevy",
+    # "https://github.com/pdm-project/pdm",
+    # "https://github.com/typst/typst",
+    # "https://github.com/helix-editor/helix",
+    # "https://github.com/sharkdp/fd",
+    # "https://github.com/charliermarsh/ruff",
+    # "https://github.com/lapce/lapce",
+    # "https://github.com/tw93/Pake",
+    # "https://github.com/nushell/nushell",
+    # "https://github.com/pola-rs/polars",
+    # "https://github.com/swc-project/swc",
+    # "https://github.com/influxdata/influxdb",
+    # "https://github.com/TabbyML/tabby",
+    # "https://github.com/servo/servo",
+    # "https://github.com/wasmerio/wasmer",
+    # "https://github.com/ogham/exa",
+    # "https://github.com/diem/diem",
+    # "https://github.com/EmbarkStudios/texture-synthesis",
+    # "https://github.com/EmbarkStudios/kajiya",
+    # "https://github.com/EmbarkStudios/rust-gpu",
+    # "https://github.com/paritytech/substrate",
+    # "https://github.com/wasmEdge/wasmedge",
+    # "https://github.com/XAMPPRocky/tokei",
+    # "https://github.com/quickwit-oss/tantivy",
+    # "https://github.com/facebook/relay",
+    # "https://github.com/boa-dev/boa",
+    # "https://github.com/rerun-io/rerun",
+    # "https://github.com/containers/podman",
+    # "https://github.com/hyperium/tonic",
+    # "https://github.com/tokio-rs/axum",
+    # "https://github.com/cross-rs/cross",
+    # "https://github.com/pyroscope-io/pyroscope",
+    # "https://github.com/bottlerocket-os/bottlerocket",
+    # "https://github.com/vectordotdev/vector"
 ]
 
 if __name__ == "__main__":
