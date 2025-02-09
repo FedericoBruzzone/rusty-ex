@@ -121,10 +121,15 @@ def analyze(repo_name, reset_cargo=False):
         while not process.poll() and (time.time() - start_time) < 600: # 10 minutes timeout
             max_mem = max(max_mem, max_memory())
             time.sleep(0.01)
+        if not process.poll():
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+            printt(f"Error: {repo_name} timed out.")
+            os.chdir("..")
+            return result
         stdout, stderr = process.communicate()
-    except subprocess.TimeoutExpired:
+    except Exception:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        printt(f"Error: {repo_name} timed out.")
+        printt(f"Error: {repo_name} crashed.")
         os.chdir("..")
         return result
 
