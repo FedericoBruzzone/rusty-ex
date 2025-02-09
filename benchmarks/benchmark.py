@@ -9,10 +9,15 @@ from datetime import datetime
 import signal
 import psutil
 import io
+import sys
 
 # print with timestamp
 def printt(message):
     print(f"[{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {message}")
+
+# print with timestamp on stderr
+def eprintt(message):
+    print(f"[{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}] {message}", file=sys.stderr)
 
 # get the number of stars of a GitHub repository
 def get_github_stars(repo_url):
@@ -24,7 +29,7 @@ def get_github_stars(repo_url):
         data = response.json()
         return data.get("stargazers_count", 0)
     except Exception as e:
-        printt(f"Error fetching GitHub stars: {e}")
+        eprintt(f"Error fetching GitHub stars: {e}")
         return None
 
 # get the number of downloads of a crate from crates.io
@@ -36,7 +41,7 @@ def get_cratesio_downloads(crate_name):
         data = response.json()
         return data.get("crate", {}).get("downloads", 0)
     except Exception as e:
-        printt(f"Error fetching crates.io downloads: {e}")
+        eprintt(f"Error fetching crates.io downloads: {e}")
         return None
 
 # return and parse Cargo.toml file
@@ -48,7 +53,7 @@ def parse_cargo_toml(subdir="."):
             with open(cargo_toml, "r") as f:
                 return toml.load(f)
         except Exception as e:
-            printt(f"Error reading Cargo.toml: {e}")
+            eprintt(f"Error reading Cargo.toml: {e}")
 
 # expand members with wildcard
 def expand_members(repo_name, members):
@@ -59,7 +64,7 @@ def expand_members(repo_name, members):
             if os.path.exists(member_dir):
                 expanded_members.extend([os.path.join(member[:-2], subdir) for subdir in os.listdir(member_dir) if os.path.isdir(os.path.join(member_dir, subdir))])
             else:
-                printt(f"Warning: Directory {member_dir} does not exist.")
+                eprintt(f"Warning: Directory {member_dir} does not exist.")
         else:
             expanded_members.append(member)
     return expanded_members
@@ -83,7 +88,7 @@ def max_memory():
 
 # analyze the folder at `repo_name` and return a list of result dicts
 def analyze(repo_name, reset_cargo=False):
-    printt(f"Analyzing {repo_name}.")
+    eprintt(f"Analyzing {repo_name}.")
 
     os.chdir(repo_name)
 
@@ -108,7 +113,7 @@ def analyze(repo_name, reset_cargo=False):
             os.rename("Cargo.toml", "Cargo.toml.bak")
             subprocess.run(["cargo", "init", "--name", "temp"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception as e:
-            printt(f"Error resetting Cargo.toml: {e}")
+            eprintt(f"Error resetting Cargo.toml: {e}")
             os.chdir("..")
             return result
     subprocess.run(["cargo", "clean"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -123,13 +128,13 @@ def analyze(repo_name, reset_cargo=False):
             time.sleep(0.01)
         if not process.poll():
             os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-            printt(f"Error: {repo_name} timed out.")
+            eprintt(f"Error: {repo_name} timed out.")
             os.chdir("..")
             return result
         stdout, stderr = process.communicate()
     except Exception:
         os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        printt(f"Error: {repo_name} crashed.")
+        eprintt(f"Error: {repo_name} crashed.")
         os.chdir("..")
         return result
 
@@ -153,7 +158,7 @@ def analyze(repo_name, reset_cargo=False):
         }
 
     except json.JSONDecodeError:
-        printt(f"Error: Line is not a valid JSON.")
+        eprintt(f"Error: Line is not a valid JSON.")
         os.chdir("..")
         return result
 
@@ -166,7 +171,7 @@ def analyze_members(repo_name, members):
     for member in members:
         try:
             if not os.path.exists(f"{repo_name}/{member}"):
-                printt(f"Error: Member {member} does not exist.")
+                eprintt(f"Error: Member {member} does not exist.")
                 continue
 
             base = "MEMBER-" + os.path.basename(member)
@@ -179,13 +184,13 @@ def analyze_members(repo_name, members):
             shutil.rmtree(base)
 
         except Exception as e:
-            printt(f"Error analyzing member {member}: {e}")
+            eprintt(f"Error analyzing member {member}: {e}")
             continue
     return results
 
 # format the results as a LaTeX row
 def latex_format(results):
-    print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
+    # print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
 
     formatted = []
 
@@ -221,14 +226,14 @@ def main(repo_url):
         if os.path.exists(repo_name):
             shutil.rmtree(repo_name)
 
-        printt(f"Cloning the repository from {repo_url}.")
+        eprintt(f"Cloning the repository from {repo_url}.")
         subprocess.run(["git", "clone", "--recurse-submodules", "-j8", repo_url], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         cargo_toml = parse_cargo_toml(repo_name)
         members = cargo_toml.get("workspace", {}).get("members", [])
         members = expand_members(repo_name, members)
 
-        printt(f"Members: {members}")
+        eprintt(f"Members: {members}")
 
         results = []
 
@@ -242,7 +247,7 @@ def main(repo_url):
         print(latex_format(results))
 
     except Exception as e:
-        printt(f"Error: {e}")
+        eprintt(f"Error: {e}")
 
 TO_ANALYZE = [
     # "https://github.com/rustdesk/rustdesk",
