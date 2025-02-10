@@ -4,7 +4,7 @@ use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 use std::cmp::Eq;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::panic;
@@ -22,7 +22,7 @@ pub struct Feature {
 }
 
 /// Complex feature: none, a single feature (not included), all features, or any feature
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum ComplexFeature {
     None,
     Feature(Feature),
@@ -131,7 +131,7 @@ pub struct FeatureNode {
     pub weight: Option<f64>,
     /// If this feature has some siblings, they must be satisfied (all), so we must track
     /// the nature of each single feature.
-    pub complex_feature: Vec<ComplexFeature>,
+    pub complex_feature: HashSet<ComplexFeature>,
 }
 
 /// Features graph: the actual graph and a map to get the index of a feature node from its key
@@ -310,7 +310,7 @@ impl FeaturesGraph {
         &mut self,
         feature: FeatureKey,
         weight: Option<f64>,
-        complex_feature: Vec<ComplexFeature>,
+        complex_feature: HashSet<ComplexFeature>,
     ) -> FeatureIndex {
         if let Some(index) = self.nodes.get(&feature) {
             return *index;
@@ -379,7 +379,7 @@ impl Default for FeaturesGraph {
 
 impl<T> ToPropFormula<T> for FeaturesGraph {
     fn to_prop_formula(&self) -> PropFormula<T> {
-        let mut cnf = CnfFormula::new();
+        // let mut cnf = CnfFormula::new();
 
         todo!()
     }

@@ -343,10 +343,15 @@ impl CollectVisitor {
             AstIndex::new(GLOBAL_NODE_INDEX),
             "Error: global AST node has an index != 0"
         );
+        let mut complex_feature = HashSet::new();
+        assert_eq!(
+            complex_feature.insert(ComplexFeature::Feature(feature.clone())),
+            true
+        );
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(feature.clone())],
+            complex_feature,
         );
         assert_eq!(
             index,
@@ -371,10 +376,15 @@ impl CollectVisitor {
             name: GLOBAL_DUMMY_NAME.to_string(),
             not: false,
         };
+        let mut complex_feature = HashSet::new();
+        assert_eq!(
+            complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())),
+            true
+        );
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(dummy_feature)],
+            complex_feature,
         );
         assert_eq!(
             index,
@@ -408,8 +418,8 @@ impl CollectVisitor {
                     let feature = Feature { name, not };
                     self.features_graph.create_node(
                         FeatureKey(feature.clone()),
-                        None,   // to be valued later
-                        vec![], // to be valued later
+                        None,           // to be valued later
+                        HashSet::new(), // to be valued later
                     );
 
                     features.push(ComplexFeature::Feature(feature));
@@ -446,8 +456,8 @@ impl CollectVisitor {
                     };
                     self.features_graph.create_node(
                         FeatureKey(feature.clone()),
-                        None,   // to be valued later
-                        vec![], // to be valued later
+                        None,           // to be valued later
+                        HashSet::new(), // to be valued later
                     );
                     features.push(ComplexFeature::Feature(feature));
                 }
@@ -791,7 +801,7 @@ impl CollectVisitor {
                         child_node.weight = Some(*child_weight);
                         child_node
                             .complex_feature
-                            .push(child_ast_node.features.clone());
+                            .insert(child_ast_node.features.clone());
 
                         self.features_graph.graph.add_edge(
                             *child_index,
