@@ -244,7 +244,11 @@ def main(repo_url):
 
         shutil.rmtree(repo_name)
 
-        print(latex_format(results))
+        with open("results.json", "w") as f:
+            json.dump(results, f, indent=4)
+
+        with open("results.tex", "w") as f:
+            f.write(latex_format(results))
 
     except Exception as e:
         eprintt(f"Error: {e}")
