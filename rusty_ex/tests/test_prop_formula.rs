@@ -4,7 +4,7 @@ mod utils;
 
 use pretty_assertions::assert_eq;
 use rusty_ex::configs::prop_formula::PropFormula;
-use rusty_ex::configs::Cnf;
+use rusty_ex::configs::CnfFormula;
 use utils::bx;
 
 #[test]
@@ -293,7 +293,7 @@ fn test_to_cnf_repr() -> Result<(), String> {
     let mut prop_formula = Or(vec![Var(0), And(vec![Var(1), Var(2)])]);
 
     // (P | Q) & (P | R)
-    let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
+    let cnf: CnfFormula<u32> = prop_formula.to_cnf_repr();
 
     assert_eq!(cnf, [[(0, true), (1, true)], [(0, true), (2, true)]]);
 
@@ -308,7 +308,7 @@ fn test_to_cnf_repr_2() -> Result<(), String> {
     let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
 
     // (!P | Q) & (!Q | P)
-    let cnf: Cnf<u32> = prop_formula.to_cnf_repr();
+    let cnf: CnfFormula<u32> = prop_formula.to_cnf_repr();
 
     assert_eq!(cnf, [[(0, false), (1, true)], [(1, false), (0, true)]]);
 

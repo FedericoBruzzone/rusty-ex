@@ -6,7 +6,7 @@ use rusty_ex::types::*;
 use rusty_ex::{
     GLOBAL_DUMMY_INDEX, GLOBAL_DUMMY_NAME, GLOBAL_FEATURE_NAME, GLOBAL_NODE_ID, GLOBAL_NODE_INDEX,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 
 pub struct SuperCollector {
@@ -46,10 +46,12 @@ impl SuperCollector {
             "Error: global AST node has an index != 0"
         );
 
+        let mut complex_feature = HashSet::new();
+        assert_eq!(complex_feature.insert(features.clone()), true);
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(feature.clone())],
+            complex_feature,
         );
         assert_eq!(
             index,
@@ -78,10 +80,15 @@ impl SuperCollector {
             name: GLOBAL_DUMMY_NAME.to_string(),
             not: false,
         };
+        let mut complex_feature = HashSet::new();
+        assert_eq!(
+            complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())),
+            true
+        );
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
-            vec![ComplexFeature::Feature(dummy_feature)],
+            complex_feature,
         );
         assert_eq!(
             index,
