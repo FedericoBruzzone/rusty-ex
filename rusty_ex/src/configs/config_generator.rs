@@ -27,10 +27,8 @@ where
     /// Add a clause to the solver.
     ///
     /// For instance:
-    /// ```rust
-    /// vec![(0, true), (1, false), (2, true)]
-    /// ```
-    /// is the clause `(x0 | !x1 | x2)` in DIMACS format.
+    ///
+    /// `vec![(0, true), (1, false), (2, true)]` is the clause `(x0 | !x1 | x2)` in DIMACS format.
     fn add_clause(&mut self, clause: CnfClause<u32>) -> &mut Self {
         let mut c = Clause::new();
         for (var, neg) in clause {
@@ -43,12 +41,8 @@ where
     /// Add a CNF to the solver.
     ///
     /// For instance:
-    /// ```rust
-    /// vec![
-    ///     vec![(0, true), (1, false), (2, true)],
-    ///     vec![(0, false), (1, true)],
-    /// ]
-    /// is the CNF `((x0 | !x1 | x2) & (!x0 | x1))` in DIMACS format.
+    ///
+    /// `vec![ vec![(0, true), (1, false), (2, true)], vec![(0, false), (1, true)]]` is the CNF `((x0 | !x1 | x2) & (!x0 | x1))` in DIMACS format.
     pub fn add_cnf(&mut self, cnf: CnfFormula<u32>) {
         for clause in cnf {
             self.add_clause(clause);
@@ -57,10 +51,8 @@ where
     /// This function finds all the configurations that satisfy the given variable.
     ///
     /// For instance:
-    /// ```rust
-    /// (0, true)
-    /// ```
-    /// is the variable `x0` that must be true.
+    ///
+    /// `(0, true)` is the variable `x0` that must be true.
     pub fn all_configs_given_a_var(&mut self, var: CnfLit<u32>) -> CnfFormula<u32> {
         // Set the variable to the given value.
         self.add_clause(vec![var]);
