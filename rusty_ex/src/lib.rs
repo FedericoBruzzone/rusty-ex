@@ -35,31 +35,31 @@ pub struct RustcEx;
 // detail is up to you.
 #[derive(Parser, Serialize, Deserialize, Debug, Default)]
 pub struct PrintAstArgs {
-    /// Pass --print-ast-graph to print the DOT graph
+    /// Pass --print-terms-tree to print the Terms Tree in DOT format
     #[clap(long)]
-    print_ast_graph: bool,
+    print_terms_tree: bool,
 
-    /// Pass --print-features-multigraph to print the DOT graph
+    /// Pass --print-features-multigraph to print the Features Graph before squashing edges in DOT format
     #[clap(long)]
     print_features_multigraph: bool,
 
-    /// Pass --print-features-graph to print the DOT graph
+    /// Pass --print-features-graph to print the Features Graph in DOT format
     #[clap(long)]
     print_features_graph: bool,
 
-    /// Pass --print-artifacts-graph to print the DOT graph
+    /// Pass --print-artifacts-tree to print the Artifacts Tree in DOT format
     #[clap(long)]
-    print_artifacts_graph: bool,
+    print_artifacts_tree: bool,
 
-    /// Pass --print-crate to print the crate
+    /// Pass --print-crate to print the crate AST
     #[clap(long)]
     print_crate: bool,
 
-    /// Pass --print-centrality to print some feature graph centrality
+    /// Pass --print-centrality to print some centrality measures on Features Graph
     #[clap(long)]
     print_centrality: bool,
 
-    /// Pass --print-serialized-graphs to print all extracted data serialized
+    /// Pass --print-serialized-graphs to print all extracted graphs serialized
     #[clap(long)]
     print_serialized_graphs: bool,
 
@@ -140,8 +140,8 @@ impl PrintAstCallbacks {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
-        if self.args.print_ast_graph {
-            collector.ast_graph.print_dot();
+        if self.args.print_terms_tree {
+            collector.terms_tree.print_dot();
         }
         if self.args.print_features_graph {
             collector.squash_feature_graph_edges().print_dot();
@@ -149,8 +149,8 @@ impl PrintAstCallbacks {
         if self.args.print_features_multigraph {
             collector.features_graph.print_dot();
         }
-        if self.args.print_artifacts_graph {
-            collector.artifacts_graph.print_dot();
+        if self.args.print_artifacts_tree {
+            collector.artifacts_tree.print_dot();
         }
         if self.args.print_centrality {
             collector.print_centrality();
@@ -239,9 +239,9 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                     node_id_incr: 1, // 0 is reserved for global scope
                     stack: Vec::new(),
 
-                    ast_graph: AstGraph::new(),
+                    terms_tree: TermsTree::new(),
                     features_graph: FeaturesGraph::new(),
-                    artifacts_graph: ArtifactsGraph::new(),
+                    artifacts_tree: ArtifactsTree::new(),
 
                     idents_weights: HashMap::new(),
                     weights_to_resolve: LinkedHashSet::new(),
@@ -250,18 +250,18 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 // initialize global scope (global feature and artifact)
                 collector.init_global_scope();
 
-                // visit AST and build AST graph
+                // visit AST and build Terms Tree (UIR)
                 collector.visit_crate(krate);
 
-                // build features and artifacts graphs visiting AST graph
+                // build features and artifacts tree visiting Terms Tree
                 collector.build_feat_graph();
                 collector.build_arti_graph();
 
-                // calculate weights of AST nodes
-                collector.ast_graph.graph.reverse(); // reverse graph
-                collector.rec_weight_ast_graph(AstIndex::new(GLOBAL_NODE_INDEX));
+                // calculate weights of Terms
+                collector.terms_tree.graph.reverse(); // reverse graph
+                collector.rec_weight_terms_tree(TermIndex::new(GLOBAL_NODE_INDEX));
                 collector.resolve_weights_in_wait();
-                collector.ast_graph.graph.reverse(); // restore graph
+                collector.terms_tree.graph.reverse(); // restore graph
 
                 collector.add_dummy_centrality_node_edges();
 
@@ -277,7 +277,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 pub const GLOBAL_NODE_ID: NodeId = NodeId::from_u32(4294967039);
 /// Constant for the global feature name
 pub const GLOBAL_FEATURE_NAME: &str = "__GLOBAL__";
-/// Index of the global ASTNode/Feature/Artifact in the graphs
+/// Index of the global Term/Feature/Artifact in the graphs
 pub const GLOBAL_NODE_INDEX: usize = 0;
 
 /// Constant for the global dummy node name
@@ -285,30 +285,30 @@ pub const GLOBAL_DUMMY_NAME: &str = "__DUMMY__";
 /// Index of the dummy feature node in the features graph
 pub const GLOBAL_DUMMY_INDEX: usize = 1;
 
-/// Weight assigned to AST nodes that cannot be resolved
-pub const RECOVERY_WEIGHT: NodeWeight = NodeWeight::Weight(7.0); // TODO: this should be the mean of all external function weights. This, of course, needs to be calculated a priori and passed as an argument. For now, we use `7.0` because of its intrinsic beauty.
+/// Weight assigned to Term nodes that cannot be resolved
+pub const RECOVERY_WEIGHT: TermWeight = TermWeight::Weight(7.0); // TODO: this should be the mean of all external function weights. This, of course, needs to be calculated a priori and passed as an argument. For now, we use `7.0` because of its intrinsic beauty.
 
 /// AST visitor to collect data to build the graphs
 pub struct CollectVisitor {
     /// NodeId in nodes are not resolved yet, so we need to increment it manually
     node_id_incr: u32,
-    /// Stack to keep track of the AST nodes dependencies
-    stack: Vec<(AstIndex, ComplexFeature)>,
+    /// Stack to keep track of the terms dependencies
+    stack: Vec<(TermIndex, ComplexFeature)>,
 
-    /// Relationships between all nodes of the AST (both annotated or not)
-    ast_graph: AstGraph<SimpleAstKey>,
+    /// Relationships between all terms (all pieces of code annotated or not)
+    terms_tree: TermsTree<SimpleTermKey>,
     /// Multigraph storing relationships between features
     features_graph: FeaturesGraph,
-    /// Graph storing only annotated artifacts (AST nodes with features)
-    artifacts_graph: ArtifactsGraph<SimpleArtifactKey>,
+    /// Relationships between all artifacts (terms nodes with features)
+    artifacts_tree: ArtifactsTree<SimpleArtifactKey>,
 
-    /// Weights of the already weighted idents (needed to weight the Calls).
+    /// Weights of the already weighted idents (needed to weight the References).
     /// The weights for a single ident can be multiple, because a function can
     /// be defined multiple times (with different #[cfg] attributes)
     idents_weights: HashMap<String, Vec<f64>>,
-    /// Weights of the ASTNodes that are waiting for something to be resolved.
+    /// Terms that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
-    weights_to_resolve: LinkedHashSet<AstIndex>,
+    weights_to_resolve: LinkedHashSet<TermIndex>,
 }
 
 impl CollectVisitor {
@@ -320,7 +320,7 @@ impl CollectVisitor {
         NodeId::from_u32(node_id)
     }
 
-    /// Initialize the global scope (AST node, feature node, artifact node)
+    /// Initialize the global scope (term node, feature node, artifact node)
     fn init_global_scope(&mut self) {
         let ident = Some(GLOBAL_FEATURE_NAME.to_string());
         let node_id = GLOBAL_NODE_ID;
@@ -331,17 +331,17 @@ impl CollectVisitor {
         let features = ComplexFeature::Feature(feature.clone());
         let artifact = SimpleArtifactKey(node_id);
 
-        let index = self.ast_graph.create_node(
-            SimpleAstKey(node_id),
+        let index = self.terms_tree.create_node(
+            SimpleTermKey(node_id),
             ident.clone(),
             features.clone(),
-            NodeWeightKind::Children("Global".to_string()),
-            NodeWeight::ToBeCalculated,
+            TermWeightKind::Children("Global".to_string()),
+            TermWeight::ToBeCalculated,
         );
         assert_eq!(
             index,
-            AstIndex::new(GLOBAL_NODE_INDEX),
-            "Error: global AST node has an index != 0"
+            TermIndex::new(GLOBAL_NODE_INDEX),
+            "Error: global term node has an index != 0"
         );
         let mut complex_feature = HashSet::new();
         assert_eq!(
@@ -358,12 +358,12 @@ impl CollectVisitor {
             FeatureIndex::new(GLOBAL_NODE_INDEX),
             "Error: global feature node has an index != 0"
         );
-        let index = self.artifacts_graph.create_node(
+        let index = self.artifacts_tree.create_node(
             artifact,
             ident,
             ComplexFeature::Feature(feature.clone()),
             self.rec_features_to_indexes(&features),
-            NodeWeight::ToBeCalculated,
+            TermWeight::ToBeCalculated,
         );
         assert_eq!(
             index,
@@ -389,7 +389,7 @@ impl CollectVisitor {
         assert_eq!(
             index,
             FeatureIndex::new(GLOBAL_NODE_INDEX),
-            "Error: global AST node has an index != 0"
+            "Error: global term node has an index != 0"
         );
 
         self.features_graph.graph.add_edge(
@@ -491,33 +491,33 @@ impl CollectVisitor {
         }
     }
 
-    /// Update the AST node with the found features and create the dependency (edge)
-    /// in the AST graph. The parent ASTNode should already exist (anothe node or global scope)
-    fn update_ast_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
+    /// Update the term node with the found features and create the dependency (edge)
+    /// in the Terms Tree. The parent TermNode should already exist (anothe node or global scope)
+    fn update_term_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
         // update the node with the found and weighted cfgs
-        let node_index: &AstIndex = self
-            .ast_graph
+        let node_index: &TermIndex = self
+            .terms_tree
             .nodes
-            .get(&SimpleAstKey(node_id))
-            .expect("Error: cannot find AST node updating features");
+            .get(&SimpleTermKey(node_id))
+            .expect("Error: cannot find Term node updating features");
 
-        self.ast_graph
+        self.terms_tree
             .graph
             .node_weight_mut(*node_index)
-            .expect("Error: cannot find AST node updating features")
+            .expect("Error: cannot find Term node updating features")
             .features = features;
 
         // create edge in the graph, to the parent or to the global scope
         match self.stack.last() {
             Some((parent_index, ..)) => {
-                self.ast_graph
+                self.terms_tree
                     .graph
                     .add_edge(*node_index, *parent_index, Edge { weight: 0.0 });
             }
             None => {
-                self.ast_graph.graph.add_edge(
+                self.terms_tree.graph.add_edge(
                     *node_index,
-                    AstIndex::new(GLOBAL_NODE_INDEX),
+                    TermIndex::new(GLOBAL_NODE_INDEX),
                     Edge { weight: 0.0 },
                 );
             }
@@ -551,61 +551,61 @@ impl CollectVisitor {
         indexes
     }
 
-    /// Initialize a new AST node and update the stack
-    fn pre_walk(&mut self, kind: NodeWeightKind, ident: Option<String>, node_id: NodeId) {
-        let ast_index = self.ast_graph.create_node(
-            SimpleAstKey(node_id),
+    /// Initialize a new Term node and update the stack
+    fn pre_walk(&mut self, kind: TermWeightKind, ident: Option<String>, node_id: NodeId) {
+        let term_index = self.terms_tree.create_node(
+            SimpleTermKey(node_id),
             ident,
             ComplexFeature::None,
             kind,
-            NodeWeight::ToBeCalculated,
+            TermWeight::ToBeCalculated,
         );
-        self.stack.push((ast_index, ComplexFeature::None));
+        self.stack.push((term_index, ComplexFeature::None));
     }
 
-    /// Extract the features of the AST node from the stack and update the AST graph
+    /// Extract the features of the Term node from the stack and update the Terms Tree
     fn post_walk(&mut self, node_id: NodeId) {
         let (node_index, features) = self
             .stack
             .pop()
             .expect("Error: stack is empty while in expression");
 
-        let ast_node = self
-            .ast_graph
+        let term_node = self
+            .terms_tree
             .graph
             .node_weight_mut(node_index)
             .expect("Error: missing node post AST walk");
 
         assert_eq!(
-            node_id, ast_node.node_id.0,
+            node_id, term_node.node_id.0,
             "Error: node id mismatch post AST walk"
         );
 
         // create artifact if some features are found
         if features != ComplexFeature::None {
-            let ident = ast_node.ident.clone();
+            let ident = term_node.ident.clone();
             // convert features to index of the features (the features node already exist)
             let features_indexes = self.rec_features_to_indexes(&features);
 
-            self.artifacts_graph.create_node(
+            self.artifacts_tree.create_node(
                 SimpleArtifactKey(node_id),
                 ident,
                 features.clone(),
                 features_indexes,
-                NodeWeight::ToBeCalculated,
+                TermWeight::ToBeCalculated,
             );
         }
 
         // insert found features in node
-        self.update_ast_node_features(node_id, features);
+        self.update_term_node_features(node_id, features);
     }
 
     /// Recursively fet the first parent node with features. The only node with no
     /// annotated parents is the global scope
     fn rec_get_annotated_parent(
-        graph: &DiGraph<AstNode<SimpleAstKey>, Edge>,
-        start_index: AstIndex,
-    ) -> Option<AstIndex> {
+        graph: &DiGraph<TermNode<SimpleTermKey>, Edge>,
+        start_index: TermIndex,
+    ) -> Option<TermIndex> {
         // global node (no parents)
         if start_index == NodeIndex::new(GLOBAL_NODE_INDEX) {
             return None;
@@ -632,8 +632,8 @@ impl CollectVisitor {
         }
     }
 
-    /// Recursively weight (in place) the AST nodes in the AST graph, starting from the global node
-    fn rec_weight_ast_graph(&mut self, start_index: AstIndex) -> NodeWeight {
+    /// Recursively weight (in place) the Term nodes in the Terms Tree, starting from the global node
+    fn rec_weight_terms_tree(&mut self, start_index: TermIndex) -> TermWeight {
         // TODO: ci sono altre cose fa considerare come Reference weight?
 
         // IMPORTANT! We cannot skip already weighted nodes because a re-evaluation may be needed.
@@ -642,49 +642,49 @@ impl CollectVisitor {
         // This works because the root (GLOBAL) is in Wait state until everything is resolved.
 
         let adjacents = self
-            .ast_graph
+            .terms_tree
             .graph
             .neighbors(start_index)
             .collect::<Vec<_>>()
             .into_iter()
-            .map(|index| self.rec_weight_ast_graph(index))
+            .map(|index| self.rec_weight_terms_tree(index))
             .collect::<Vec<_>>();
 
         let mut child_weight = 0.0;
         for adj_weight in adjacents {
             match adj_weight {
-                NodeWeight::ToBeCalculated => {
-                    panic!("Error: recursion not working while weighting AST graph")
+                TermWeight::ToBeCalculated => {
+                    panic!("Error: recursion not working while weighting Terms Tree")
                 }
-                NodeWeight::Wait(dep) => {
-                    self.update_weight(start_index, NodeWeight::Wait(dep.clone()));
+                TermWeight::Wait(dep) => {
+                    self.update_weight(start_index, TermWeight::Wait(dep.clone()));
                     self.weights_to_resolve.insert(start_index);
-                    return NodeWeight::Wait(dep);
+                    return TermWeight::Wait(dep);
                 }
-                NodeWeight::Weight(w) => child_weight += w,
+                TermWeight::Weight(w) => child_weight += w,
             }
         }
 
         let weight = match &self
-            .ast_graph
+            .terms_tree
             .graph
             .node_weight(start_index)
-            .expect("Error: cannot find AST node weighting AST graph")
+            .expect("Error: cannot find Term node weighting Terms Tree")
             .weight_kind
         {
-            NodeWeightKind::Intrinsic(..) => NodeWeight::Weight(1.0 + child_weight),
-            NodeWeightKind::Children(..) => NodeWeight::Weight(child_weight),
-            NodeWeightKind::Reference(.., Some(to)) => match self.idents_weights.get(to) {
-                Some(vec_fn_weight) => NodeWeight::Weight(
+            TermWeightKind::Intrinsic(..) => TermWeight::Weight(1.0 + child_weight),
+            TermWeightKind::Children(..) => TermWeight::Weight(child_weight),
+            TermWeightKind::Reference(.., Some(to)) => match self.idents_weights.get(to) {
+                Some(vec_fn_weight) => TermWeight::Weight(
                     (vec_fn_weight.iter().sum::<f64>() / vec_fn_weight.len() as f64) + child_weight,
                 ),
                 None => {
                     self.weights_to_resolve.insert(start_index);
-                    NodeWeight::Wait(to.to_string())
+                    TermWeight::Wait(to.to_string())
                 }
             },
-            NodeWeightKind::Reference(.., None) => NodeWeight::Weight(child_weight),
-            NodeWeightKind::No(..) => NodeWeight::Weight(0.0),
+            TermWeightKind::Reference(.., None) => TermWeight::Weight(child_weight),
+            TermWeightKind::No(..) => TermWeight::Weight(0.0),
         };
 
         self.update_weight(start_index, weight.clone());
@@ -710,72 +710,72 @@ impl CollectVisitor {
             seen.insert((cur_index, self.weights_to_resolve.len()));
 
             // try to weight the node, if it's not possible, it will be added again to the queue
-            self.rec_weight_ast_graph(cur_index);
+            self.rec_weight_terms_tree(cur_index);
         }
     }
 
-    /// Update the weight of the AST node.
+    /// Update the weight of the Term node.
     /// Remove the updated node from nodes in wait (only if the weight is not a Wait).
     /// Add the weight to the `idents_weights` map if the node has an ident
-    fn update_weight(&mut self, ast_index: AstIndex, weight: NodeWeight) {
-        let ast_node = self
-            .ast_graph
+    fn update_weight(&mut self, term_index: TermIndex, weight: TermWeight) {
+        let term_node = self
+            .terms_tree
             .graph
-            .node_weight_mut(ast_index)
-            .expect("Error: cannot find AST node updating weight");
+            .node_weight_mut(term_index)
+            .expect("Error: cannot find Term node updating weight");
 
-        if ast_node.features != ComplexFeature::None {
+        if term_node.features != ComplexFeature::None {
             let artifact_index = self
-                .artifacts_graph
+                .artifacts_tree
                 .nodes
-                .get(&SimpleArtifactKey(ast_node.node_id.0))
+                .get(&SimpleArtifactKey(term_node.node_id.0))
                 .expect("Error: cannot find artifact index updating weight");
             let artifact_node = self
-                .artifacts_graph
+                .artifacts_tree
                 .graph
                 .node_weight_mut(*artifact_index)
                 .expect("Error: cannot find artifact node updating weight");
             artifact_node.weight = weight.clone();
         }
 
-        ast_node.weight = weight.clone();
+        term_node.weight = weight.clone();
 
         // remove from nodes in wait
-        if let NodeWeight::Weight(..) = weight {
-            self.weights_to_resolve.remove(&ast_index);
+        if let TermWeight::Weight(..) = weight {
+            self.weights_to_resolve.remove(&term_index);
         }
 
         // add to idents map if it has an ident
-        if let (NodeWeight::Weight(weight), Some(ident)) = (weight, ast_node.ident.clone()) {
+        if let (TermWeight::Weight(weight), Some(ident)) = (weight, term_node.ident.clone()) {
             self.idents_weights.entry(ident).or_default().push(weight);
         }
     }
 
-    /// Build the features graph from the AST graph
+    /// Build the features graph from the Terms Tree
     fn build_feat_graph(&mut self) {
-        self.ast_graph
+        self.terms_tree
             .nodes
             .iter()
             // ignore global node
             .filter(|(_, node_index)| *node_index != &NodeIndex::new(GLOBAL_NODE_INDEX))
-            .for_each(|(.., child_ast_index)| {
-                let child_ast_node = &self
-                    .ast_graph
+            .for_each(|(.., child_term_index)| {
+                let child_term_node = &self
+                    .terms_tree
                     .graph
-                    .node_weight(*child_ast_index)
+                    .node_weight(*child_term_index)
                     .expect("Error: cannot find child node creating features graph");
-                let child_features = CollectVisitor::rec_weight_feature(&child_ast_node.features);
+                let child_features = CollectVisitor::rec_weight_feature(&child_term_node.features);
 
-                let parent_ast_index = CollectVisitor::rec_get_annotated_parent(
-                    &self.ast_graph.graph,
-                    *child_ast_index,
+                let parent_term_index = CollectVisitor::rec_get_annotated_parent(
+                    &self.terms_tree.graph,
+                    *child_term_index,
                 )
                 .expect("Error: cannot find parent creating features graph");
                 let parent_features = CollectVisitor::rec_weight_feature(
                     &self
-                        .ast_graph
+                        .terms_tree
                         .graph
-                        .node_weight(parent_ast_index)
+                        .node_weight(parent_term_index)
                         .expect("Error: cannot find parent node creating features graph")
                         .features,
                 );
@@ -801,7 +801,7 @@ impl CollectVisitor {
                         child_node.weight = Some(*child_weight);
                         child_node
                             .complex_feature
-                            .insert(child_ast_node.features.clone());
+                            .insert(child_term_node.features.clone());
 
                         self.features_graph.graph.add_edge(
                             *child_index,
@@ -818,9 +818,9 @@ impl CollectVisitor {
             });
     }
 
-    /// Build the artifacts graph from the AST graph
+    /// Build the artifacts tree from the Terms Tree
     fn build_arti_graph(&mut self) {
-        self.ast_graph
+        self.terms_tree
             .nodes
             .iter()
             // ignore global node
@@ -828,7 +828,7 @@ impl CollectVisitor {
             // ignore nodes with no features
             .filter(|(.., node_index)| {
                 let child_node = &self
-                    .ast_graph
+                    .terms_tree
                     .graph
                     .node_weight(**node_index)
                     .expect("Error: cannot find child node creating features graph");
@@ -836,40 +836,40 @@ impl CollectVisitor {
                 child_node.features != ComplexFeature::None
             })
             // get first annotated parent for each node
-            // the index is in the AST graph, not in the artifacts graph
+            // the index is in the Terms Tree, not in the artifacts tree
             .map(|(.., child_index)| {
                 let parent_index =
-                    CollectVisitor::rec_get_annotated_parent(&self.ast_graph.graph, *child_index)
+                    CollectVisitor::rec_get_annotated_parent(&self.terms_tree.graph, *child_index)
                         .expect("Error: cannot find parent creating features graph");
 
                 (child_index, parent_index)
             })
-            // add edge between child and parent in the artifacts graph
-            // we need to convert the AstIndex to the ArtifactIndex
-            .for_each(|(child_ast_index, parent_ast_index)| {
-                let child_ast_node = &self
-                    .ast_graph
+            // add edge between child and parent in the artifacts tree
+            // we need to convert the TermIndex to the ArtifactIndex
+            .for_each(|(child_term_index, parent_term_index)| {
+                let child_term_node = &self
+                    .terms_tree
                     .graph
-                    .node_weight(*child_ast_index)
+                    .node_weight(*child_term_index)
                     .expect("Error: cannot find child node creating features graph");
-                let parent_ast_node = &self
-                    .ast_graph
+                let parent_term_node = &self
+                    .terms_tree
                     .graph
-                    .node_weight(parent_ast_index)
+                    .node_weight(parent_term_index)
                     .expect("Error: cannot find parent node creating features graph");
 
                 let child_arti_index = self
-                    .artifacts_graph
+                    .artifacts_tree
                     .nodes
-                    .get(&SimpleArtifactKey(child_ast_node.node_id.0))
-                    .expect("Error: cannot find child artifact node creating artifacts graph");
+                    .get(&SimpleArtifactKey(child_term_node.node_id.0))
+                    .expect("Error: cannot find child artifact node creating artifacts tree");
                 let parent_arti_index = self
-                    .artifacts_graph
+                    .artifacts_tree
                     .nodes
-                    .get(&SimpleArtifactKey(parent_ast_node.node_id.0))
-                    .expect("Error: cannot find child artifact node creating artifacts graph");
+                    .get(&SimpleArtifactKey(parent_term_node.node_id.0))
+                    .expect("Error: cannot find child artifact node creating artifacts tree");
 
-                self.artifacts_graph.graph.add_edge(
+                self.artifacts_tree.graph.add_edge(
                     *child_arti_index,
                     *parent_arti_index,
                     Edge { weight: 0.0 },
@@ -933,9 +933,9 @@ impl CollectVisitor {
     /// Print all extracted graphs serialized
     fn print_serialized_graphs(&self) {
         let graphs = SimpleSerialization {
-            ast_graph: self.ast_graph.clone(),
+            terms_tree: self.terms_tree.clone(),
             features_graph: self.features_graph.clone(),
-            artifacts_graph: self.artifacts_graph.clone(),
+            artifacts_tree: self.artifacts_tree.clone(),
         };
 
         println!(
@@ -969,9 +969,9 @@ impl CollectVisitor {
     fn print_metadata(&self) {
         #[derive(Serialize)]
         struct Metadata {
-            ast_nodes: u32,
-            ast_edges: u32,
-            ast_height: u32,
+            term_nodes: u32,
+            term_edges: u32,
+            term_height: u32,
 
             features_nodes: u32,
             features_edges: u32,
@@ -982,9 +982,9 @@ impl CollectVisitor {
         }
 
         let metadata = Metadata {
-            ast_nodes: self.ast_graph.graph.node_count() as u32,
-            ast_edges: self.ast_graph.graph.edge_count() as u32,
-            ast_height: longest_path(&self.ast_graph.graph, |_| Ok::<i64, &str>(1))
+            term_nodes: self.terms_tree.graph.node_count() as u32,
+            term_edges: self.terms_tree.graph.edge_count() as u32,
+            term_height: longest_path(&self.terms_tree.graph, |_| Ok::<i64, &str>(1))
                 .expect("Error: cannot calculate longest path")
                 .expect("Error: cannot calculate longest path")
                 .1 as u32,
@@ -993,8 +993,8 @@ impl CollectVisitor {
             features_edges: self.features_graph.graph.edge_count() as u32,
             features_squashed_edges: self.squash_feature_graph_edges().graph.edge_count() as u32,
 
-            artifacts_nodes: self.artifacts_graph.graph.node_count() as u32,
-            artifacts_edges: self.artifacts_graph.graph.edge_count() as u32,
+            artifacts_nodes: self.artifacts_tree.graph.node_count() as u32,
+            artifacts_edges: self.artifacts_tree.graph.edge_count() as u32,
         };
 
         println!(
@@ -1067,7 +1067,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             if meta.name_or_empty() == Symbol::intern("rustex_cfg") {
                 if let MetaItemKind::List(ref list) = meta.kind {
                     match self.stack.pop() {
-                        Some((astnode_index, ComplexFeature::None)) => {
+                        Some((term_index, ComplexFeature::None)) => {
                             let parsed_features = self.rec_expand_features(list.to_vec(), false);
                             log::info!("Parsed features: {:?}", parsed_features);
 
@@ -1075,13 +1075,13 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                                 // This should be `unreachable!()` because in `rec_expand_features`
                                 // we always return at least one feature
                                 0 => {
-                                    self.stack.push((astnode_index, ComplexFeature::None));
+                                    self.stack.push((term_index, ComplexFeature::None));
                                 }
                                 // well-formed with built-in feature (we need the ignore): #[cfg(windows)]
                                 // well-formed with feature (we need the feature): #[cfg(feature = "a"))]
                                 1 => {
                                     self.stack
-                                        .push((astnode_index, parsed_features[0].to_owned()));
+                                        .push((term_index, parsed_features[0].to_owned()));
                                 }
                                 // malformed (panic): #[cfg(feature = "a", feature = "b")]
                                 _ => {
@@ -1107,7 +1107,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_expr(&mut self, cur_ex: &'ast Expr) {
         let ident = None;
         let node_id = self.get_node_id();
-        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
+        let kind_string = TermWeightKind::parse_kind_variant_name(format!("{:?}", &cur_ex.kind));
         let kind = match &cur_ex.kind {
             // children weight
             ExprKind::Array(..)
@@ -1137,7 +1137,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Struct(..)
             | ExprKind::Repeat(..)
             | ExprKind::Paren(..)
-            | ExprKind::Try(..) => NodeWeightKind::Children(kind_string),
+            | ExprKind::Try(..) => TermWeightKind::Children(kind_string),
 
             // reference weight
             ExprKind::Call(call, ..) => {
@@ -1151,11 +1151,11 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                     ),
                     _ => None,
                 };
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
             ExprKind::MethodCall(method_call) => {
                 let ident = Some(method_call.seg.ident.to_string());
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
             ExprKind::MacCall(mac_call) => {
                 let ident = Some(
@@ -1167,7 +1167,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
 
             // intrinsic weight
@@ -1180,14 +1180,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Yeet(..)
             | ExprKind::Become(..)
             | ExprKind::Path(..)
-            | ExprKind::Err(..) => NodeWeightKind::Intrinsic(kind_string),
+            | ExprKind::Err(..) => TermWeightKind::Intrinsic(kind_string),
 
             // no weight
             ExprKind::Underscore
             | ExprKind::OffsetOf(..)
             | ExprKind::IncludedBytes(..)
             | ExprKind::FormatArgs(..)
-            | ExprKind::Dummy => NodeWeightKind::No(kind_string),
+            | ExprKind::Dummy => TermWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1199,7 +1199,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_item(&mut self, cur_item: &'ast Item) {
         let ident = Some(cur_item.ident.to_string());
         let node_id = self.get_node_id();
-        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
+        let kind_string = TermWeightKind::parse_kind_variant_name(format!("{:?}", &cur_item.kind));
         let kind = match &cur_item.kind {
             // children weight
             ItemKind::Fn(..)
@@ -1210,7 +1210,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ItemKind::Impl(..)
             | ItemKind::Union(..)
             | ItemKind::TraitAlias(..)
-            | ItemKind::MacroDef(..) => NodeWeightKind::Children(kind_string),
+            | ItemKind::MacroDef(..) => TermWeightKind::Children(kind_string),
 
             // reference weight
             ItemKind::MacCall(mac_call) => {
@@ -1223,21 +1223,21 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
 
             // intrinsic weight
             ItemKind::Static(..)
             | ItemKind::Const(..)
             | ItemKind::GlobalAsm(..)
-            | ItemKind::TyAlias(..) => NodeWeightKind::Intrinsic(kind_string),
+            | ItemKind::TyAlias(..) => TermWeightKind::Intrinsic(kind_string),
 
             // no weight
             ItemKind::Use(..)
             | ItemKind::ExternCrate(..)
             | ItemKind::ForeignMod(..)
             | ItemKind::Delegation(..)
-            | ItemKind::DelegationMac(..) => NodeWeightKind::No(kind_string),
+            | ItemKind::DelegationMac(..) => TermWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1249,10 +1249,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_assoc_item(&mut self, cur_aitem: &'ast AssocItem, ctxt: AssocCtxt) -> Self::Result {
         let ident = Some(cur_aitem.ident.to_string());
         let node_id = self.get_node_id();
-        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
+        let kind_string = TermWeightKind::parse_kind_variant_name(format!("{:?}", &cur_aitem.kind));
         let kind = match &cur_aitem.kind {
             // children weight
-            AssocItemKind::Fn(..) => NodeWeightKind::Children(kind_string),
+            AssocItemKind::Fn(..) => TermWeightKind::Children(kind_string),
 
             // reference weight
             AssocItemKind::MacCall(mac_call) => {
@@ -1265,16 +1265,16 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
 
             // instrinsic weight
-            AssocItemKind::Const(..) => NodeWeightKind::Intrinsic(kind_string),
+            AssocItemKind::Const(..) => TermWeightKind::Intrinsic(kind_string),
 
             // no weight
-            AssocItemKind::Type(..) => NodeWeightKind::No(kind_string),
-            AssocItemKind::Delegation(..) => NodeWeightKind::No(kind_string),
-            AssocItemKind::DelegationMac(..) => NodeWeightKind::No(kind_string),
+            AssocItemKind::Type(..) => TermWeightKind::No(kind_string),
+            AssocItemKind::Delegation(..) => TermWeightKind::No(kind_string),
+            AssocItemKind::DelegationMac(..) => TermWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1286,10 +1286,10 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
     fn visit_stmt(&mut self, cur_stmt: &'ast Stmt) -> Self::Result {
         let ident = None;
         let node_id = self.get_node_id();
-        let kind_string = NodeWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
+        let kind_string = TermWeightKind::parse_kind_variant_name(format!("{:?}", &cur_stmt.kind));
         let kind = match &cur_stmt.kind {
             // children weight
-            StmtKind::Item(..) | StmtKind::Semi(..) => NodeWeightKind::Children(kind_string),
+            StmtKind::Item(..) | StmtKind::Semi(..) => TermWeightKind::Children(kind_string),
 
             // reference weight
             StmtKind::MacCall(mac_call) => {
@@ -1303,14 +1303,14 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                         .collect::<Vec<_>>()
                         .join("::"),
                 );
-                NodeWeightKind::Reference(kind_string, ident)
+                TermWeightKind::Reference(kind_string, ident)
             }
 
             // intrinsic weight
-            StmtKind::Let(..) | StmtKind::Expr(..) => NodeWeightKind::Intrinsic(kind_string),
+            StmtKind::Let(..) | StmtKind::Expr(..) => TermWeightKind::Intrinsic(kind_string),
 
             // no weight
-            StmtKind::Empty => NodeWeightKind::No(kind_string),
+            StmtKind::Empty => TermWeightKind::No(kind_string),
         };
 
         self.pre_walk(kind, ident, node_id);
@@ -1323,7 +1323,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = None;
         let node_id = self.get_node_id();
         let kind_string = "FieldDef".to_string();
-        let kind = NodeWeightKind::Intrinsic(kind_string);
+        let kind = TermWeightKind::Intrinsic(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_field_def(self, cur_field);
@@ -1335,7 +1335,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = Some(cur_var.ident.to_string());
         let node_id = self.get_node_id();
         let kind_string = "Variant".to_string();
-        let kind = NodeWeightKind::Intrinsic(kind_string);
+        let kind = TermWeightKind::Intrinsic(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_variant(self, cur_var);
@@ -1347,7 +1347,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = None;
         let node_id = self.get_node_id();
         let kind_string = "Arm".to_string();
-        let kind = NodeWeightKind::Children(kind_string);
+        let kind = TermWeightKind::Children(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_arm(self, cur_arm);
@@ -1359,7 +1359,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         let ident = cur_par.pat.descr();
         let node_id = self.get_node_id();
         let kind_string = "Param".to_string();
-        let kind = NodeWeightKind::No(kind_string);
+        let kind = TermWeightKind::No(kind_string);
 
         self.pre_walk(kind, ident, node_id);
         walk_param(self, cur_par);

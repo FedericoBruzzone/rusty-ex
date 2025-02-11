@@ -145,9 +145,9 @@ def analyze(repo_name, reset_cargo=False):
         parsed_line = json.loads(stdout.decode().strip())
 
         result |= {
-            "ast_nodes": parsed_line.get("ast_nodes", "N/A"),
-            "ast_edges": parsed_line.get("ast_edges", "N/A"),
-            "ast_height": parsed_line.get("ast_height", "N/A"),
+            "term_nodes": parsed_line.get("term_nodes", "N/A"),
+            "term_edges": parsed_line.get("term_edges", "N/A"),
+            "term_height": parsed_line.get("term_height", "N/A"),
             "feature_nodes": parsed_line.get("features_nodes", "N/A"),
             "feature_edges": parsed_line.get("features_edges", "N/A"),
             "feature_squashed_edges": parsed_line.get("features_squashed_edges", "N/A"),
@@ -190,7 +190,7 @@ def analyze_members(repo_name, members):
 
 # format the results as a LaTeX row
 def latex_format(results):
-    # print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, AST Nodes, AST Edges, AST Height, Features Nodes, Features Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
+    # print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, Term Nodes, Term Edges, Term Height, Feature Nodes, Feature Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
 
     formatted = []
 
@@ -206,14 +206,14 @@ def latex_format(results):
             continue
 
         if i == 0:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
             continue
 
         if res["error"]:
             formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
             continue
 
-        formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('ast_nodes')} & {g('ast_edges')} & {g('ast_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
+        formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
 
     return "\n".join(formatted)
 

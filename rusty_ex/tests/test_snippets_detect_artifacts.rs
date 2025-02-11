@@ -10,7 +10,7 @@ const FOLDER: &str = "tests/snippets/detect_artifacts";
 #[test]
 fn test_macro() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/macro.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["MacCall"]), 3);
 
@@ -20,7 +20,7 @@ fn test_macro() -> Result<(), String> {
 #[test]
 fn test_module() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/module.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Mod", "example1"]));
     assert!(same_line(&output, vec!["Mod", "example2"]));
@@ -33,7 +33,7 @@ fn test_module() -> Result<(), String> {
 #[test]
 fn test_extern_crate() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/extern_crate.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["ExternCrate", "example1"]));
     assert!(same_line(&output, vec!["ExternCrate", "example2"]));
@@ -44,7 +44,7 @@ fn test_extern_crate() -> Result<(), String> {
 #[test]
 fn test_use() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/use.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Use"]), 11);
 
@@ -54,7 +54,7 @@ fn test_use() -> Result<(), String> {
 #[test]
 fn test_function() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/function.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Fn", "example1"]));
     assert!(same_line(&output, vec!["Fn", "example2"]));
@@ -75,7 +75,7 @@ fn test_function() -> Result<(), String> {
 #[test]
 fn test_type() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/type.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["TyAlias", "Example1"]));
     assert!(same_line(&output, vec!["TyAlias", "Example2"]));
@@ -88,7 +88,7 @@ fn test_type() -> Result<(), String> {
 #[test]
 fn test_struct() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/struct.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Struct", "Example1"]));
     assert!(same_line(&output, vec!["Struct", "Example2"]));
@@ -101,7 +101,7 @@ fn test_struct() -> Result<(), String> {
 #[test]
 fn test_enum() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/enum.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Enum", "Example1"]));
     assert!(same_line(&output, vec!["Enum", "Example2"]));
@@ -116,7 +116,7 @@ fn test_enum() -> Result<(), String> {
 #[test]
 fn test_union() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/union.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Union", "Example1"]));
     assert!(same_line(&output, vec!["Union", "Example2"]));
@@ -128,7 +128,7 @@ fn test_union() -> Result<(), String> {
 #[test]
 fn test_const() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/const.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Const", "EXAMPLE1"]));
     assert!(same_line(&output, vec!["Const", "EXAMPLE2"]));
@@ -141,7 +141,7 @@ fn test_const() -> Result<(), String> {
 #[test]
 fn test_static() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/static.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Static", "EXAMPLE1"]));
     assert!(same_line(&output, vec!["Static", "EXAMPLE2"]));
@@ -154,7 +154,7 @@ fn test_static() -> Result<(), String> {
 #[test]
 fn test_trait() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/trait.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Trait", "Example1"]));
     assert!(same_line(&output, vec!["Trait", "Example2"]));
@@ -170,7 +170,7 @@ fn test_trait() -> Result<(), String> {
 #[test]
 fn test_impl() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/impl.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Impl"]), 5);
 
@@ -180,7 +180,7 @@ fn test_impl() -> Result<(), String> {
 #[test]
 fn test_assoc_item() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/assoc_item.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert!(same_line(&output, vec!["Fn", "example1"]));
     assert!(same_line(&output, vec!["Fn", "example2"]));
@@ -201,7 +201,7 @@ fn test_assoc_item() -> Result<(), String> {
 #[test]
 fn test_statement() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/statement.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Let"]), 3);
 
@@ -211,7 +211,7 @@ fn test_statement() -> Result<(), String> {
 #[test]
 fn test_literal() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/literal.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Lit"]), 61);
 
@@ -221,7 +221,7 @@ fn test_literal() -> Result<(), String> {
 #[test]
 fn test_path() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/path.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Path"]), 6);
 
@@ -231,7 +231,7 @@ fn test_path() -> Result<(), String> {
 #[test]
 fn test_block() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/block.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Block"]), 3);
 
@@ -241,7 +241,7 @@ fn test_block() -> Result<(), String> {
 #[test]
 fn test_operator() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/operator.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Semi"]), 42);
 
@@ -251,7 +251,7 @@ fn test_operator() -> Result<(), String> {
 #[test]
 fn test_closure() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/closure.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Closure"]), 3);
 
@@ -261,7 +261,7 @@ fn test_closure() -> Result<(), String> {
 #[test]
 fn test_loop() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/loop.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["(Loop"]), 3);
     assert_eq!(count_line(&output, vec!["While"]), 2);
@@ -275,7 +275,7 @@ fn test_loop() -> Result<(), String> {
 #[test]
 fn test_range() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/range.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Range"]), 6);
 
@@ -285,7 +285,7 @@ fn test_range() -> Result<(), String> {
 #[test]
 fn test_if() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/if.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["If"]), 9);
 
@@ -295,7 +295,7 @@ fn test_if() -> Result<(), String> {
 #[test]
 fn test_match() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/match.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Match"]), 3);
     assert_eq!(count_line(&output, vec!["Arm"]), 7);
@@ -306,7 +306,7 @@ fn test_match() -> Result<(), String> {
 #[test]
 fn test_return() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/return.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Ret"]), 2);
 
@@ -316,7 +316,7 @@ fn test_return() -> Result<(), String> {
 #[test]
 fn test_await() -> Result<(), String> {
     let snippet = &std::fs::read_to_string(format!("{FOLDER}/await.rs")).unwrap();
-    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-ast-graph"])?;
+    let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--print-terms-tree"])?;
 
     assert_eq!(count_line(&output, vec!["Await"]), 1);
 

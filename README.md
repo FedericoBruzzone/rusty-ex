@@ -50,10 +50,10 @@ cargo test --no-fail-fast -- --test-threads=1
 Available plugin args:
 
 - Graphs in DOT format:
-  - `--print-ast-graph`: print the AST graph, including all the AST nodes (both annotated with a feature and not)
+  - `--print-terms-tree`: print the terms tree (unified intermediate representation - UIR), including all the terms
   - `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`). Between two nodes there can be at most 1 edge
   - `--print-features-multigraph`: print the features multigraph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`). Between two nodes there can be multiple edges
-  - `--print-artifacts-graph`: print the artifacts graph, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
+  - `--print-artifacts-tree`: print the artifacts tree, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
 - Other:
   - `--print-crate`: print the crate AST
   - `--print-centrality`: print some centralities of the features graph
@@ -101,9 +101,9 @@ cargo-rusty-ex --print-features-graph > crate_2.json
 ```
 
 Execute the `deserializer-merger`, passing as `-f` argument the files containing the serialization and a plugin arg:
-- `--print-ast-graph`: print the AST graph, including all the AST nodes (both annotated with a feature and not)
+- `--print-terms-tree`: print the terms tree, including all the AST nodes (both annotated with a feature and not)
 - `--print-features-graph`: print the features graph, including only the dependencies between the features. The weights are based on the nature of the features combinations (`all`, `any`, `not`)
-- `--print-artifacts-graph`: print the artifacts graph, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
+- `--print-artifacts-tree`: print the artifacts tree, including only the AST nodes annotated with a feature. The weights are the size of the artifact (number of child nodes of the node)
 
 ```bash
 deserializer-merger [--PLUGIN-ARG] -f crate_1.json -f crate_2.json
