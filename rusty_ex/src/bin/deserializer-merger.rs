@@ -47,7 +47,7 @@ impl SuperCollector {
         );
 
         let mut complex_feature = HashSet::new();
-        assert_eq!(complex_feature.insert(features.clone()), true);
+        assert!(complex_feature.insert(features.clone()));
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
@@ -81,10 +81,7 @@ impl SuperCollector {
             not: false,
         };
         let mut complex_feature = HashSet::new();
-        assert_eq!(
-            complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())),
-            true
-        );
+        assert!(complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())));
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),

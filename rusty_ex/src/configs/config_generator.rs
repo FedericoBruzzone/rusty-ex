@@ -4,7 +4,7 @@ use rustsat::{
 };
 use rustsat_minisat::core::Minisat;
 
-use super::{CnfFormula, CnfClause, CnfLit};
+use super::{CnfClause, CnfFormula, CnfLit};
 
 pub struct ConfigGenerator<S> {
     solver: S,

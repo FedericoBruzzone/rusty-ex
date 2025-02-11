@@ -270,7 +270,8 @@ impl<Key: TermKey> TermsTree<Key> {
 
     /// Print Terms Tree (UIR) in DOT format
     pub fn print_dot(&self) {
-        let get_node_attr = |_g: &DiGraph<TermNode<Key>, Edge>, node: (NodeIndex, &TermNode<Key>)| {
+        let get_node_attr = |_g: &DiGraph<TermNode<Key>, Edge>,
+                             node: (NodeIndex, &TermNode<Key>)| {
             let index = node.0.index();
             let term_node = node.1;
             format!(

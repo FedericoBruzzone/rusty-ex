@@ -344,10 +344,7 @@ impl CollectVisitor {
             "Error: global term node has an index != 0"
         );
         let mut complex_feature = HashSet::new();
-        assert_eq!(
-            complex_feature.insert(ComplexFeature::Feature(feature.clone())),
-            true
-        );
+        assert!(complex_feature.insert(ComplexFeature::Feature(feature.clone())));
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
@@ -377,10 +374,7 @@ impl CollectVisitor {
             not: false,
         };
         let mut complex_feature = HashSet::new();
-        assert_eq!(
-            complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())),
-            true
-        );
+        assert!(complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())));
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
@@ -1080,8 +1074,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                                 // well-formed with built-in feature (we need the ignore): #[cfg(windows)]
                                 // well-formed with feature (we need the feature): #[cfg(feature = "a"))]
                                 1 => {
-                                    self.stack
-                                        .push((term_index, parsed_features[0].to_owned()));
+                                    self.stack.push((term_index, parsed_features[0].to_owned()));
                                 }
                                 // malformed (panic): #[cfg(feature = "a", feature = "b")]
                                 _ => {

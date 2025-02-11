@@ -34,7 +34,7 @@ impl Ordinal for u32 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum PropFormula<T> {
     Var(T),
     Not(Box<PropFormula<T>>),
@@ -43,13 +43,8 @@ pub enum PropFormula<T> {
     Implies(Box<PropFormula<T>>, Box<PropFormula<T>>),
     Iff(Box<PropFormula<T>>, Box<PropFormula<T>>),
     // Used to indicate an invalid formula or to invalidate a formula.
+    #[default]
     None,
-}
-
-impl<T: Clone + Debug> Default for PropFormula<T> {
-    fn default() -> Self {
-        PropFormula::None
-    }
 }
 
 impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
