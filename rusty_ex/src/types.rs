@@ -25,11 +25,11 @@ pub struct Feature {
     pub not: bool,
 }
 
-/// Complex feature: none, a single feature (not included), all features, or any feature
+/// Complex feature: none, a single feature (with not included), all features, or any feature
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum ComplexFeature {
     None,
-    Feature(Feature),
+    Simple(Feature),
     All(Vec<ComplexFeature>),
     Any(Vec<ComplexFeature>),
 }
@@ -479,7 +479,7 @@ impl Display for ComplexFeature {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ComplexFeature::None => write!(f, ""),
-            ComplexFeature::Feature(Feature { name, not }) => {
+            ComplexFeature::Simple(Feature { name, not }) => {
                 let name = match not {
                     true => "!".to_string() + name,
                     false => name.to_string(),

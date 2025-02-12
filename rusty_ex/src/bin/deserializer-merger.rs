@@ -27,7 +27,7 @@ impl SuperCollector {
             name: GLOBAL_FEATURE_NAME.to_string(),
             not: false,
         };
-        let features = ComplexFeature::Feature(feature.clone());
+        let features = ComplexFeature::Simple(feature.clone());
         let artifact = SimpleArtifactKey(node_id);
 
         let index = self.terms_tree.create_node(
@@ -65,7 +65,7 @@ impl SuperCollector {
                 krate: GLOBAL_FEATURE_NAME.to_string(),
             },
             ident,
-            ComplexFeature::Feature(feature.clone()),
+            ComplexFeature::Simple(feature.clone()),
             vec![0.into()],
             TermWeight::ToBeCalculated,
         );
@@ -81,7 +81,7 @@ impl SuperCollector {
             not: false,
         };
         let mut complex_feature = HashSet::new();
-        assert!(complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())));
+        assert!(complex_feature.insert(ComplexFeature::Simple(dummy_feature.clone())));
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),

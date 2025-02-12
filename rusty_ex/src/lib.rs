@@ -328,7 +328,7 @@ impl CollectVisitor {
             name: GLOBAL_FEATURE_NAME.to_string(),
             not: false,
         };
-        let features = ComplexFeature::Feature(feature.clone());
+        let features = ComplexFeature::Simple(feature.clone());
         let artifact = SimpleArtifactKey(node_id);
 
         let index = self.terms_tree.create_node(
@@ -344,7 +344,7 @@ impl CollectVisitor {
             "Error: global term node has an index != 0"
         );
         let mut complex_feature = HashSet::new();
-        assert!(complex_feature.insert(ComplexFeature::Feature(feature.clone())));
+        assert!(complex_feature.insert(ComplexFeature::Simple(feature.clone())));
         let index = self.features_graph.create_node(
             FeatureKey(feature.clone()),
             Some(1.0),
@@ -358,7 +358,7 @@ impl CollectVisitor {
         let index = self.artifacts_tree.create_node(
             artifact,
             ident,
-            ComplexFeature::Feature(feature.clone()),
+            ComplexFeature::Simple(feature.clone()),
             self.rec_features_to_indexes(&features),
             TermWeight::ToBeCalculated,
         );
@@ -374,7 +374,7 @@ impl CollectVisitor {
             not: false,
         };
         let mut complex_feature = HashSet::new();
-        assert!(complex_feature.insert(ComplexFeature::Feature(dummy_feature.clone())));
+        assert!(complex_feature.insert(ComplexFeature::Simple(dummy_feature.clone())));
         self.features_graph.create_node(
             FeatureKey(dummy_feature.clone()),
             Some(1.0),
@@ -416,7 +416,7 @@ impl CollectVisitor {
                         HashSet::new(), // to be valued later
                     );
 
-                    features.push(ComplexFeature::Feature(feature));
+                    features.push(ComplexFeature::Simple(feature));
                 }
                 sym::not => features.extend(
                     self.rec_expand_features(
@@ -453,7 +453,7 @@ impl CollectVisitor {
                         None,           // to be valued later
                         HashSet::new(), // to be valued later
                     );
-                    features.push(ComplexFeature::Feature(feature));
+                    features.push(ComplexFeature::Simple(feature));
                 }
             }
         }
@@ -465,7 +465,7 @@ impl CollectVisitor {
     fn rec_weight_feature(features: &ComplexFeature) -> Vec<(FeatureKey, f64)> {
         match features {
             ComplexFeature::None => Vec::new(),
-            ComplexFeature::Feature(feature) => Vec::from([(FeatureKey(feature.clone()), 1.0)]),
+            ComplexFeature::Simple(feature) => Vec::from([(FeatureKey(feature.clone()), 1.0)]),
             ComplexFeature::All(nested) => {
                 let size = nested.len() as f64;
 
@@ -524,7 +524,7 @@ impl CollectVisitor {
 
         match features {
             ComplexFeature::None => (),
-            ComplexFeature::Feature(f) => {
+            ComplexFeature::Simple(f) => {
                 indexes.push(
                     *self
                         .features_graph
@@ -1082,7 +1082,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
                                 }
                             }
                         }
-                        Some((.., ComplexFeature::Feature(..)))
+                        Some((.., ComplexFeature::Simple(..)))
                         | Some((.., ComplexFeature::All(..)))
                         | Some((.., ComplexFeature::Any(..))) => {
                             panic!("Error: node on stack already has a feature visiting attribute")
