@@ -223,7 +223,7 @@ fn test_distribute_over_conjunction_2() -> Result<(), String> {
 }
 
 #[test]
-fn test_distribute_over_conjunction_add() -> Result<(), String> {
+fn test_distribute_over_conjunction_add1() -> Result<(), String> {
     use PropFormula::*;
 
     // (P & Q) | (R & S)
@@ -243,6 +243,30 @@ fn test_distribute_over_conjunction_add() -> Result<(), String> {
         ])
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_distribute_over_conjunction_add2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P | ((P & Q) | (Q & R))
+    let mut prop_formula = Or(vec![
+        Var(0),
+        Or(vec![And(vec![Var(0), Var(1)]), And(vec![Var(1), Var(2)])]),
+    ]);
+
+    prop_formula.distribute_disjunction_over_conjunction();
+
+    assert_eq!(
+        prop_formula,
+        And(vec![
+            Or(vec![Var(0), Or(vec![Var(0), Var(1)])]),
+            Or(vec![Var(0), Or(vec![Var(1), Var(1)])]),
+            Or(vec![Var(0), Or(vec![Var(0), Var(2)])]),
+            Or(vec![Var(0), Or(vec![Var(1), Var(2)])]),
+        ])
+    );
     Ok(())
 }
 
