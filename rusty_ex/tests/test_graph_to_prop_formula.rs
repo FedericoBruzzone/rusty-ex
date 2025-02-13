@@ -135,14 +135,67 @@ fn test_not_in_one() -> Result<(), String> {
     Ok(())
 }
 
-// #[test]
-// fn test_not_in_not() -> Result<(), String> {}
-//
-// #[test]
-// fn test_not_in_any() -> Result<(), String> {}
-//
-// #[test]
-// fn test_not_in_all() -> Result<(), String> {}
+#[test]
+fn test_not_in_not() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("not_in_not.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Not(bx!(Var("a".to_string(),))),
+        Not(bx!(Var("b".to_string(),))),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_not_in_any() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("not_in_any.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        Not(bx!(Var("c".to_string(),))),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_not_in_all() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("not_in_all.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        Not(bx!(Var("c".to_string(),))),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
 
 // =============================================
 // ==================== ALL ====================
@@ -168,27 +221,150 @@ fn test_all_in_one() -> Result<(), String> {
     Ok(())
 }
 
-// #[test]
-// fn test_all_in_not() -> Result<(), String> {}
-//
-// #[test]
-// fn test_all_in_any() -> Result<(), String> {}
-//
-// #[test]
-// fn test_all_in_all() -> Result<(), String> {}
+#[test]
+fn test_all_in_not() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("all_in_not.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Not(bx!(Var("a".to_string(),))),
+        And(vec![Var("b".to_string()), Var("c".to_string())]),
+        And(vec![Var("b".to_string()), Var("c".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_all_in_any() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("all_in_any.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        And(vec![Var("c".to_string()), Var("d".to_string())]),
+        And(vec![Var("c".to_string()), Var("d".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_all_in_all() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("all_in_all.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        And(vec![Var("c".to_string()), Var("d".to_string())]),
+        And(vec![Var("c".to_string()), Var("d".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
 
 // =============================================
 // ==================== ANY ====================
 // =============================================
 
-// #[test]
-// fn test_any_in_one() -> Result<(), String> {}
-//
-// #[test]
-// fn test_any_in_not() -> Result<(), String> {}
-//
-// #[test]
-// fn test_any_in_any() -> Result<(), String> {}
-//
-// #[test]
-// fn test_any_in_all() -> Result<(), String> {}
+#[test]
+fn test_any_in_one() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("any_in_one.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Var("a".to_string()),
+        Or(vec![Var("b".to_string()), Var("c".to_string())]),
+        Or(vec![Var("b".to_string()), Var("c".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_any_in_not() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("any_in_not.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Not(bx!(Var("a".to_string(),))),
+        Or(vec![Var("b".to_string()), Var("c".to_string())]),
+        Or(vec![Var("b".to_string()), Var("c".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_any_in_any() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("any_in_any.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        Or(vec![Var("a".to_string()), Var("b".to_string())]),
+        Or(vec![Var("c".to_string()), Var("d".to_string())]),
+        Or(vec![Var("c".to_string()), Var("d".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}
+
+#[test]
+fn test_any_in_all() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let feat_graph = get_feature_graph("any_in_all.rs")?;
+    // feat_graph.print_dot();
+    let prop_formula = feat_graph.to_prop_formula(ConversionMethod::Naive);
+    let output = And(vec![
+        Var("__GLOBAL__".to_string()),
+        Var("__DUMMY__".to_string()),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        And(vec![Var("a".to_string()), Var("b".to_string())]),
+        Or(vec![Var("c".to_string()), Var("d".to_string())]),
+        Or(vec![Var("c".to_string()), Var("d".to_string())]),
+    ]);
+
+    assert_eq!(prop_formula, output);
+
+    Ok(())
+}

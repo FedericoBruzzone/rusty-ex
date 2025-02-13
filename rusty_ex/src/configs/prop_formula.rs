@@ -23,7 +23,7 @@ pub trait ToPropFormula<T> {
 /// Note that, not all `Ordinals` are `Countable`, because of the "first uncountable ordinal" (w1)
 /// which contains all countable ordinals.
 /// But all `Countables` are `Ordinals`.
-pub trait Ordinal: Default + Add<Output = Self> {
+pub trait Ordinal: Default + Ord + Add<Output = Self> {
     fn suc(&mut self);
     fn pred(&mut self);
 }
@@ -281,9 +281,6 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     }
 
     /// Convert the propositional formula to CNF.
-    ///
-    /// NOTE: `distribute_disjunction_over_conjunction`, `push_negation_inwards`,
-    /// `eliminate_implies`, and `eliminate_iff` functions should be called first.
     pub fn to_cnf(&mut self) {
         self.eliminate_iff();
         self.eliminate_implies();
@@ -295,8 +292,16 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     ///
     /// It calls the `to_cnf` function first. So, it is safe to call this function directly.
     ///
-    /// This ivalidates the formula.
-    pub fn to_cnf_repr<U>(&mut self) -> CnfFormula<U>
+    /// This invalidates the formula.
+    ///
+    /// # Arguments
+    /// * `U` - The type to be used for the countable type.
+    /// * `normalize` - If true, it normalizes the formula. It means that it removes duplicates and sorts the variables.
+    ///
+    /// # Returns
+    /// * A CNF formula.
+    /// * A mapping from variables to a countable type.
+    pub fn to_cnf_repr<U>(&mut self, normalize: bool) -> (CnfFormula<U>, HashMap<T, U>)
     where
         U: Ordinal + Clone,
     {
@@ -350,7 +355,6 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
                     }
                 }
                 And(prop) => {
-                    assert!(prop.iter().all(|f| matches!(f, Or(_))));
                     let mut cnf = vec![];
                     for f in prop {
                         let f_cnf = rec_to_cnf_repr(f, mapping, curr_value);
@@ -374,6 +378,23 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
 
         self.to_cnf();
         let mut mapping = HashMap::<T, U>::new();
-        rec_to_cnf_repr(self, &mut mapping, &mut U::default())
+        let cnf = rec_to_cnf_repr(self, &mut mapping, &mut U::default());
+
+        // Remove duplicates
+        if normalize {
+            let mut cnf = cnf
+                .into_iter()
+                .map(|mut v| {
+                    v.sort();
+                    v.dedup();
+                    v
+                })
+                .collect::<Vec<Vec<(U, bool)>>>();
+            cnf.sort();
+            cnf.dedup();
+            (cnf, mapping)
+        } else {
+            (cnf, mapping)
+        }
     }
 }
