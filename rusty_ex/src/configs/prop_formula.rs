@@ -6,9 +6,13 @@ use crate::utils::bx;
 
 use super::CnfFormula;
 
+pub enum ConversionMethod {
+    Naive,
+}
+
 /// Trait for converting a type to a propositional formula.
 pub trait ToPropFormula<T> {
-    fn to_prop_formula(&self) -> PropFormula<T>;
+    fn to_prop_formula(&self, method: ConversionMethod) -> PropFormula<T>;
 }
 
 /// Trait to represent an ordinal type, it aims to extend `Enumerable` to infinite sets.

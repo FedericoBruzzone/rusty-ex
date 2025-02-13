@@ -4,12 +4,14 @@ use std::path::Path;
 use std::process::Command;
 use std::sync::Once;
 
+#[allow(unused_macros)] // Due to a bug
 macro_rules! bx {
     ($e:expr) => {
         Box::new($e)
     };
 }
 
+#[allow(unused_imports)] // Due to a bug
 pub(crate) use bx;
 
 const PLUGIN_NAME: &str = "rusty-ex";
@@ -38,7 +40,7 @@ pub fn run_with_cargo_bin(
         cargo_cmd.args(["install", "--path", ".", "--debug", "--locked", "--root"]);
         cargo_cmd.arg(&root_dir);
         cargo_cmd.current_dir(&current_dir);
-        // See the `args` function on `impl RustcPlugin for RustcEx` for the explanation of why we need to pass the `--features test-mode` argument.
+        // See the `args` function on `impl RustcPlugin for RustyEx` for the explanation of why we need to pass the `--features test-mode` argument.
         cargo_cmd.args(["--features", TEST_MODE_FEATURE]);
         let status = cargo_cmd.status().unwrap();
         if !status.success() {
