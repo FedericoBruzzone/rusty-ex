@@ -387,6 +387,37 @@ impl Default for FeaturesGraph {
 
 impl<T> ToPropFormula<T> for FeaturesGraph {
     fn to_prop_formula(&self) -> PropFormula<T> {
+        fn to_prop_formula_rec<T>(
+            graph: &DiGraph<FeatureNode, Edge>,
+            node: NodeIndex,
+            visited: &mut HashSet<NodeIndex>,
+        ) -> Option<PropFormula<T>> {
+            if visited.contains(&node) {
+                return None;
+            }
+            visited.insert(node);
+
+            let complex_feature = &graph[node].complex_feature;
+
+            for feature in complex_feature {
+                match feature {
+                    ComplexFeature::Feature(feature) => todo!(),
+                    ComplexFeature::All(vec) => todo!(),
+                    ComplexFeature::Any(vec) => todo!(),
+                    ComplexFeature::None => unreachable!(),
+                }
+            }
+
+            let mut formula = PropFormula::None;
+            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
+                let child_formula = to_prop_formula_rec::<T>(graph, neighbor, visited);
+
+                todo!();
+            }
+
+            Some(formula)
+        }
+
         // let mut cnf = CnfFormula::new();
 
         todo!()
