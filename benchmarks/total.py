@@ -55,7 +55,7 @@ def latex_format(res):
         r = res.get(x, "N/A")
         return r.replace("_", "\\_") if isinstance(r, str) else r
 
-    return f"\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}} & {g('github_stars')} & {g('cratesio_downloads')} & {g('lines_of_code')} & {g('members')} & {g('errors')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ \\hline"
+    return f"\\href{{{g('url')}}}{{{{{g('crate')}}}}} & {g('github_stars')} & {g('cratesio_downloads')} & {g('lines_of_code')} & {g('members')} & {g('errors')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ \\hline"
 
 if __name__ == "__main__":
     file_path = "results.json"

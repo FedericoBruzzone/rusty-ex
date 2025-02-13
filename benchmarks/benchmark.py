@@ -202,11 +202,11 @@ def latex_format(results):
             return r.replace("_", "\\_") if isinstance(r, str) else r
 
         if i == 0 and res["error"]:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
             continue
 
         if i == 0:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{\\underline{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
+            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
             continue
 
         if res["error"]:
@@ -255,58 +255,54 @@ def main(repo_url):
         eprintt(f"Error: {e}")
 
 TO_ANALYZE = [
-    # "https://github.com/rustdesk/rustdesk",
-    # "https://github.com/GitoxideLabs/gitoxide",
-    # "https://github.com/denoland/deno",
-    # "https://github.com/tauri-apps/tauri",
-    # "https://github.com/FuelLabs/sway",
-    # "https://github.com/FuelLabs/fuel-core",
-    # "https://github.com/alacritty/alacritty",
-    # "https://github.com/rust-lang/rustlings",
-    # "https://github.com/zed-industries/zed",
-    # "https://github.com/lencx/ChatGPT",
-    # "https://github.com/sharkdp/bat",
-    # "https://github.com/BurntSushi/ripgrep",
-    # "https://github.com/meilisearch/meilisearch",
-    # "https://github.com/starship/starship",
-    # "https://github.com/FuelLabs/fuels-rs",
-    # "https://github.com/dani-garcia/vaultwarden",
-    # "https://github.com/bevyengine/bevy",
-    # "https://github.com/pdm-project/pdm",
-    # "https://github.com/typst/typst",
-    # "https://github.com/helix-editor/helix",
-    # "https://github.com/sharkdp/fd",
-    # "https://github.com/charliermarsh/ruff",
-    # "https://github.com/lapce/lapce",
-    # "https://github.com/tw93/Pake",
-    # "https://github.com/nushell/nushell",
-    # "https://github.com/pola-rs/polars",
-    # "https://github.com/swc-project/swc",
-    # "https://github.com/influxdata/influxdb",
-    # "https://github.com/TabbyML/tabby",
-    # "https://github.com/servo/servo",
-    # "https://github.com/wasmerio/wasmer",
-    # "https://github.com/ogham/exa",
-    # "https://github.com/diem/diem",
-    # "https://github.com/EmbarkStudios/texture-synthesis",
-    # "https://github.com/EmbarkStudios/kajiya",
-    # "https://github.com/EmbarkStudios/rust-gpu",
-    # "https://github.com/paritytech/substrate",
-    # "https://github.com/wasmEdge/wasmedge",
-    # "https://github.com/XAMPPRocky/tokei",
-    # "https://github.com/quickwit-oss/tantivy",
-    # "https://github.com/facebook/relay",
-    # "https://github.com/boa-dev/boa",
-    # "https://github.com/rerun-io/rerun",
-    # "https://github.com/containers/podman",
-    # "https://github.com/hyperium/tonic",
-    # "https://github.com/tokio-rs/axum",
-    # "https://github.com/cross-rs/cross",
-    # "https://github.com/pyroscope-io/pyroscope",
-    # "https://github.com/bottlerocket-os/bottlerocket",
-    # "https://github.com/vectordotdev/vector"
+    "https://github.com/sharkdp/bat",
+    "https://github.com/GitoxideLabs/gitoxide",
+    "https://github.com/FuelLabs/fuels-rs",
+    "https://github.com/tauri-apps/tauri",
+    "https://github.com/alacritty/alacritty",
+    "https://github.com/zed-industries/zed",
+    "https://github.com/BurntSushi/ripgrep",
+    "https://github.com/meilisearch/meilisearch",
+    "https://github.com/rustdesk/rustdesk",
+    "https://github.com/typst/typst",
+    "https://github.com/helix-editor/helix",
+    "https://github.com/charliermarsh/ruff",
+    "https://github.com/lapce/lapce",
+    "https://github.com/nushell/nushell",
+    "https://github.com/pola-rs/polars",
+    "https://github.com/swc-project/swc",
+    "https://github.com/influxdata/influxdb",
+    "https://github.com/TabbyML/tabby",
+    "https://github.com/servo/servo",
+    "https://github.com/wasmerio/wasmer",
+    "https://github.com/diem/diem",
+    "https://github.com/EmbarkStudios/texture-synthesis",
+    "https://github.com/EmbarkStudios/kajiya",
+    "https://github.com/EmbarkStudios/rust-gpu",
+    "https://github.com/paritytech/substrate",
+    "https://github.com/quickwit-oss/tantivy",
+    "https://github.com/hyperium/tonic",
+    "https://github.com/n0-computer/sendme",
+    "https://github.com/moghtech/komodo",
+    "https://github.com/cloudflare/quiche",
+    "https://github.com/rolldown/rolldown",
+    "https://github.com/n0-computer/iroh",
+    "https://github.com/succinctlabs/sp1",
+    "https://github.com/unionlabs/union",
+    "https://github.com/juspay/hyperswitch",
+    "https://github.com/emilk/egui",
+    "https://github.com/Nukesor/pueue",
+    "https://github.com/denoland/deno",
+    "https://github.com/FuelLabs/sway",
+    "https://github.com/FuelLabs/fuel-core",
 ]
 
 if __name__ == "__main__":
+    with open("results.json", "a") as f:
+        f.write("[\n")
+
     for repo_url in TO_ANALYZE:
         result = main(repo_url)
+
+    with open("results.json", "a") as f:
+        f.write("]\n")
