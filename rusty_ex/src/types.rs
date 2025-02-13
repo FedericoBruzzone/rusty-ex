@@ -1,3 +1,4 @@
+use petgraph::visit::IntoNodeReferences;
 use rustc_ast::NodeId;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
@@ -124,6 +125,12 @@ pub struct TermsTree<Key: TermKey> {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct FeatureKey(pub Feature);
 
+impl From<&Feature> for FeatureKey {
+    fn from(value: &Feature) -> Self {
+        FeatureKey(value.clone())
+    }
+}
+
 /// Feature node, with the feature, its weight (if already calculated) and its nature
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureNode {
@@ -230,6 +237,12 @@ impl Display for SimpleArtifactKey {
 impl Display for SuperArtifactKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}::{}", self.krate, self.artifact)
+    }
+}
+
+impl Feature {
+    pub fn is_negated(&self) -> bool {
+        self.not
     }
 }
 
@@ -385,42 +398,43 @@ impl Default for FeaturesGraph {
     }
 }
 
-impl<T> ToPropFormula<T> for FeaturesGraph {
-    fn to_prop_formula(&self) -> PropFormula<T> {
-        fn to_prop_formula_rec<T>(
-            graph: &DiGraph<FeatureNode, Edge>,
-            node: NodeIndex,
-            visited: &mut HashSet<NodeIndex>,
-        ) -> Option<PropFormula<T>> {
-            if visited.contains(&node) {
-                return None;
-            }
-            visited.insert(node);
-
-            let complex_feature = &graph[node].complex_feature;
-
-            for feature in complex_feature {
-                match feature {
-                    ComplexFeature::Feature(feature) => todo!(),
-                    ComplexFeature::All(vec) => todo!(),
-                    ComplexFeature::Any(vec) => todo!(),
-                    ComplexFeature::None => unreachable!(),
+impl ToPropFormula<Feature> for FeaturesGraph {
+    fn to_prop_formula(&self) -> PropFormula<Feature> {
+        fn resolve_complex_feature_rec(complex_feature: &ComplexFeature) -> PropFormula<Feature> {
+            match complex_feature {
+                ComplexFeature::None => PropFormula::None,
+                ComplexFeature::Simple(feature) => {
+                    if feature.is_negated() {
+                        PropFormula::Not(Box::new(PropFormula::Var(feature.clone())))
+                    } else {
+                        PropFormula::Var(feature.clone())
+                    }
+                }
+                ComplexFeature::All(features) => {
+                    let mut formula = Vec::new();
+                    for feature in features {
+                        formula.push(resolve_complex_feature_rec(feature));
+                    }
+                    PropFormula::And(formula)
+                }
+                ComplexFeature::Any(features) => {
+                    let mut formula = Vec::new();
+                    for feature in features {
+                        formula.push(resolve_complex_feature_rec(feature));
+                    }
+                    PropFormula::Or(formula)
                 }
             }
-
-            let mut formula = PropFormula::None;
-            for neighbor in graph.neighbors_directed(node, petgraph::Direction::Outgoing) {
-                let child_formula = to_prop_formula_rec::<T>(graph, neighbor, visited);
-
-                todo!();
-            }
-
-            Some(formula)
         }
 
-        // let mut cnf = CnfFormula::new();
+        let mut formula = Vec::new();
+        for (_, feature_node) in self.graph.node_references() {
+            for complex_feature in &feature_node.complex_feature {
+                formula.push(resolve_complex_feature_rec(complex_feature));
+            }
+        }
 
-        todo!()
+        PropFormula::And(formula)
     }
 }
 
