@@ -223,7 +223,7 @@ fn test_distribute_over_conjunction_2() -> Result<(), String> {
 }
 
 #[test]
-fn test_distribute_over_conjunction_add() -> Result<(), String> {
+fn test_distribute_over_conjunction_add1() -> Result<(), String> {
     use PropFormula::*;
 
     // (P & Q) | (R & S)
@@ -243,6 +243,30 @@ fn test_distribute_over_conjunction_add() -> Result<(), String> {
         ])
     );
 
+    Ok(())
+}
+
+#[test]
+fn test_distribute_over_conjunction_add2() -> Result<(), String> {
+    use PropFormula::*;
+
+    // P | ((P & Q) | (Q & R))
+    let mut prop_formula = Or(vec![
+        Var(0),
+        Or(vec![And(vec![Var(0), Var(1)]), And(vec![Var(1), Var(2)])]),
+    ]);
+
+    prop_formula.distribute_disjunction_over_conjunction();
+
+    assert_eq!(
+        prop_formula,
+        And(vec![
+            Or(vec![Var(0), Or(vec![Var(0), Var(1)])]),
+            Or(vec![Var(0), Or(vec![Var(1), Var(1)])]),
+            Or(vec![Var(0), Or(vec![Var(0), Var(2)])]),
+            Or(vec![Var(0), Or(vec![Var(1), Var(2)])]),
+        ])
+    );
     Ok(())
 }
 
@@ -293,7 +317,7 @@ fn test_to_cnf_repr() -> Result<(), String> {
     let mut prop_formula = Or(vec![Var(0), And(vec![Var(1), Var(2)])]);
 
     // (P | Q) & (P | R)
-    let cnf: CnfFormula<u32> = prop_formula.to_cnf_repr();
+    let (cnf, _): (CnfFormula<u32>, _) = prop_formula.to_cnf_repr(false);
 
     assert_eq!(cnf, [[(0, true), (1, true)], [(0, true), (2, true)]]);
 
@@ -308,7 +332,7 @@ fn test_to_cnf_repr_2() -> Result<(), String> {
     let mut prop_formula = Iff(bx!(Var(0)), bx!(Var(1)));
 
     // (!P | Q) & (!Q | P)
-    let cnf: CnfFormula<u32> = prop_formula.to_cnf_repr();
+    let (cnf, _): (CnfFormula<u32>, _) = prop_formula.to_cnf_repr(false);
 
     assert_eq!(cnf, [[(0, false), (1, true)], [(1, false), (0, true)]]);
 

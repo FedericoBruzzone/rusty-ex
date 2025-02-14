@@ -6,9 +6,13 @@ use crate::utils::bx;
 
 use super::CnfFormula;
 
+pub enum ConversionMethod {
+    Naive,
+}
+
 /// Trait for converting a type to a propositional formula.
 pub trait ToPropFormula<T> {
-    fn to_prop_formula(&self) -> PropFormula<T>;
+    fn to_prop_formula(&self, method: ConversionMethod) -> PropFormula<T>;
 }
 
 /// Trait to represent an ordinal type, it aims to extend `Enumerable` to infinite sets.
@@ -19,7 +23,7 @@ pub trait ToPropFormula<T> {
 /// Note that, not all `Ordinals` are `Countable`, because of the "first uncountable ordinal" (w1)
 /// which contains all countable ordinals.
 /// But all `Countables` are `Ordinals`.
-pub trait Ordinal: Default + Add<Output = Self> {
+pub trait Ordinal: Default + Ord + Add<Output = Self> {
     fn suc(&mut self);
     fn pred(&mut self);
 }
@@ -53,32 +57,42 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     /// For instance:
     /// P <-> Q is equivalent to (P -> Q) & (Q -> P)
     pub fn eliminate_iff(&mut self) {
-        use PropFormula::*;
-        match self {
-            Var(_) => {}
-            Not(p) => p.eliminate_iff(),
-            And(v) => {
-                for f in v.iter_mut() {
-                    f.eliminate_iff();
+        fn inner<T: Clone>(f: &mut PropFormula<T>) {
+            use PropFormula::*;
+            match f {
+                Var(_) => {}
+                Not(p) => inner(p),
+                And(v) => {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
-            }
-            Or(v) => {
-                for f in v.iter_mut() {
-                    f.eliminate_iff();
+                Or(v) => {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
+                Implies(p, q) => {
+                    inner(p);
+                    inner(q);
+                }
+                Iff(p, q) => {
+                    inner(p);
+                    inner(q);
+                    let new_p = Implies(p.clone(), q.clone());
+                    let new_q = Implies(q.clone(), p.clone());
+                    *f = And(vec![new_p, new_q]);
+                }
+                None => panic!("Invalid formula."),
             }
-            Implies(p, q) => {
-                p.eliminate_iff();
-                q.eliminate_iff();
+        }
+
+        loop {
+            let prev = self.clone();
+            inner(self);
+            if prev == *self {
+                break;
             }
-            Iff(p, q) => {
-                p.eliminate_iff();
-                q.eliminate_iff();
-                let new_p = Implies(p.clone(), q.clone());
-                let new_q = Implies(q.clone(), p.clone());
-                *self = And(vec![new_p, new_q]);
-            }
-            None => panic!("Invalid formula."),
         }
     }
 
@@ -89,31 +103,41 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     /// For instance:
     /// P -> Q is equivalent to !P | Q
     pub fn eliminate_implies(&mut self) {
-        use PropFormula::*;
-        match self {
-            Var(_) => {}
-            Not(p) => p.eliminate_implies(),
-            And(v) => {
-                for f in v.iter_mut() {
-                    f.eliminate_implies();
+        fn inner<T: Clone>(f: &mut PropFormula<T>) {
+            use PropFormula::*;
+            match f {
+                Var(_) => {}
+                Not(p) => inner(p),
+                And(v) => {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
-            }
-            Or(v) => {
-                for f in v.iter_mut() {
-                    f.eliminate_implies();
+                Or(v) => {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
+                Implies(p, q) => {
+                    inner(p);
+                    inner(q);
+                    let not_p = Not((*p).clone());
+                    *f = Or(vec![not_p, *q.clone()]);
+                }
+                Iff(p, q) => {
+                    inner(p);
+                    inner(q);
+                }
+                None => panic!("Invalid formula."),
             }
-            Implies(p, q) => {
-                p.eliminate_implies();
-                q.eliminate_implies();
-                let not_p = Not((*p).clone());
-                *self = Or(vec![not_p, *q.clone()]);
+        }
+
+        loop {
+            let prev = self.clone();
+            inner(self);
+            if prev == *self {
+                break;
             }
-            Iff(p, q) => {
-                p.eliminate_implies();
-                q.eliminate_implies();
-            }
-            None => panic!("Invalid formula."),
         }
     }
 
@@ -127,47 +151,54 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     /// !(P | Q) is equivalent to !P & !Q
     /// !!P is equivalent to P
     pub fn push_negation_inwards(&mut self) {
-        use PropFormula::*;
-        match self {
-            Var(_) => {}
-            Not(p) => {
-                p.push_negation_inwards(); // FIXME: Check correctness
-                match (**p).clone() {
-                    Var(_) => {}
-                    Not(ref p) => {
-                        *self = *p.clone();
-                    }
-                    And(v) => {
-                        let mut not_v = Vec::new();
-                        for f in v.iter() {
-                            not_v.push(Not(bx!(f.clone())));
+        fn inner<T: Clone>(f: &mut PropFormula<T>) {
+            use PropFormula::*;
+            match f {
+                Var(_) => {}
+                Not(p) => {
+                    match (**p).clone() {
+                        Var(_) => {}
+                        Not(ref p) => {
+                            *f = *p.clone();
                         }
-                        *self = Or(not_v);
-                        self.push_negation_inwards();
-                    }
-                    Or(v) => {
-                        let mut not_v = Vec::new();
-                        for f in v.iter() {
-                            not_v.push(Not(bx!(f.clone())));
+                        And(v) => {
+                            let mut not_v = Vec::new();
+                            for f in v.iter() {
+                                not_v.push(Not(bx!(f.clone())));
+                            }
+                            *f = Or(not_v);
                         }
-                        *self = And(not_v);
-                        self.push_negation_inwards();
+                        Or(v) => {
+                            let mut not_v = Vec::new();
+                            for f in v.iter() {
+                                not_v.push(Not(bx!(f.clone())));
+                            }
+                            *f = And(not_v);
+                        }
+                        _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
                     }
-                    _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
                 }
-            }
-            And(v) => {
-                for f in v.iter_mut() {
-                    f.push_negation_inwards();
+                And(v) => {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
-            }
-            Or(v) =>  {
-                for f in v.iter_mut() {
-                    f.push_negation_inwards();
+                Or(v) =>  {
+                    for f in v.iter_mut() {
+                        inner(f);
+                    }
                 }
+                None => panic!("Invalid formula."),
+                _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
             }
-            None => panic!("Invalid formula."),
-            _ => unreachable!("The `push_negation_inwards` function should call only after the `eliminate_iff` and `eliminate_implies` functions."),
+        }
+
+        loop {
+            let prev = self.clone();
+            inner(self);
+            if prev == *self {
+                break;
+            }
         }
     }
 
@@ -180,69 +211,76 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     /// P | (Q & R) is equivalent to (P | Q) & (P | R)
     /// (P & Q) | R is equivalent to (P | R) & (Q | R)
     pub fn distribute_disjunction_over_conjunction(&mut self) {
-        use PropFormula::*;
-        match self {
-            Var(_) => {}
+        fn inner<T: Clone>(f: &mut PropFormula<T>) {
+            use PropFormula::*;
+            match f {
+                Var(_) => {}
             Not(v) => assert!(matches!(**v, Var(_))),
             And(v) => {
                 for f in v.iter_mut() {
-                    f.distribute_disjunction_over_conjunction();
+                    inner(f);
                 }
             }
             Or(v) => {
                 // Check if there is a conjunction inside the disjunction.
                 if v.iter().any(|f| matches!(f, And(_))) {
+                    let mut new_v = Vec::new();
                     // (a & b & c) | (d & e & f) => (a | d) & (a | e) & (a | f) & (b | d) & (b | e)
                     // & (b | f) & (c | d) & (c | e) & (c | f)
-                    let mut new_v = Vec::new();
-                    for f in v.iter() {
-                        match f {
-                            And(v) => new_v.push(v.clone()),
-                            Var(_) => new_v.push(vec![f.clone()]),
-                            Not(v) => {
-                                assert!(matches!(**v, Var(_)));
-                                new_v.push(vec![f.clone()]);
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-
-                    fn cartesian_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
-                        let mut result = vec![vec![]];
-                        for i in v {
-                            let mut new_result = vec![];
-                            for j in i {
-                                for k in result.iter() {
-                                    let mut new_k = k.clone();
-                                    new_k.push(j.clone());
-                                    new_result.push(new_k);
-                                }
-                            }
-                            result = new_result;
-                        }
-                        result
-                    }
-
-                    let new_or = cartesian_product(new_v);
-
-                    *self = And(new_or.into_iter().map(|v| Or(v)).collect());
-                } else {
-                    // FIXME: Check correctness
-                    // If there is a disjunction inside the disjunction, then distribute it.
                     for f in v.iter_mut() {
-                        f.distribute_disjunction_over_conjunction();
+                        match f {
+                            And(v) => {
+                                new_v.push(v.clone())
+                            },
+                            Var(_) => new_v.push(vec![f.clone()]),
+                                Not(v) => {
+                                    assert!(matches!(**v, Var(_)));
+                                    new_v.push(vec![f.clone()]);
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+
+                        fn cartesian_product<T: Clone>(v: Vec<Vec<T>>) -> Vec<Vec<T>> {
+                            let mut result = vec![vec![]];
+                            for i in v {
+                                let mut new_result = vec![];
+                                for j in i {
+                                    for k in result.iter() {
+                                        let mut new_k = k.clone();
+                                        new_k.push(j.clone());
+                                        new_result.push(new_k);
+                                    }
+                                }
+                                result = new_result;
+                            }
+                            result
+                        }
+
+                        let new_or = cartesian_product(new_v);
+
+                        *f = And(new_or.into_iter().map(|v| Or(v)).collect());
+                    } else {
+                        for f in v.iter_mut() {
+                            inner(f);
+                        }
                     }
                 }
+                None => panic!("Invalid formula."),
+                _ => unreachable!("The `distribute_disjunction_over_conjunction` function should call only after the `eliminate_iff`, `eliminate_implies`, and `push_negation_inwards` functions."),
             }
-            None => panic!("Invalid formula."),
-            _ => unreachable!("The `distribute_disjunction_over_conjunction` function should call only after the `eliminate_iff`, `eliminate_implies`, and `push_negation_inwards` functions."),
+        }
+
+        loop {
+            let prev = self.clone();
+            inner(self);
+            if prev == *self {
+                break;
+            }
         }
     }
 
     /// Convert the propositional formula to CNF.
-    ///
-    /// NOTE: `distribute_disjunction_over_conjunction`, `push_negation_inwards`,
-    /// `eliminate_implies`, and `eliminate_iff` functions should be called first.
     pub fn to_cnf(&mut self) {
         self.eliminate_iff();
         self.eliminate_implies();
@@ -254,8 +292,16 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
     ///
     /// It calls the `to_cnf` function first. So, it is safe to call this function directly.
     ///
-    /// This ivalidates the formula.
-    pub fn to_cnf_repr<U>(&mut self) -> CnfFormula<U>
+    /// This invalidates the formula.
+    ///
+    /// # Arguments
+    /// * `U` - The type to be used for the countable type.
+    /// * `normalize` - If true, it normalizes the formula. It means that it removes duplicates and sorts the variables.
+    ///
+    /// # Returns
+    /// * A CNF formula.
+    /// * A mapping from variables to a countable type.
+    pub fn to_cnf_repr<U>(&mut self, normalize: bool) -> (CnfFormula<U>, HashMap<T, U>)
     where
         U: Ordinal + Clone,
     {
@@ -309,7 +355,6 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
                     }
                 }
                 And(prop) => {
-                    assert!(prop.iter().all(|f| matches!(f, Or(_))));
                     let mut cnf = vec![];
                     for f in prop {
                         let f_cnf = rec_to_cnf_repr(f, mapping, curr_value);
@@ -333,6 +378,23 @@ impl<T: Clone + Debug + Eq + Hash> PropFormula<T> {
 
         self.to_cnf();
         let mut mapping = HashMap::<T, U>::new();
-        rec_to_cnf_repr(self, &mut mapping, &mut U::default())
+        let cnf = rec_to_cnf_repr(self, &mut mapping, &mut U::default());
+
+        // Remove duplicates
+        if normalize {
+            let mut cnf = cnf
+                .into_iter()
+                .map(|mut v| {
+                    v.sort();
+                    v.dedup();
+                    v
+                })
+                .collect::<Vec<Vec<(U, bool)>>>();
+            cnf.sort();
+            cnf.dedup();
+            (cnf, mapping)
+        } else {
+            (cnf, mapping)
+        }
     }
 }

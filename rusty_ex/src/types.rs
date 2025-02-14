@@ -1,3 +1,4 @@
+use petgraph::visit::IntoNodeReferences;
 use rustc_ast::NodeId;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
@@ -9,7 +10,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::panic;
 
-use crate::configs::prop_formula::{PropFormula, ToPropFormula};
+use crate::configs::prop_formula::{ConversionMethod, PropFormula, ToPropFormula};
 
 // Terminology:
 // - Feature: an identifier that identifies a piece of code that can be included or excluded from compilation
@@ -124,6 +125,12 @@ pub struct TermsTree<Key: TermKey> {
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct FeatureKey(pub Feature);
 
+impl From<&Feature> for FeatureKey {
+    fn from(value: &Feature) -> Self {
+        FeatureKey(value.clone())
+    }
+}
+
 /// Feature node, with the feature, its weight (if already calculated) and its nature
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FeatureNode {
@@ -233,6 +240,12 @@ impl Display for SuperArtifactKey {
     }
 }
 
+impl Feature {
+    pub fn is_negated(&self) -> bool {
+        self.not
+    }
+}
+
 impl<Key: TermKey> TermsTree<Key> {
     /// Create a new empty Terms Tree (UIR)
     pub fn new() -> Self {
@@ -334,6 +347,49 @@ impl FeaturesGraph {
         index
     }
 
+    /// Convert the features graph to a propositional formula using a naive method.
+    ///
+    /// The naive method consists in iterating over all nodes and creating a formula with all
+    /// the complex features of each node.
+    /// The formula is a conjunction of all the complex features of all nodes.
+    fn to_prop_formula_naive(&self) -> PropFormula<String> {
+        fn resolve_complex_feature_rec(complex_feature: &ComplexFeature) -> PropFormula<String> {
+            match complex_feature {
+                ComplexFeature::None => PropFormula::None,
+                ComplexFeature::Simple(feature) => {
+                    if feature.is_negated() {
+                        PropFormula::Not(Box::new(PropFormula::Var(feature.name.to_string())))
+                    } else {
+                        PropFormula::Var(feature.name.to_string())
+                    }
+                }
+                ComplexFeature::All(features) => {
+                    let mut formula = Vec::new();
+                    for feature in features {
+                        formula.push(resolve_complex_feature_rec(feature));
+                    }
+                    PropFormula::And(formula)
+                }
+                ComplexFeature::Any(features) => {
+                    let mut formula = Vec::new();
+                    for feature in features {
+                        formula.push(resolve_complex_feature_rec(feature));
+                    }
+                    PropFormula::Or(formula)
+                }
+            }
+        }
+
+        let mut formula = Vec::new();
+        for (_, feature_node) in self.graph.node_references() {
+            for complex_feature in &feature_node.complex_feature {
+                formula.push(resolve_complex_feature_rec(complex_feature));
+            }
+        }
+
+        PropFormula::And(formula)
+    }
+
     /// Print features graph in DOT format
     pub fn print_dot(&self) {
         let get_node_attr = |_g: &DiGraph<FeatureNode, Edge>, node: (NodeIndex, &FeatureNode)| {
@@ -385,11 +441,11 @@ impl Default for FeaturesGraph {
     }
 }
 
-impl<T> ToPropFormula<T> for FeaturesGraph {
-    fn to_prop_formula(&self) -> PropFormula<T> {
-        // let mut cnf = CnfFormula::new();
-
-        todo!()
+impl ToPropFormula<String> for FeaturesGraph {
+    fn to_prop_formula(&self, method: ConversionMethod) -> PropFormula<String> {
+        match method {
+            ConversionMethod::Naive => self.to_prop_formula_naive(),
+        }
     }
 }
 
