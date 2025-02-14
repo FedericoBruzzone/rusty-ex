@@ -36,8 +36,8 @@ These graphs are then analyzed to determine the most important features, which w
 > [!WARNING]
 > `RustyEx` is under active development, this documentation or the attached documents _(especially my thesis)_ may be outdated soon.
 
-<br />
-<br />
+![Architecture](assets/architecture.svg)
+
 <br />
 
 ## Table of Contents
