@@ -22,14 +22,14 @@ To this end, _RustyEx_ is introduced as a tool for performing _static analysis_ 
 This is achieved by _instrumenting_ the Rust compiler ([`rustc`](https://doc.rust-lang.org/rustc/index.html)) and traversing the [_Abstract Syntax Tree_ (AST)](https://en.wikipedia.org/wiki/Abstract_syntax_tree).
 During the visit, _RustyEx_ collects information about the features, building a _custom tree_ that represents each piece of the code along with its features and their importance, represented as weight.
 
-This internal tree is then used to construct two resulting graphs: the _Features Dependency Graph_, which focuses on the dependencies between features, and the _Artifacts Dependency Tree_, which describes each piece of code annotated by a feature.
+This internal tree is then used to construct two resulting graphs: the _Features Dependency Graph_, with a focus on feature dependencies and interactions; and the _Artifact Dependency Tree_, which offers a more detailed view of the pieces of code annotated by features.
 These graphs are then analyzed to determine the most important features, which will be further used to generate _valid configurations_ for testing.
 
 </details>
 
-🎓 **Full Thesis**: _TODO link_
+🎓 **Full Thesis**: [`thesis.pdf`](https://github.com/Favo02/rusty-ex/releases/download/thesis-release/thesis.pdf)
 
-📊 **Results Appendix**: _TODO link_
+📊 **Complete Results**: [`projects-table.pdf`](https://github.com/Favo02/rusty-ex/releases/download/thesis-release/projects-table.pdf) [`crates-table-part1.pdf`](https://github.com/Favo02/rusty-ex/releases/download/thesis-release/crates-table-part1.pdf) [`crates-table-part2.pdf`](https://github.com/Favo02/rusty-ex/releases/download/thesis-release/crates-table-part2.pdf)
 
 <br />
 
@@ -63,11 +63,11 @@ These graphs are then analyzed to determine the most important features, which w
 
 - ***Rust Artifact***: a term annotated by a feature;
 
-- ***Global Scope***: the root of the codebase, contains all features, items, and artifacts;
+- ***Global Scope***: the root of the codebase; it contains all features, terms, and artifacts and is conventionally annotated with the _Global_ feature;
 
 - ***Feature importance (or weight)***: the importance of a feature increases with the number of other features that depend on it. Additionally, the larger the piece of code (artifact) controlled by a feature, the more important it is;
 
-- ***Dependency***: a node (either a feature, a term, or an artifact) is said to depend on another node if its inclusion or execution is influenced by the inclusion or execution of the other node. In code terms, a feature or a term depends on another node if it is nested within scope of the other node;
+- ***Dependency***: a node (either a feature, a term, or an artifact) is said to depend on another node if its inclusion or execution is influenced by the inclusion or execution of the other node. In code terms, a feature or a term depends on another node if it is nested within the scope of the other node;
 
 - ***Dependency graph***: a general rooted graph that illustrates dependencies between nodes, where the root is the global scope.
 Dependencies are depicted as directed edges, where the source node depends on the target node.
@@ -76,10 +76,10 @@ Depending on the nature of the nodes, the graph could be acyclic, forming a tree
 - ***Unified Intermediate Representation (UIR) or Terms Dependency Tree***: a dependency graph with nodes representing terms in a codebase.
 Since each term can depend on at most one other term and because of the uniqueness of each term, there can be no circular dependencies, making the graph a tree, rooted at the global scope;
 
-- ***Features Dependency Graph***: a dependency graph with nodes representing features in a codebase.
-Unlike artifacts, features are not unique, meaning a feature can depend on different features in different contexts, creating possible circular dependencies;
+- ***Features Dependency Graph***: a dependency graph with nodes representing Features in a codebase.
+Unlike terms, features are not unique, meaning a feature can depend on different features in different contexts, creating possible circular dependencies;
 
-- ***Artifacts Dependency Tree***: a dependency graph where the nodes represent artifacts within a codebase.
+- ***Artifacts Dependency Tree***: a dependency graph where the nodes represent artifacts (terms annotated with features), within a codebase.
 Since each artifact can depend on at most one other artifact and because of the uniqueness of each artifact, there can be no circular dependencies, making the graph a tree.
 
 ## Installation and Usage
