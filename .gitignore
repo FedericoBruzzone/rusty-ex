@@ -27,7 +27,9 @@ Cargo.lock
 ### Benchmark ###
 **/benchmarks/*
 !**/benchmarks/benchmark.py
-!**/benchmarks/total.py
+!**/benchmarks/format.py
+!**/benchmarks/data-analysis.ipynb
+!**/benchmarks/data
 
 ### Test workspaces ###
 temp

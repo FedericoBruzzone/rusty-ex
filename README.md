@@ -202,10 +202,20 @@ cargo run --manifest-path ../../../Cargo.toml --bin cargo-rusty-ex -- --print-fe
 
 ### Benchmarks
 
-Benchmark scripts are available in the `benchmarks` directory:
+Benchmark scripts are available in the `benchmarks` directory.
 
-- `benchmark.py` analyzes all the crates specified in the `TO_ANALYZE` list, producing `results.json` and `results.tex` with the results, as a JSON file and a LaTeX table, respectively.
-- `total.py` reads the `results.json` file and calculates a global report for each independent project, used for workspace projects.
+Prerequisites:
+
+- python environment with `requirements.txt` installed
+- installed `cargo-rusty-ex` binary
+
+Usage:
+
+- `benchmark.py` will clone and analyze automatically all the repositories listed in the `TO_ANALYZE` hardcoded list, generating:
+  - `data/analyzed-crates.json` file containing the results of each single crate analysis
+  - `data/analyzed-projects.json` file containing the results of the analysis aggregated by project
+- `format.py` will format the files in `data/` into a LaTeX table
+- `data-analysis.ipynb` is a Jupyter notebook used for some statistical analysis of the results
 
 ### More
 

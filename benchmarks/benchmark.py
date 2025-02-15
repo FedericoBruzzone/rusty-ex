@@ -44,7 +44,7 @@ def get_cratesio_downloads(crate_name):
         eprintt(f"Error fetching crates.io downloads: {e}")
         return None
 
-# return and parse Cargo.toml file
+# parse Cargo.toml file
 def parse_cargo_toml(subdir="."):
     cargo_toml = os.path.join(subdir, "Cargo.toml")
 
@@ -69,6 +69,7 @@ def expand_members(repo_name, members):
             expanded_members.append(member)
     return expanded_members
 
+# return the maximum memory usage of the current process and its children
 def max_memory():
     current_process = psutil.Process()
     children = current_process.children(recursive=True)
@@ -188,71 +189,69 @@ def analyze_members(repo_name, members):
             continue
     return results
 
-# format the results as a LaTeX row
-def latex_format(results):
-    # print("Crate, GH Stars, Crates.io Downloads, Member, Lines of Code, Dependencies, Defined Features, Term Nodes, Term Edges, Term Height, Feature Nodes, Feature Edges, Feature Squashed Edges, Artifact Nodes, Artifact Edges, Execution Time, Peak Memory Usage")
+# aggregate the result of a single project
+def aggregate_project(project):
+    root = project[0]
 
-    formatted = []
+    result = {
+        "members": len(project),
+        "errors": len([m for m in project if m["error"]]),
+    }
 
-    for i, res in enumerate(results):
-        linebreak = "\\cline{4-17}" if i != len(results) - 1 else "\\hline"
+    for root_field in ["lines_of_code", "url", "crate", "github_stars", "cratesio_downloads"]:
+        result[root_field] = root[root_field]
 
-        def g(x):
-            r = res.get(x, "N/A")
-            return r.replace("_", "\\_") if isinstance(r, str) else r
+    for sum_field in ["dependencies", "defined_features", "term_nodes", "term_edges", "feature_nodes", "feature_edges", "feature_squashed_edges", "artifact_nodes", "artifact_edges", "execution_time"]:
+        result[sum_field] = sum(m[sum_field] for m in project if not m["error"])
 
-        if i == 0 and res["error"]:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
-            continue
+    for max_field in ["term_height", "peak_memory_usage"]:
+        result[max_field] = max(m[max_field] for m in project if not m["error"])
 
-        if i == 0:
-            formatted.append(f"\\multirow{{{len(results)}}}{{*}}{{\\href{{{g('url')}}}{{{{{g('crate')}}}}}}} & \\multirow{{{len(results)}}}{{*}}{{{g('github_stars')}}} & \\multirow{{{len(results)}}}{{*}}{{{g('cratesio_downloads')}}} & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
-            continue
+    return result
 
-        if res["error"]:
-            formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & \\multicolumn{{10}}{{c|}}{{\\textit{{error}}}} \\\\ {linebreak}")
-            continue
+def main():
 
-        formatted.append(f"& & & {g('member')} & {g('lines_of_code')} & {g('dependencies')} & {g('defined_features')} & {g('term_nodes')} & {g('term_edges')} & {g('term_height')} & {g('feature_nodes')} & {g('feature_edges')} & {g('feature_squashed_edges')} & {g('artifact_nodes')} & {g('artifact_edges')} & {g('execution_time'):.2f} s & {int(g('peak_memory_usage'))} MB \\\\ {linebreak}")
+    crates = []
+    projects = []
 
-    return "\n".join(formatted)
+    for repo_url in TO_ANALYZE:
+        try:
+            repo_name = os.path.basename(repo_url).replace(".git", "")
+            stars = get_github_stars(repo_url)
+            downloads = get_cratesio_downloads(repo_name)
 
-def main(repo_url):
-    try:
-        repo_name = os.path.basename(repo_url).replace(".git", "")
-        stars = get_github_stars(repo_url)
-        downloads = get_cratesio_downloads(repo_name)
+            if os.path.exists(repo_name):
+                shutil.rmtree(repo_name)
 
-        if os.path.exists(repo_name):
+            eprintt(f"Cloning the repository from {repo_url}.")
+            subprocess.run(["git", "clone", "--recurse-submodules", "-j8", repo_url], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+            cargo_toml = parse_cargo_toml(repo_name)
+            members = cargo_toml.get("workspace", {}).get("members", [])
+            members = expand_members(repo_name, members)
+
+            eprintt(f"Members: {members}")
+
+            project = []
+
+            project.append(analyze(repo_name))
+            project += analyze_members(repo_name, members)
+
+            project = [p | {"url": repo_url, "crate": repo_name, "github_stars": stars, "cratesio_downloads": downloads} for p in project]
+
             shutil.rmtree(repo_name)
 
-        eprintt(f"Cloning the repository from {repo_url}.")
-        subprocess.run(["git", "clone", "--recurse-submodules", "-j8", repo_url], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            crates += project
+            projects.append(aggregate_project(project))
 
-        cargo_toml = parse_cargo_toml(repo_name)
-        members = cargo_toml.get("workspace", {}).get("members", [])
-        members = expand_members(repo_name, members)
+        except Exception as e:
+            eprintt(f"Error: {e}")
 
-        eprintt(f"Members: {members}")
+    with open("data/analyzed-crates.json", "a") as f:
+        json.dump(crates, f, indent=4)
 
-        results = []
-
-        results.append(analyze(repo_name))
-        results += analyze_members(repo_name, members)
-
-        results = [r | {"url": repo_url, "crate": repo_name, "github_stars": stars, "cratesio_downloads": downloads} for r in results]
-
-        shutil.rmtree(repo_name)
-
-        with open("results.json", "a") as f:
-            json.dump(results, f, indent=4)
-            f.write(",\n")
-
-        with open("results.tex", "a") as f:
-            f.write(latex_format(results))
-
-    except Exception as e:
-        eprintt(f"Error: {e}")
+    with open("data/analyzed-projects.json", "a") as f:
+        json.dump(projects, f, indent=4)
 
 TO_ANALYZE = [
     "https://github.com/sharkdp/bat",
@@ -298,11 +297,4 @@ TO_ANALYZE = [
 ]
 
 if __name__ == "__main__":
-    with open("results.json", "a") as f:
-        f.write("[\n")
-
-    for repo_url in TO_ANALYZE:
-        result = main(repo_url)
-
-    with open("results.json", "a") as f:
-        f.write("]\n")
+    main()
