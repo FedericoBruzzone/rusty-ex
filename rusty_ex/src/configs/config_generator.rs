@@ -48,14 +48,18 @@ where
             self.add_clause(clause);
         }
     }
-    /// This function finds all the configurations that satisfy the given variable.
+    /// This function finds all the configurations that satisfy a set of variables.
     ///
     /// For instance:
-    ///
-    /// `(0, true)` is the variable `x0` that must be true.
-    pub fn all_configs_given_a_var(&mut self, var: CnfLit<u32>) -> CnfFormula<u32> {
+    /// [(0, true)] is the variable `x0` that must be true, the function fill return
+    /// all the configurations that satisfy `x0`.
+    /// [(0, false), (1, true)] is the variable `x0` that must be false and `x1` that must be true,
+    /// the function fill return all the configurations that satisfy `!x0 & x1`.
+    pub fn all_configs_given_a_var(&mut self, vars: Vec<CnfLit<u32>>) -> CnfFormula<u32> {
         // Set the variable to the given value.
-        self.add_clause(vec![var]);
+        for var in vars {
+            self.add_clause(vec![var]);
+        }
 
         // Find all the configurations that satisfy the given variable.
         let mut all_configs = Vec::new();
@@ -64,14 +68,20 @@ where
             match self.solver.solve().unwrap() {
                 SolverResult::Sat => {
                     let sol = self.solver.full_solution().unwrap();
-                    let config: Vec<(u32, bool)> = sol
+                    let config = sol
                         .iter()
                         .map(|lit| match sol[lit.var()] {
                             TernaryVal::True => (lit.vidx32(), true),
                             TernaryVal::False => (lit.vidx32(), false),
-                            TernaryVal::DontCare => panic!("Unexpected DontCare"), // TODO: Should we handle this case?
+                            TernaryVal::DontCare => {
+                                // The formula is satisfied.
+                                // For now, we don't handle this case because
+                                // we are only interested in the configurations that satisfy the
+                                // given variables.
+                                panic!("Unexpected DontCare")
+                            }
                         })
-                        .collect();
+                        .collect::<Vec<(u32, bool)>>();
                     all_configs.push(config.clone());
 
                     // Add the negation of the current configuration.
@@ -109,3 +119,4 @@ impl ConfigGeneratorUtils {
         s
     }
 }
+

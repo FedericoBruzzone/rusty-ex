@@ -1,3 +1,4 @@
+pub mod centrality;
 pub mod config_generator;
 pub mod prop_formula;
 
