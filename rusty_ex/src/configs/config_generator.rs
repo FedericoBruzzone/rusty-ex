@@ -119,4 +119,3 @@ impl ConfigGeneratorUtils {
         s
     }
 }
-

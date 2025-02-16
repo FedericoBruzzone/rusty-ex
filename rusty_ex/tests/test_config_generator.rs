@@ -115,4 +115,3 @@ fn test_multiple_var2() -> Result<(), String> {
 
     Ok(())
 }
-

@@ -42,9 +42,7 @@ impl Centrality {
             );
 
         match katz {
-            Ok(katz) => {
-                return katz;
-            }
+            Ok(katz) => katz,
             Err(e) => {
                 // TODO: Probabily we should return handle this error gracefully
                 panic!("Error computing katz centrality: {:?}", e);
@@ -69,9 +67,7 @@ impl Centrality {
             );
 
         match eigenvector {
-            Ok(eigenvector) => {
-                return eigenvector;
-            }
+            Ok(eigenvector) => eigenvector,
             Err(e) => {
                 // TODO: Probabily we should return handle this error gracefully
                 panic!("Error computing eigenvector centrality: {:?}", e);

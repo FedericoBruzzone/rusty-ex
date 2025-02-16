@@ -1324,4 +1324,3 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id);
     }
 }
-
