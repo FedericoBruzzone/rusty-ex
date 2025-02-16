@@ -14,6 +14,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
+use configs::centrality::Centrality;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -245,6 +246,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                     idents_weights: HashMap::new(),
                     weights_to_resolve: LinkedHashSet::new(),
+
+                    centrality: None,
                 };
 
                 // initialize global scope (global feature and artifact)
@@ -264,6 +267,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 collector.terms_tree.graph.reverse(); // restore graph
 
                 collector.add_dummy_centrality_node_edges();
+
+                collector
+                    .centrality
+                    .replace(Centrality::new(&collector.features_graph));
 
                 self.process_cli_args(collector, krate);
             });
@@ -309,6 +316,9 @@ pub struct CollectVisitor {
     /// Terms that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
     weights_to_resolve: LinkedHashSet<TermIndex>,
+
+    /// Centrality measures of the Features Graph
+    centrality: Option<Centrality>,
 }
 
 impl CollectVisitor {
@@ -873,55 +883,10 @@ impl CollectVisitor {
 
     /// Print some centrality measures of the features graph
     fn print_centrality(&self) {
-        let katz: rustworkx_core::Result<Option<Vec<f64>>> =
-            rustworkx_core::centrality::katz_centrality(
-                &self.features_graph.graph,
-                |e| Ok(e.weight().weight),
-                None,
-                None,
-                None,
-                None,
-                None,
-            );
-
-        let closeness =
-            rustworkx_core::centrality::closeness_centrality(&self.features_graph.graph, false);
-
-        let eigenvector: rustworkx_core::Result<Option<Vec<f64>>> =
-            rustworkx_core::centrality::eigenvector_centrality(
-                &self.features_graph.graph,
-                |e| Ok(e.weight().weight),
-                None,
-                Some(1e-2),
-            );
-
-        let graph_nodes = self
-            .features_graph
-            .graph
-            .node_indices()
-            .map(|n| {
-                let feat = self.features_graph.graph.node_weight(n).unwrap();
-                (
-                    n,
-                    (feat.feature.0.name.clone(), feat.feature.0.not, feat.weight),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        let katz = katz.unwrap().unwrap();
-        let katz_zip = katz.iter().zip(graph_nodes.iter()).collect::<Vec<_>>();
-
-        let closeness_zip = closeness.iter().zip(graph_nodes.iter()).collect::<Vec<_>>();
-
-        let eigenvector = eigenvector.unwrap().unwrap();
-        let eigenvector_zip = eigenvector
-            .iter()
-            .zip(graph_nodes.iter())
-            .collect::<Vec<_>>();
-
-        println!("katz {:?}", katz_zip); // println!("katz {:?}", katz.unwrap().unwrap());
-        println!("clos {:?}", closeness_zip); // println!("clos {:?}", closeness);
-        println!("eige {:?}", eigenvector_zip); // println!("eige {:?}", eigenvector);
+        self.centrality
+            .as_ref()
+            .unwrap()
+            .pretty_print(&self.features_graph)
     }
 
     /// Print all extracted graphs serialized
@@ -1359,3 +1324,4 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
         self.post_walk(node_id);
     }
 }
+
