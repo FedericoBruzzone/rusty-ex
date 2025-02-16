@@ -1,4 +1,9 @@
+[github-ci]: https://github.com/Favo02/rusty-ex/actions/workflows/ci.yml
+[github-ci-shield]: https://github.com/Favo02/rusty-ex/actions/workflows/ci.yml/badge.svg
+
 ## RustyEx 🦀
+
+[![GitHub CI][github-ci-shield]][github-ci]
 
 > **TL;DR:**
 >
