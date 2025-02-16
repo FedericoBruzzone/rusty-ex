@@ -3,21 +3,21 @@ name: CI
 on:
   push:
     paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.lock'
-      - 'Cargo.toml'
-      - 'rustfmt.toml'
-      - 'config/**'
+      - '**/src/**'
+      - '**/tests/**'
+      - '**/Cargo.lock'
+      - '**/Cargo.toml'
+      - '**/rustfmt.toml'
+      - '**/config/**'
       - '.github/workflows/**'
   pull_request:
     paths:
-      - 'src/**'
-      - 'tests/**'
-      - 'Cargo.lock'
-      - 'Cargo.toml'
-      - 'rustfmt.toml'
-      - 'config/**'
+      - '**/src/**'
+      - '**/tests/**'
+      - '**/Cargo.lock'
+      - '**/Cargo.toml'
+      - '**/rustfmt.toml'
+      - '**/config/**'
       - '.github/workflows/**'
 
 env:
