@@ -32,7 +32,7 @@ impl Centrality {
         }
     }
 
-    pub fn new_with_refiner(&self, refiner_hm: &HashMap<FeatureIndex, f64>) -> Self {
+    pub fn refine(&self, refiner_hm: HashMap<FeatureIndex, f64>) -> Self {
         let mut measures = Measures::default();
         if let Some(katz) = &self.measures.katz {
             measures.katz = Some(

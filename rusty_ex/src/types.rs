@@ -512,6 +512,7 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
         index
     }
 
+    /// NOTE: The `FeatureGraph` is expected to be the same as the one used to create the `ArtifactsTree`
     pub fn refiner_hash_map(&self, fgraph: &FeaturesGraph) -> HashMap<FeatureIndex, f64> {
         fn refined_hash_map_rec(
             complex_index: ComplexFeature<FeatureIndex>,
