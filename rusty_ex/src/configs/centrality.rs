@@ -1,18 +1,29 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     types::{FeatureIndex, FeaturesGraph},
     GLOBAL_DUMMY_INDEX,
 };
 
-#[derive(Default)]
-pub struct Centrality {
-    pub measures: Measures,
-    pub feat_graph_indices: Vec<FeatureIndex>,
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum CentralityKind {
+    #[default]
+    All,
+    Katz,
+    Closeness,
+    Eigenvector,
 }
 
 #[derive(Default)]
-pub struct Measures {
+pub struct Centrality {
+    pub measures: CentralityMeasures,
+    pub feat_graph_indices: Vec<FeatureIndex>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct CentralityMeasures {
     pub katz: Option<Vec<f64>>,
     pub closeness: Vec<Option<f64>>,
     pub eigenvector: Option<Vec<f64>>,
@@ -29,7 +40,7 @@ impl Centrality {
             node_indices.collect::<Vec<FeatureIndex>>()
         };
 
-        let measures = Measures {
+        let measures = CentralityMeasures {
             katz: Centrality::compute_katz(feat_graph),
             closeness: Centrality::compute_closeness(feat_graph),
             eigenvector: Centrality::compute_eigenvector(feat_graph),
@@ -42,7 +53,7 @@ impl Centrality {
     }
 
     pub fn refine(&self, refiner_hm: HashMap<FeatureIndex, f64>) -> Self {
-        let mut measures = Measures::default();
+        let mut measures = CentralityMeasures::default();
 
         // They are ordered in the same way as the feat_graph_indices.
         let refined_values: Vec<&f64> = self
@@ -85,6 +96,18 @@ impl Centrality {
             measures,
             feat_graph_indices: self.feat_graph_indices.clone(),
         }
+    }
+
+    pub fn katz(&self) -> Option<&Vec<f64>> {
+        self.measures.katz.as_ref()
+    }
+
+    pub fn closeness(&self) -> &Vec<Option<f64>> {
+        &self.measures.closeness
+    }
+
+    pub fn eigenvector(&self) -> Option<&Vec<f64>> {
+        self.measures.eigenvector.as_ref()
     }
 
     fn compute_katz(feat_graph: &FeaturesGraph) -> Option<Vec<f64>> {

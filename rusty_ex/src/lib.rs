@@ -14,7 +14,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use configs::centrality::Centrality;
+use configs::centrality::{Centrality, CentralityKind};
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -58,7 +58,11 @@ pub struct PrintAstArgs {
 
     /// Pass --print-centrality to print some centrality measures on Features Graph
     #[clap(long)]
-    print_centrality: bool,
+    pretty_print_centrality: bool,
+
+    /// Pass --serialize-centrality followed by the centrality measure to serialize it.
+    #[clap(long, value_enum)]
+    serialize_centrality: Option<CentralityKind>,
 
     /// Pass --print-serialized-graphs to print all extracted graphs serialized
     #[clap(long)]
@@ -72,6 +76,21 @@ pub struct PrintAstArgs {
     // mytool --allcaps -- some extra args here
     //                     ^^^^^^^^^^^^^^^^^^^^ these are cargo args
     cargo_args: Vec<String>,
+}
+
+impl clap::ValueEnum for CentralityKind {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::All, Self::Katz, Self::Closeness, Self::Eigenvector]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            Self::All => Some(clap::builder::PossibleValue::new("all")),
+            Self::Katz => Some(clap::builder::PossibleValue::new("katz")),
+            Self::Closeness => Some(clap::builder::PossibleValue::new("closeness")),
+            Self::Eigenvector => Some(clap::builder::PossibleValue::new("eigenvector")),
+        }
+    }
 }
 
 impl RustcPlugin for RustcEx {
@@ -153,8 +172,11 @@ impl PrintAstCallbacks {
         if self.args.print_artifacts_tree {
             collector.artifacts_tree.print_dot();
         }
-        if self.args.print_centrality {
-            collector.print_centrality();
+        if self.args.pretty_print_centrality {
+            collector.pretty_print_centrality();
+        }
+        if let Some(centrality) = &self.args.serialize_centrality {
+            collector.serialize_centrality(centrality);
         }
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
@@ -853,8 +875,42 @@ impl CollectVisitor {
             });
     }
 
+    /// Serialize the centrality measures of the Features Graph
+    fn serialize_centrality(&self, kind: &CentralityKind) {
+        match kind {
+            CentralityKind::All => {
+                let measures = &self.centrality.as_ref().unwrap().measures;
+                println!(
+                    "{}",
+                    serde_json::to_string(measures).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Katz => {
+                let katz = self.centrality.as_ref().unwrap().katz();
+                println!(
+                    "{}",
+                    serde_json::to_string(&katz).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Closeness => {
+                let closeness = self.centrality.as_ref().unwrap().closeness();
+                println!(
+                    "{}",
+                    serde_json::to_string(&closeness).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Eigenvector => {
+                let eigenvector = self.centrality.as_ref().unwrap().eigenvector();
+                println!(
+                    "{}",
+                    serde_json::to_string(&eigenvector).expect("Error: cannot serialize data")
+                );
+            }
+        }
+    }
+
     /// Print some centrality measures of the features graph
-    fn print_centrality(&self) {
+    fn pretty_print_centrality(&self) {
         self.centrality
             .as_ref()
             .unwrap()
