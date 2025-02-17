@@ -542,8 +542,11 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
 
         fn normalize_max(hm: &mut HashMap<FeatureIndex, f64>) {
             let max = hm.values().cloned().fold(0.0, f64::max);
+            if max == 0.0 {
+                return;
+            }
             for (_, weight) in hm.iter_mut() {
-                *weight = *weight / max;
+                *weight /= max;
             }
         }
 

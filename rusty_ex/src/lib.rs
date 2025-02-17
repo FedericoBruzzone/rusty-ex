@@ -60,9 +60,9 @@ pub struct PrintAstArgs {
     #[clap(long)]
     pretty_print_centrality: bool,
 
-    /// Pass --serialize-centrality followed by the centrality measure to serialize it.
+    /// Pass --serialized-centrality followed by the centrality measure to print the serialized centrality
     #[clap(long, value_enum)]
-    serialize_centrality: Option<CentralityKind>,
+    serialized_centrality: Option<CentralityKind>,
 
     /// Pass --print-serialized-graphs to print all extracted graphs serialized
     #[clap(long)]
@@ -175,8 +175,8 @@ impl PrintAstCallbacks {
         if self.args.pretty_print_centrality {
             collector.pretty_print_centrality();
         }
-        if let Some(centrality) = &self.args.serialize_centrality {
-            collector.serialize_centrality(centrality);
+        if let Some(centrality) = &self.args.serialized_centrality {
+            collector.serialized_centrality(centrality);
         }
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
@@ -293,7 +293,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
                 let refiner_hm = collector
                     .artifacts_tree
                     .refiner_hash_map(&collector.features_graph);
-                let refined = Centrality::new(&collector.features_graph, true).refine(refiner_hm);
+                let centrality = Centrality::new(&collector.features_graph, true);
+                let refined = centrality.refine(refiner_hm);
                 collector.centrality.replace(refined);
 
                 self.process_cli_args(collector, krate);
@@ -876,7 +877,7 @@ impl CollectVisitor {
     }
 
     /// Serialize the centrality measures of the Features Graph
-    fn serialize_centrality(&self, kind: &CentralityKind) {
+    fn serialized_centrality(&self, kind: &CentralityKind) {
         match kind {
             CentralityKind::All => {
                 let measures = &self.centrality.as_ref().unwrap().measures;

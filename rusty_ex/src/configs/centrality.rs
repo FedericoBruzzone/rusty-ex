@@ -16,13 +16,13 @@ pub enum CentralityKind {
     Eigenvector,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Centrality {
     pub measures: CentralityMeasures,
     pub feat_graph_indices: Vec<FeatureIndex>,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct CentralityMeasures {
     pub katz: Option<Vec<f64>>,
     pub closeness: Vec<Option<f64>>,
@@ -30,6 +30,13 @@ pub struct CentralityMeasures {
 }
 
 impl Centrality {
+    /// Create a new Centrality struct with the centrality measures computed for the
+    /// FeaturesGraph. If remove_dummy is true, the dummy node is removed from the
+    /// centrality measures.
+    ///
+    /// NOTE: The dummy node is the node with the index GLOBAL_DUMMY_INDEX.
+    /// If `remove_dummy` is false, you have to be sure when calling
+    /// `refine` that the dummy node is not present in the refiner hashmap.
     pub fn new(feat_graph: &FeaturesGraph, remove_dummy: bool) -> Self {
         let node_indices = feat_graph.graph.node_indices();
         let feat_graph_indices = if remove_dummy {
@@ -59,7 +66,7 @@ impl Centrality {
         let refined_values: Vec<&f64> = self
             .feat_graph_indices
             .iter()
-            .map(|feature_index| refiner_hm.get(&feature_index).unwrap())
+            .map(|feature_index| refiner_hm.get(feature_index).unwrap())
             .collect();
 
         if let Some(katz) = &self.measures.katz {
@@ -76,9 +83,10 @@ impl Centrality {
             .closeness
             .iter()
             .zip(refined_values.iter())
-            .map(|(closeness, refined_value)| match closeness {
-                Some(closeness) => Some(closeness * *refined_value),
-                None => None,
+            .map(|(closeness, refined_value)| {
+                closeness
+                    .as_ref()
+                    .map(|closeness| closeness * *refined_value)
             })
             .collect();
 
