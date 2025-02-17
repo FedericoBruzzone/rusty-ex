@@ -1,11 +1,11 @@
-use petgraph::graph::NodeIndex;
+use std::collections::HashMap;
 
-use crate::types::FeaturesGraph;
+use crate::types::{FeatureIndex, FeaturesGraph};
 
 #[derive(Default)]
 pub struct Centrality {
     pub measures: Measures,
-    pub feat_graph_indices: Vec<NodeIndex>,
+    pub feat_graph_indices: Vec<FeatureIndex>,
 }
 
 #[derive(Default)]
@@ -17,7 +17,10 @@ pub struct Measures {
 
 impl Centrality {
     pub fn new(feat_graph: &FeaturesGraph) -> Self {
-        let feat_graph_indices = feat_graph.graph.node_indices().collect::<Vec<NodeIndex>>();
+        let feat_graph_indices = feat_graph
+            .graph
+            .node_indices()
+            .collect::<Vec<FeatureIndex>>();
         let measures = Measures {
             katz: Centrality::compute_katz(feat_graph),
             closeness: Centrality::compute_closeness(feat_graph),
@@ -26,6 +29,44 @@ impl Centrality {
         Centrality {
             measures,
             feat_graph_indices,
+        }
+    }
+
+    pub fn new_with_refiner(&self, refiner_hm: &HashMap<FeatureIndex, f64>) -> Self {
+        let mut measures = Measures::default();
+        if let Some(katz) = &self.measures.katz {
+            measures.katz = Some(
+                katz.iter()
+                    .enumerate()
+                    .map(|(index, katz)| katz * refiner_hm[&self.feat_graph_indices[index]])
+                    .collect(),
+            );
+        }
+        if let Some(eigenvector) = &self.measures.eigenvector {
+            measures.eigenvector = Some(
+                eigenvector
+                    .iter()
+                    .enumerate()
+                    .map(|(index, eigenvector)| {
+                        eigenvector * refiner_hm[&self.feat_graph_indices[index]]
+                    })
+                    .collect(),
+            );
+        }
+        measures.closeness = self
+            .measures
+            .closeness
+            .iter()
+            .enumerate()
+            .map(|(index, closeness)| match closeness {
+                Some(closeness) => Some(closeness * refiner_hm[&self.feat_graph_indices[index]]),
+                None => None,
+            })
+            .collect();
+
+        Centrality {
+            measures,
+            feat_graph_indices: self.feat_graph_indices.clone(),
         }
     }
 

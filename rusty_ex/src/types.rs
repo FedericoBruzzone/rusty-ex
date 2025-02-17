@@ -512,10 +512,52 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
         index
     }
 
-    pub fn tmp(&self, fgraph: &FeaturesGraph) {
-        // let _ = fgraph.graph.node_weight(NodeIndex::new(0));
-        // let global = self.graph[NodeIndex::new(0)].clone();
-        // let _x = fgraph.graph[global.features_indexes[0]].clone();
+    pub fn refiner_hash_map(&self, fgraph: &FeaturesGraph) -> HashMap<FeatureIndex, f64> {
+        fn refined_hash_map_rec(
+            complex_index: ComplexFeature<FeatureIndex>,
+            weight: f64,
+            hm: &mut HashMap<FeatureIndex, f64>,
+        ) {
+            match complex_index {
+                ComplexFeature::None => panic!("ComplexFeature::None not expected"),
+                ComplexFeature::Simple(index) => {
+                    hm.insert(index, weight);
+                }
+                ComplexFeature::All(complex_indexes) => {
+                    // In `All` case, the weight is divided by the number of features
+                    // because all features must be satisfied.
+                    let new_weight = weight / complex_indexes.len() as f64;
+                    for complex_index in complex_indexes {
+                        refined_hash_map_rec(complex_index, new_weight, hm);
+                    }
+                }
+                ComplexFeature::Any(complex_indexes) => {
+                    for complex_index in complex_indexes {
+                        refined_hash_map_rec(complex_index, weight, hm);
+                    }
+                }
+            }
+        }
+
+        fn normalize_max(hm: &mut HashMap<FeatureIndex, f64>) {
+            let max = hm.values().cloned().fold(0.0, f64::max);
+            for (_, weight) in hm.iter_mut() {
+                *weight = *weight / max;
+            }
+        }
+
+        let mut refiner_hm = HashMap::new();
+        for (_, artifact_node) in self.graph.node_references() {
+            let complex_index = artifact_node.complex_feature.to_feature_index(fgraph);
+            let weight = if let TermWeight::Weight(w) = artifact_node.weight {
+                w
+            } else {
+                panic!("Weight not expected to be a Wait")
+            };
+            refined_hash_map_rec(complex_index, weight, &mut refiner_hm);
+        }
+        normalize_max(&mut refiner_hm);
+        refiner_hm
     }
 
     /// Print artifacts tree in DOT format
