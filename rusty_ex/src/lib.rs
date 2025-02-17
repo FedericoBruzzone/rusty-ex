@@ -300,7 +300,7 @@ pub struct CollectVisitor {
     /// NodeId in nodes are not resolved yet, so we need to increment it manually
     node_id_incr: u32,
     /// Stack to keep track of the terms dependencies
-    stack: Vec<(TermIndex, ComplexFeature)>,
+    stack: Vec<(TermIndex, ComplexFeature<Feature>)>,
 
     /// Relationships between all terms (all pieces of code annotated or not)
     terms_tree: TermsTree<SimpleTermKey>,
@@ -369,7 +369,6 @@ impl CollectVisitor {
             artifact,
             ident,
             ComplexFeature::Simple(feature.clone()),
-            self.rec_features_to_indexes(&features),
             TermWeight::ToBeCalculated,
         );
         assert_eq!(
@@ -408,7 +407,7 @@ impl CollectVisitor {
         &mut self,
         nested_meta: Vec<MetaItemInner>,
         not: bool,
-    ) -> Vec<ComplexFeature> {
+    ) -> Vec<ComplexFeature<Feature>> {
         let mut features = Vec::new();
 
         for meta in nested_meta {
@@ -472,7 +471,7 @@ impl CollectVisitor {
     }
 
     /// Weight features horizontally, considering only the "siblings"
-    fn rec_weight_feature(features: &ComplexFeature) -> Vec<(FeatureKey, f64)> {
+    fn rec_weight_feature(features: &ComplexFeature<Feature>) -> Vec<(FeatureKey, f64)> {
         match features {
             ComplexFeature::None => Vec::new(),
             ComplexFeature::Simple(feature) => Vec::from([(FeatureKey(feature.clone()), 1.0)]),
@@ -497,7 +496,7 @@ impl CollectVisitor {
 
     /// Update the term node with the found features and create the dependency (edge)
     /// in the Terms Tree. The parent TermNode should already exist (anothe node or global scope)
-    fn update_term_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
+    fn update_term_node_features(&mut self, node_id: NodeId, features: ComplexFeature<Feature>) {
         // update the node with the found and weighted cfgs
         let node_index: &TermIndex = self
             .terms_tree
@@ -526,33 +525,6 @@ impl CollectVisitor {
                 );
             }
         }
-    }
-
-    /// Recursively convert features to node indexes in the features graph
-    fn rec_features_to_indexes(&self, features: &ComplexFeature) -> Vec<NodeIndex> {
-        let mut indexes = Vec::new();
-
-        match features {
-            ComplexFeature::None => (),
-            ComplexFeature::Simple(f) => {
-                indexes.push(
-                    *self
-                        .features_graph
-                        .nodes
-                        .get(&FeatureKey(f.clone()))
-                        .expect(
-                            "Error: cannot find feature node index converting features to indexes",
-                        ),
-                );
-            }
-            ComplexFeature::All(fs) | ComplexFeature::Any(fs) => {
-                for f in fs {
-                    indexes.extend(self.rec_features_to_indexes(f));
-                }
-            }
-        }
-
-        indexes
     }
 
     /// Initialize a new Term node and update the stack
@@ -589,13 +561,11 @@ impl CollectVisitor {
         if features != ComplexFeature::None {
             let ident = term_node.ident.clone();
             // convert features to index of the features (the features node already exist)
-            let features_indexes = self.rec_features_to_indexes(&features);
 
             self.artifacts_tree.create_node(
                 SimpleArtifactKey(node_id),
                 ident,
                 features.clone(),
-                features_indexes,
                 TermWeight::ToBeCalculated,
             );
         }

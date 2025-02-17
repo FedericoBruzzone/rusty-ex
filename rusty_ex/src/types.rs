@@ -26,13 +26,42 @@ pub struct Feature {
     pub not: bool,
 }
 
+impl Feature {
+    pub fn to_feature_index(&self, fgraph: &FeaturesGraph) -> FeatureIndex {
+        fgraph.nodes[&FeatureKey::from(self)]
+    }
+}
+
 /// Complex feature: none, a single feature (with not included), all features, or any feature
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize)]
-pub enum ComplexFeature {
+pub enum ComplexFeature<T> {
     None,
-    Simple(Feature),
-    All(Vec<ComplexFeature>),
-    Any(Vec<ComplexFeature>),
+    Simple(T),
+    All(Vec<ComplexFeature<T>>),
+    Any(Vec<ComplexFeature<T>>),
+}
+
+impl ComplexFeature<Feature> {
+    fn to_feature_index(&self, fgraph: &FeaturesGraph) -> ComplexFeature<FeatureIndex> {
+        match self {
+            ComplexFeature::None => ComplexFeature::None,
+            ComplexFeature::Simple(feature) => {
+                ComplexFeature::Simple(feature.to_feature_index(fgraph))
+            }
+            ComplexFeature::All(features) => ComplexFeature::All(
+                features
+                    .iter()
+                    .map(|f| f.to_feature_index(fgraph))
+                    .collect::<Vec<_>>(),
+            ),
+            ComplexFeature::Any(features) => ComplexFeature::Any(
+                features
+                    .iter()
+                    .map(|f| f.to_feature_index(fgraph))
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
 }
 
 // -------------------- Weights --------------------
@@ -97,7 +126,7 @@ impl TermKey for SuperTermKey {}
 pub struct TermNode<Key: TermKey> {
     pub node_id: Key,
     pub ident: Option<String>,
-    pub features: ComplexFeature,
+    pub features: ComplexFeature<Feature>,
     pub weight_kind: TermWeightKind,
     pub weight: TermWeight,
 }
@@ -140,12 +169,13 @@ pub struct FeatureNode {
     pub weight: Option<f64>,
     /// If this feature has some siblings, they must be satisfied (all), so we must track
     /// the nature of each single feature.
-    pub complex_feature: HashSet<ComplexFeature>,
+    pub complex_feature: HashSet<ComplexFeature<Feature>>,
 }
 
 /// Index of a feature node in the graph representing the Features Dependency Graph.
 /// The index is used to access the node in the graph.
-/// To get the index of a node from its key, use `FeaturesGraph.nodes`
+/// To get the index of a node from its key use `FeatureGraph.nodes`.
+/// To retrieve the node from the index use `FeatureGraph.graph[FeatureIndex]`.
 pub type FeatureIndex = NodeIndex;
 
 /// Features Dependency Graph: the actual graph and a map to get the index of a feature node from its key
@@ -183,9 +213,7 @@ pub struct ArtifactNode<Key: ArtifactKey> {
     pub artifact: Key,
     pub ident: Option<String>,
     /// Feature that annotate the Term, making it an Artifact
-    pub complex_feature: ComplexFeature,
-    /// Indexes of the features that compose the complex feature in the Features Graph
-    pub features_indexes: Vec<FeatureIndex>,
+    pub complex_feature: ComplexFeature<Feature>,
     pub weight: TermWeight,
 }
 
@@ -261,7 +289,7 @@ impl<Key: TermKey> TermsTree<Key> {
         &mut self,
         node_id: Key,
         ident: Option<String>,
-        features: ComplexFeature,
+        features: ComplexFeature<Feature>,
         weight_kind: TermWeightKind,
         weight: TermWeight,
     ) -> TermIndex {
@@ -331,7 +359,7 @@ impl FeaturesGraph {
         &mut self,
         feature: FeatureKey,
         weight: Option<f64>,
-        complex_feature: HashSet<ComplexFeature>,
+        complex_feature: HashSet<ComplexFeature<Feature>>,
     ) -> FeatureIndex {
         if let Some(index) = self.nodes.get(&feature) {
             return *index;
@@ -353,7 +381,9 @@ impl FeaturesGraph {
     /// the complex features of each node.
     /// The formula is a conjunction of all the complex features of all nodes.
     fn to_prop_formula_naive(&self) -> PropFormula<String> {
-        fn resolve_complex_feature_rec(complex_feature: &ComplexFeature) -> PropFormula<String> {
+        fn resolve_complex_feature_rec(
+            complex_feature: &ComplexFeature<Feature>,
+        ) -> PropFormula<String> {
             match complex_feature {
                 ComplexFeature::None => PropFormula::None,
                 ComplexFeature::Simple(feature) => {
@@ -464,8 +494,7 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
         &mut self,
         artifact: Key,
         ident: Option<String>,
-        complex_feature: ComplexFeature,
-        features_indexes: Vec<FeatureIndex>,
+        complex_feature: ComplexFeature<Feature>,
         weight: TermWeight,
     ) -> ArtifactIndex {
         if let Some(index) = self.nodes.get(&artifact) {
@@ -476,12 +505,17 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
             artifact: artifact.clone(),
             ident,
             complex_feature,
-            features_indexes,
             weight,
         });
         self.nodes.insert(artifact, index);
 
         index
+    }
+
+    pub fn tmp(&self, fgraph: &FeaturesGraph) {
+        // let _ = fgraph.graph.node_weight(NodeIndex::new(0));
+        // let global = self.graph[NodeIndex::new(0)].clone();
+        // let _x = fgraph.graph[global.features_indexes[0]].clone();
     }
 
     /// Print artifacts tree in DOT format
@@ -530,7 +564,7 @@ impl Default for SimpleArtifactKey {
     }
 }
 
-impl Display for ComplexFeature {
+impl Display for ComplexFeature<Feature> {
     /// Complex feature to string
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
