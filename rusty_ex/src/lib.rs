@@ -14,7 +14,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use configs::centrality::{self, Centrality};
+use configs::centrality::Centrality;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -268,12 +268,11 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 collector.add_dummy_centrality_node_edges();
 
-
-                let refiner_hm = collector.artifacts_tree.refiner_hash_map(&collector.features_graph);
-                let centrality = Centrality::new(&collector.features_graph).refine(refiner_hm);
-                collector
-                    .centrality
-                    .replace(centrality);
+                let refiner_hm = collector
+                    .artifacts_tree
+                    .refiner_hash_map(&collector.features_graph);
+                let refined = Centrality::new(&collector.features_graph, true).refine(refiner_hm);
+                collector.centrality.replace(refined);
 
                 self.process_cli_args(collector, krate);
             });

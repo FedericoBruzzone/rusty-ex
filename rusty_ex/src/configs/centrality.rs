@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::types::{FeatureIndex, FeaturesGraph};
+use crate::{
+    types::{FeatureIndex, FeaturesGraph},
+    GLOBAL_DUMMY_INDEX,
+};
 
 #[derive(Default)]
 pub struct Centrality {
@@ -16,16 +19,22 @@ pub struct Measures {
 }
 
 impl Centrality {
-    pub fn new(feat_graph: &FeaturesGraph) -> Self {
-        let feat_graph_indices = feat_graph
-            .graph
-            .node_indices()
-            .collect::<Vec<FeatureIndex>>();
+    pub fn new(feat_graph: &FeaturesGraph, remove_dummy: bool) -> Self {
+        let node_indices = feat_graph.graph.node_indices();
+        let feat_graph_indices = if remove_dummy {
+            node_indices
+                .filter(|node| *node != FeatureIndex::new(GLOBAL_DUMMY_INDEX))
+                .collect::<Vec<FeatureIndex>>()
+        } else {
+            node_indices.collect::<Vec<FeatureIndex>>()
+        };
+
         let measures = Measures {
             katz: Centrality::compute_katz(feat_graph),
             closeness: Centrality::compute_closeness(feat_graph),
             eigenvector: Centrality::compute_eigenvector(feat_graph),
         };
+
         Centrality {
             measures,
             feat_graph_indices,
@@ -34,35 +43,43 @@ impl Centrality {
 
     pub fn refine(&self, refiner_hm: HashMap<FeatureIndex, f64>) -> Self {
         let mut measures = Measures::default();
+
+        // They are ordered in the same way as the feat_graph_indices.
+        let refined_values: Vec<&f64> = self
+            .feat_graph_indices
+            .iter()
+            .map(|feature_index| refiner_hm.get(&feature_index).unwrap())
+            .collect();
+
         if let Some(katz) = &self.measures.katz {
             measures.katz = Some(
                 katz.iter()
-                    .enumerate()
-                    .map(|(index, katz)| katz * refiner_hm[&self.feat_graph_indices[index]])
+                    .zip(refined_values.iter())
+                    .map(|(katz, refined_value)| katz * *refined_value)
                     .collect(),
             );
         }
-        if let Some(eigenvector) = &self.measures.eigenvector {
-            measures.eigenvector = Some(
-                eigenvector
-                    .iter()
-                    .enumerate()
-                    .map(|(index, eigenvector)| {
-                        eigenvector * refiner_hm[&self.feat_graph_indices[index]]
-                    })
-                    .collect(),
-            );
-        }
+
         measures.closeness = self
             .measures
             .closeness
             .iter()
-            .enumerate()
-            .map(|(index, closeness)| match closeness {
-                Some(closeness) => Some(closeness * refiner_hm[&self.feat_graph_indices[index]]),
+            .zip(refined_values.iter())
+            .map(|(closeness, refined_value)| match closeness {
+                Some(closeness) => Some(closeness * *refined_value),
                 None => None,
             })
             .collect();
+
+        if let Some(eigenvector) = &self.measures.eigenvector {
+            measures.eigenvector = Some(
+                eigenvector
+                    .iter()
+                    .zip(refined_values.iter())
+                    .map(|(eigenvector, refined_value)| eigenvector * *refined_value)
+                    .collect(),
+            );
+        }
 
         Centrality {
             measures,
