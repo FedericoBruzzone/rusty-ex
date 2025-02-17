@@ -56,7 +56,7 @@ jobs:
       - name: Run cargo test
         run: cargo test --verbose --no-fail-fast -- --exact --test-threads=1 --nocapture
       - name: Run cargo clippy
-        run: cargo clippy --verbose
+        run: cargo clippy --verbose -- -D warnings
       - name: Run cargo fmt
         run: cargo fmt -- --check
 
