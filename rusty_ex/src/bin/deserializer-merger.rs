@@ -66,7 +66,6 @@ impl SuperCollector {
             },
             ident,
             ComplexFeature::Simple(feature.clone()),
-            vec![0.into()],
             TermWeight::ToBeCalculated,
         );
         assert_eq!(
@@ -260,7 +259,6 @@ impl SuperCollector {
                 },
                 old_node.ident.clone(),
                 old_node.complex_feature.clone(),
-                old_node.features_indexes.clone(),
                 old_node.weight.clone(),
             );
             index_map.insert(old_node_index, new_node_index);

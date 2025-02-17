@@ -14,7 +14,7 @@ extern crate rustc_session;
 extern crate rustc_span;
 
 use clap::Parser;
-use configs::centrality::Centrality;
+use configs::centrality::{Centrality, CentralityKind};
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -58,7 +58,11 @@ pub struct PrintAstArgs {
 
     /// Pass --print-centrality to print some centrality measures on Features Graph
     #[clap(long)]
-    print_centrality: bool,
+    pretty_print_centrality: bool,
+
+    /// Pass --serialized-centrality followed by the centrality measure to print the serialized centrality
+    #[clap(long, value_enum)]
+    serialized_centrality: Option<CentralityKind>,
 
     /// Pass --print-serialized-graphs to print all extracted graphs serialized
     #[clap(long)]
@@ -72,6 +76,21 @@ pub struct PrintAstArgs {
     // mytool --allcaps -- some extra args here
     //                     ^^^^^^^^^^^^^^^^^^^^ these are cargo args
     cargo_args: Vec<String>,
+}
+
+impl clap::ValueEnum for CentralityKind {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::All, Self::Katz, Self::Closeness, Self::Eigenvector]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            Self::All => Some(clap::builder::PossibleValue::new("all")),
+            Self::Katz => Some(clap::builder::PossibleValue::new("katz")),
+            Self::Closeness => Some(clap::builder::PossibleValue::new("closeness")),
+            Self::Eigenvector => Some(clap::builder::PossibleValue::new("eigenvector")),
+        }
+    }
 }
 
 impl RustcPlugin for RustcEx {
@@ -153,8 +172,11 @@ impl PrintAstCallbacks {
         if self.args.print_artifacts_tree {
             collector.artifacts_tree.print_dot();
         }
-        if self.args.print_centrality {
-            collector.print_centrality();
+        if self.args.pretty_print_centrality {
+            collector.pretty_print_centrality();
+        }
+        if let Some(centrality) = &self.args.serialized_centrality {
+            collector.serialized_centrality(centrality);
         }
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
@@ -268,9 +290,12 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 collector.add_dummy_centrality_node_edges();
 
-                collector
-                    .centrality
-                    .replace(Centrality::new(&collector.features_graph));
+                let refiner_hm = collector
+                    .artifacts_tree
+                    .refiner_hash_map(&collector.features_graph);
+                let centrality = Centrality::new(&collector.features_graph, true);
+                let refined = centrality.refine(refiner_hm);
+                collector.centrality.replace(refined);
 
                 self.process_cli_args(collector, krate);
             });
@@ -300,7 +325,7 @@ pub struct CollectVisitor {
     /// NodeId in nodes are not resolved yet, so we need to increment it manually
     node_id_incr: u32,
     /// Stack to keep track of the terms dependencies
-    stack: Vec<(TermIndex, ComplexFeature)>,
+    stack: Vec<(TermIndex, ComplexFeature<Feature>)>,
 
     /// Relationships between all terms (all pieces of code annotated or not)
     terms_tree: TermsTree<SimpleTermKey>,
@@ -369,7 +394,6 @@ impl CollectVisitor {
             artifact,
             ident,
             ComplexFeature::Simple(feature.clone()),
-            self.rec_features_to_indexes(&features),
             TermWeight::ToBeCalculated,
         );
         assert_eq!(
@@ -408,7 +432,7 @@ impl CollectVisitor {
         &mut self,
         nested_meta: Vec<MetaItemInner>,
         not: bool,
-    ) -> Vec<ComplexFeature> {
+    ) -> Vec<ComplexFeature<Feature>> {
         let mut features = Vec::new();
 
         for meta in nested_meta {
@@ -472,7 +496,7 @@ impl CollectVisitor {
     }
 
     /// Weight features horizontally, considering only the "siblings"
-    fn rec_weight_feature(features: &ComplexFeature) -> Vec<(FeatureKey, f64)> {
+    fn rec_weight_feature(features: &ComplexFeature<Feature>) -> Vec<(FeatureKey, f64)> {
         match features {
             ComplexFeature::None => Vec::new(),
             ComplexFeature::Simple(feature) => Vec::from([(FeatureKey(feature.clone()), 1.0)]),
@@ -497,7 +521,7 @@ impl CollectVisitor {
 
     /// Update the term node with the found features and create the dependency (edge)
     /// in the Terms Tree. The parent TermNode should already exist (anothe node or global scope)
-    fn update_term_node_features(&mut self, node_id: NodeId, features: ComplexFeature) {
+    fn update_term_node_features(&mut self, node_id: NodeId, features: ComplexFeature<Feature>) {
         // update the node with the found and weighted cfgs
         let node_index: &TermIndex = self
             .terms_tree
@@ -526,33 +550,6 @@ impl CollectVisitor {
                 );
             }
         }
-    }
-
-    /// Recursively convert features to node indexes in the features graph
-    fn rec_features_to_indexes(&self, features: &ComplexFeature) -> Vec<NodeIndex> {
-        let mut indexes = Vec::new();
-
-        match features {
-            ComplexFeature::None => (),
-            ComplexFeature::Simple(f) => {
-                indexes.push(
-                    *self
-                        .features_graph
-                        .nodes
-                        .get(&FeatureKey(f.clone()))
-                        .expect(
-                            "Error: cannot find feature node index converting features to indexes",
-                        ),
-                );
-            }
-            ComplexFeature::All(fs) | ComplexFeature::Any(fs) => {
-                for f in fs {
-                    indexes.extend(self.rec_features_to_indexes(f));
-                }
-            }
-        }
-
-        indexes
     }
 
     /// Initialize a new Term node and update the stack
@@ -589,13 +586,11 @@ impl CollectVisitor {
         if features != ComplexFeature::None {
             let ident = term_node.ident.clone();
             // convert features to index of the features (the features node already exist)
-            let features_indexes = self.rec_features_to_indexes(&features);
 
             self.artifacts_tree.create_node(
                 SimpleArtifactKey(node_id),
                 ident,
                 features.clone(),
-                features_indexes,
                 TermWeight::ToBeCalculated,
             );
         }
@@ -881,8 +876,42 @@ impl CollectVisitor {
             });
     }
 
+    /// Serialize the centrality measures of the Features Graph
+    fn serialized_centrality(&self, kind: &CentralityKind) {
+        match kind {
+            CentralityKind::All => {
+                let measures = &self.centrality.as_ref().unwrap().measures;
+                println!(
+                    "{}",
+                    serde_json::to_string(measures).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Katz => {
+                let katz = self.centrality.as_ref().unwrap().katz();
+                println!(
+                    "{}",
+                    serde_json::to_string(&katz).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Closeness => {
+                let closeness = self.centrality.as_ref().unwrap().closeness();
+                println!(
+                    "{}",
+                    serde_json::to_string(&closeness).expect("Error: cannot serialize data")
+                );
+            }
+            CentralityKind::Eigenvector => {
+                let eigenvector = self.centrality.as_ref().unwrap().eigenvector();
+                println!(
+                    "{}",
+                    serde_json::to_string(&eigenvector).expect("Error: cannot serialize data")
+                );
+            }
+        }
+    }
+
     /// Print some centrality measures of the features graph
-    fn print_centrality(&self) {
+    fn pretty_print_centrality(&self) {
         self.centrality
             .as_ref()
             .unwrap()

@@ -1,32 +1,121 @@
-use petgraph::graph::NodeIndex;
+use std::collections::HashMap;
 
-use crate::types::FeaturesGraph;
+use serde::{Deserialize, Serialize};
 
-#[derive(Default)]
-pub struct Centrality {
-    pub measures: Measures,
-    pub feat_graph_indices: Vec<NodeIndex>,
+use crate::{
+    types::{FeatureIndex, FeaturesGraph},
+    GLOBAL_DUMMY_INDEX,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum CentralityKind {
+    #[default]
+    All,
+    Katz,
+    Closeness,
+    Eigenvector,
 }
 
-#[derive(Default)]
-pub struct Measures {
+#[derive(Default, Debug)]
+pub struct Centrality {
+    pub measures: CentralityMeasures,
+    pub feat_graph_indices: Vec<FeatureIndex>,
+}
+
+#[derive(Default, Serialize, Deserialize, Debug)]
+pub struct CentralityMeasures {
     pub katz: Option<Vec<f64>>,
     pub closeness: Vec<Option<f64>>,
     pub eigenvector: Option<Vec<f64>>,
 }
 
 impl Centrality {
-    pub fn new(feat_graph: &FeaturesGraph) -> Self {
-        let feat_graph_indices = feat_graph.graph.node_indices().collect::<Vec<NodeIndex>>();
-        let measures = Measures {
+    /// Create a new Centrality struct with the centrality measures computed for the
+    /// FeaturesGraph. If remove_dummy is true, the dummy node is removed from the
+    /// centrality measures.
+    ///
+    /// NOTE: The dummy node is the node with the index GLOBAL_DUMMY_INDEX.
+    /// If `remove_dummy` is false, you have to be sure when calling
+    /// `refine` that the dummy node is not present in the refiner hashmap.
+    pub fn new(feat_graph: &FeaturesGraph, remove_dummy: bool) -> Self {
+        let node_indices = feat_graph.graph.node_indices();
+        let feat_graph_indices = if remove_dummy {
+            node_indices
+                .filter(|node| *node != FeatureIndex::new(GLOBAL_DUMMY_INDEX))
+                .collect::<Vec<FeatureIndex>>()
+        } else {
+            node_indices.collect::<Vec<FeatureIndex>>()
+        };
+
+        let measures = CentralityMeasures {
             katz: Centrality::compute_katz(feat_graph),
             closeness: Centrality::compute_closeness(feat_graph),
             eigenvector: Centrality::compute_eigenvector(feat_graph),
         };
+
         Centrality {
             measures,
             feat_graph_indices,
         }
+    }
+
+    pub fn refine(&self, refiner_hm: HashMap<FeatureIndex, f64>) -> Self {
+        let mut measures = CentralityMeasures::default();
+
+        // They are ordered in the same way as the feat_graph_indices.
+        let refined_values: Vec<&f64> = self
+            .feat_graph_indices
+            .iter()
+            .map(|feature_index| refiner_hm.get(feature_index).unwrap())
+            .collect();
+
+        if let Some(katz) = &self.measures.katz {
+            measures.katz = Some(
+                katz.iter()
+                    .zip(refined_values.iter())
+                    .map(|(katz, refined_value)| katz * *refined_value)
+                    .collect(),
+            );
+        }
+
+        measures.closeness = self
+            .measures
+            .closeness
+            .iter()
+            .zip(refined_values.iter())
+            .map(|(closeness, refined_value)| {
+                closeness
+                    .as_ref()
+                    .map(|closeness| closeness * *refined_value)
+            })
+            .collect();
+
+        if let Some(eigenvector) = &self.measures.eigenvector {
+            measures.eigenvector = Some(
+                eigenvector
+                    .iter()
+                    .zip(refined_values.iter())
+                    .map(|(eigenvector, refined_value)| eigenvector * *refined_value)
+                    .collect(),
+            );
+        }
+
+        Centrality {
+            measures,
+            feat_graph_indices: self.feat_graph_indices.clone(),
+        }
+    }
+
+    pub fn katz(&self) -> Option<&Vec<f64>> {
+        self.measures.katz.as_ref()
+    }
+
+    pub fn closeness(&self) -> &Vec<Option<f64>> {
+        &self.measures.closeness
+    }
+
+    pub fn eigenvector(&self) -> Option<&Vec<f64>> {
+        self.measures.eigenvector.as_ref()
     }
 
     fn compute_katz(feat_graph: &FeaturesGraph) -> Option<Vec<f64>> {
