@@ -16,7 +16,7 @@ pub enum CentralityKind {
     Eigenvector,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Centrality {
     pub measures: CentralityMeasures,
     pub feat_graph_indices: Vec<FeatureIndex>,

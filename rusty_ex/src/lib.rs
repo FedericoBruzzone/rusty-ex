@@ -880,7 +880,7 @@ impl CollectVisitor {
     fn serialized_centrality(&self, kind: &CentralityKind) {
         match kind {
             CentralityKind::All => {
-                let measures = &self.centrality.as_ref().unwrap().measures;
+                let measures = &self.centrality.as_ref().unwrap();
                 println!(
                     "{}",
                     serde_json::to_string(measures).expect("Error: cannot serialize data")

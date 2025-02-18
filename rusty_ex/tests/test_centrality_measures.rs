@@ -3,7 +3,7 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rusty_ex::configs::centrality::CentralityMeasures;
+use rusty_ex::configs::centrality::{Centrality, CentralityMeasures};
 use utils::run_with_cargo_bin_and_snippet;
 
 const CENTRALITY_FOLDER: &str = "tests/snippets/centrality";
@@ -32,23 +32,23 @@ macro_rules! assert_almost_equal_option_iter {
     };
 }
 
-fn get_centrality_measures(file: &str) -> Result<CentralityMeasures, String> {
+fn get_centrality_measures(file: &str) -> Result<Centrality, String> {
     let snippet = &std::fs::read_to_string(format!("{CENTRALITY_FOLDER}/{file}")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--serialized-centrality", "all"])?;
-    let deserialized_centrality: CentralityMeasures = serde_json::from_str(&output).unwrap();
+    let deserialized_centrality: Centrality = serde_json::from_str(&output).unwrap();
     Ok(deserialized_centrality)
 }
 
 #[test]
 fn test_no_centrality() -> Result<(), String> {
-    let measures = get_centrality_measures("no_centrality.rs")?;
-    let katz = measures.katz.unwrap();
-    let closeness = measures.closeness;
-    let eigenvector = measures.eigenvector.unwrap();
+    let centrality = get_centrality_measures("no_centrality.rs")?;
+    let katz = centrality.katz().unwrap();
+    let closeness = centrality.closeness();
+    let eigenvector = centrality.eigenvector().unwrap();
 
-    assert_eq!(katz, vec![0.0, 0.0, 0.0]);
-    assert_eq!(closeness, vec![Some(0.0), Some(0.0), Some(0.0)]);
-    assert_eq!(eigenvector, vec![0.0, 0.0, 0.0]);
+    assert_eq!(*katz, vec![0.0, 0.0, 0.0]);
+    assert_eq!(*closeness, vec![Some(0.0), Some(0.0), Some(0.0)]);
+    assert_eq!(*eigenvector, vec![0.0, 0.0, 0.0]);
 
     Ok(())
 }
