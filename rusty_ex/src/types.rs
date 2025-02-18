@@ -522,7 +522,8 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
             match complex_index {
                 ComplexFeature::None => panic!("ComplexFeature::None not expected"),
                 ComplexFeature::Simple(index) => {
-                    hm.insert(index, weight);
+                    // Add the weight to the feature index
+                    *hm.entry(index).or_insert(0.0) += weight;
                 }
                 ComplexFeature::All(complex_indexes) => {
                     // In `All` case, the weight is divided by the number of features

@@ -3,7 +3,7 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rusty_ex::configs::centrality::{Centrality, CentralityMeasures};
+use rusty_ex::configs::centrality::Centrality;
 use utils::run_with_cargo_bin_and_snippet;
 
 const CENTRALITY_FOLDER: &str = "tests/snippets/centrality";
@@ -55,25 +55,25 @@ fn test_no_centrality() -> Result<(), String> {
 
 #[test]
 fn test_nested_features() -> Result<(), String> {
-    let measures = get_centrality_measures("nested_features.rs")?;
+    let centrality = get_centrality_measures("nested_features.rs")?;
 
-    let katz = measures.katz.unwrap();
-    let closeness = measures.closeness;
-    let eigenvector = measures.eigenvector.unwrap();
+    let katz = centrality.katz().unwrap();
+    let closeness = centrality.closeness();
+    let eigenvector = centrality.eigenvector().unwrap();
 
-    let katz_out = vec![0.4416, 0.0, 0.0, 0.0746, 0.0507];
+    let katz_out = vec![0.4416, 0.0785, 0.3360, 0.2240, 0.0507];
     let closeness_out = vec![
         Some(0.625),
-        Some(0.0),
-        Some(0.0),
-        Some(0.0961),
+        Some(0.1048),
+        Some(0.5769),
+        Some(0.2884),
         Some(0.0591),
     ];
-    let eigenvector_out = vec![0.6203, 0.0, 0.0, 0.0788, 0.0162];
+    let eigenvector_out = vec![0.6203, 0.0601, 0.3546, 0.2364, 0.0162];
 
-    assert_almost_equal_iter!(katz_out, katz, 1e-4);
-    assert_almost_equal_option_iter!(closeness_out, closeness, 1e-4);
-    assert_almost_equal_iter!(eigenvector_out, eigenvector, 1e-4);
+    assert_almost_equal_iter!(*katz_out, katz, 1e-4);
+    assert_almost_equal_option_iter!(*closeness_out, closeness, 1e-4);
+    assert_almost_equal_iter!(*eigenvector_out, eigenvector, 1e-4);
 
     Ok(())
 }
