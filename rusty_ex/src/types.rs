@@ -11,6 +11,7 @@ use std::hash::Hash;
 use std::panic;
 
 use crate::configs::prop_formula::{ConversionMethod, PropFormula, ToPropFormula};
+use crate::GLOBAL_NODE_INDEX;
 
 // Terminology:
 // - Feature: an identifier that identifies a piece of code that can be included or excluded from compilation
@@ -512,8 +513,13 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
         index
     }
 
-    /// NOTE: The `FeatureGraph` is expected to be the same as the one used to create the `ArtifactsTree`
-    pub fn refiner_hash_map(&self, fgraph: &FeaturesGraph) -> HashMap<FeatureIndex, f64> {
+    /// NOTE: The `FeatureGraph` is expected to be the same as the one used to create the `ArtifactTree`
+    /// NOTE: The `ArtifactTree` does not have the `dummy` node.
+    pub fn refiner_hash_map(
+        &self,
+        fgraph: &FeaturesGraph,
+        remove_global: bool,
+    ) -> HashMap<FeatureIndex, f64> {
         fn refined_hash_map_rec(
             complex_index: ComplexFeature<FeatureIndex>,
             weight: f64,
@@ -552,7 +558,11 @@ impl<Key: ArtifactKey> ArtifactsTree<Key> {
         }
 
         let mut refiner_hm = HashMap::new();
-        for (_, artifact_node) in self.graph.node_references() {
+        for (artifact_index, artifact_node) in self.graph.node_references() {
+            if remove_global && artifact_index == ArtifactIndex::new(GLOBAL_NODE_INDEX) {
+                continue;
+            }
+
             let complex_index = artifact_node.complex_feature.to_feature_index(fgraph);
             let weight = if let TermWeight::Weight(w) = artifact_node.weight {
                 w

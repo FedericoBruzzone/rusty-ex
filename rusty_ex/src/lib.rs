@@ -292,7 +292,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 let refiner_hm = collector
                     .artifacts_tree
-                    .refiner_hash_map(&collector.features_graph);
+                    .refiner_hash_map(&collector.features_graph, true);
                 let centrality = Centrality::new(&collector.features_graph, true);
                 let refined = centrality.refine(refiner_hm);
                 collector.centrality.replace(refined);
