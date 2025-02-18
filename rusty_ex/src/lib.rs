@@ -292,7 +292,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
                 let refiner_hm = collector
                     .artifacts_tree
-                    .refiner_hash_map(&collector.features_graph);
+                    .refiner_hash_map(&collector.features_graph, true);
                 let centrality = Centrality::new(&collector.features_graph, true);
                 let refined = centrality.refine(refiner_hm);
                 collector.centrality.replace(refined);
@@ -880,7 +880,7 @@ impl CollectVisitor {
     fn serialized_centrality(&self, kind: &CentralityKind) {
         match kind {
             CentralityKind::All => {
-                let measures = &self.centrality.as_ref().unwrap().measures;
+                let measures = &self.centrality.as_ref().unwrap();
                 println!(
                     "{}",
                     serde_json::to_string(measures).expect("Error: cannot serialize data")

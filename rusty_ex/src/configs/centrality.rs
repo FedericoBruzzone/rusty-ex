@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     types::{FeatureIndex, FeaturesGraph},
-    GLOBAL_DUMMY_INDEX,
+    GLOBAL_DUMMY_INDEX, GLOBAL_NODE_INDEX,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -16,7 +16,7 @@ pub enum CentralityKind {
     Eigenvector,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Centrality {
     pub measures: CentralityMeasures,
     pub feat_graph_indices: Vec<FeatureIndex>,
@@ -35,13 +35,17 @@ impl Centrality {
     /// centrality measures.
     ///
     /// NOTE: The dummy node is the node with the index GLOBAL_DUMMY_INDEX.
-    /// If `remove_dummy` is false, you have to be sure when calling
-    /// `refine` that the dummy node is not present in the refiner hashmap.
-    pub fn new(feat_graph: &FeaturesGraph, remove_dummy: bool) -> Self {
+    /// If `remove_dummy_and_global` is false, you have to be sure when calling
+    /// `refine` that the dummy node and the global node are not present in the
+    /// refiner hashmap.
+    pub fn new(feat_graph: &FeaturesGraph, remove_dummy_and_global: bool) -> Self {
         let node_indices = feat_graph.graph.node_indices();
-        let feat_graph_indices = if remove_dummy {
+        let feat_graph_indices = if remove_dummy_and_global {
             node_indices
-                .filter(|node| *node != FeatureIndex::new(GLOBAL_DUMMY_INDEX))
+                .filter(|node| {
+                    *node != FeatureIndex::new(GLOBAL_DUMMY_INDEX)
+                        && *node != FeatureIndex::new(GLOBAL_NODE_INDEX)
+                })
                 .collect::<Vec<FeatureIndex>>()
         } else {
             node_indices.collect::<Vec<FeatureIndex>>()
