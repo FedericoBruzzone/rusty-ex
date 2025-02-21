@@ -1,7 +1,7 @@
-use rustworkx_core::petgraph::visit::IntoNodeReferences;
 use rustc_ast::NodeId;
 use rustworkx_core::petgraph::dot::{Config, Dot};
 use rustworkx_core::petgraph::graph::{DiGraph, NodeIndex};
+use rustworkx_core::petgraph::visit::IntoNodeReferences;
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 use std::cmp::Eq;
