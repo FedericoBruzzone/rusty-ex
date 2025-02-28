@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -147,7 +148,13 @@ impl Centrality {
     // if the graph is not connected (i.e. there is a node that is not reachable
     // from all other nodes)
     fn compute_closeness(feat_graph: &FeaturesGraph) -> Vec<Option<f64>> {
-        rustworkx_core::centrality::closeness_centrality(&feat_graph.graph, true)
+        // The `closeness_centrality` does not work as expected when the network is weighted.
+        // rustworkx_core::centrality::closeness_centrality(&feat_graph.graph, true)
+        rustworkx_core::centrality::newman_weighted_closeness_centrality(
+            &feat_graph.graph,
+            true,
+            |e| e.weight().weight,
+        )
     }
 
     fn compute_eigenvector(feat_graph: &FeaturesGraph) -> Option<Vec<f64>> {
