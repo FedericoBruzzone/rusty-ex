@@ -234,10 +234,10 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
     /// Called after expansion. Return value instructs the compiler whether to
     /// continue the compilation afterwards (defaults to `Compilation::Continue`)
-    fn after_expansion<'tcx>(
+    fn after_expansion(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
-        tcx: rustc_middle::ty::TyCtxt<'tcx>,
+        tcx: rustc_middle::ty::TyCtxt<'_>,
     ) -> rustc_driver::Compilation {
         // extract AST
         let resolver_and_krate = tcx.resolver_for_lowering().borrow();
