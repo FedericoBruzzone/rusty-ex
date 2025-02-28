@@ -31,7 +31,6 @@ where
     T: Clone,
 {
     pub measures: CentralityMeasures,
-    // pub feat_graph_indices: Vec<FeatureIndex>,
     pub indices: Vec<T>,
 }
 

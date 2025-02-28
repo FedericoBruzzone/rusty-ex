@@ -15,6 +15,7 @@ extern crate rustc_span;
 
 use clap::Parser;
 use configs::centrality::{Centrality, CentralityKind};
+use configs::config_generator::ConfigGenerator;
 use configs::prop_formula::{ConversionMethod, Ordinal, ToPropFormula};
 use configs::CnfFormula;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
@@ -149,7 +150,12 @@ struct PrintAstCallbacks {
 }
 
 impl PrintAstCallbacks {
-    fn process_cli_args(&self, collector: &CollectVisitor, krate: &Crate) {
+    fn process_cli_args(
+        &self,
+        collector: &CollectVisitor,
+        krate: &Crate,
+        centrality: Centrality<u32>,
+    ) {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
@@ -165,8 +171,8 @@ impl PrintAstCallbacks {
         if self.args.print_artifacts_tree {
             collector.artifacts_tree.print_dot();
         }
-        if let Some(centrality) = &self.args.serialized_centrality {
-            collector.serialized_centrality(centrality);
+        if let Some(centrality_kind) = &self.args.serialized_centrality {
+            collector.serialized_centrality(centrality, centrality_kind);
         }
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
@@ -249,8 +255,6 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
             idents_weights: HashMap::new(),
             weights_to_resolve: LinkedHashSet::new(),
-
-            centrality: None,
         };
 
         // initialize global scope (global feature and artifact)
@@ -272,10 +276,11 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         collector.add_dummy_centrality_node_edges();
 
         // Calculate centrality measures
-        let (_cnf, mapping) = collector.get_fgraph_to_cnf::<u32>(ConversionMethod::Naive);
-        collector.compute_centrality(&mapping);
+        let (cnf, mapping) = collector.get_fgraph_to_cnf::<u32>(ConversionMethod::Naive);
+        let centrality = collector.compute_centrality(&mapping);
+        let _configs = ConfigGenerator::new(cnf, &centrality.indices, 5).generate();
 
-        self.process_cli_args(collector, krate);
+        self.process_cli_args(collector, krate, centrality);
 
         rustc_driver::Compilation::Stop
     }
@@ -318,9 +323,6 @@ pub struct CollectVisitor {
     /// Terms that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
     weights_to_resolve: LinkedHashSet<TermIndex>,
-
-    /// Centrality measures of the Features Graph
-    centrality: Option<Centrality<u32>>,
 }
 
 impl CollectVisitor {
@@ -853,41 +855,50 @@ impl CollectVisitor {
             });
     }
 
-    fn compute_centrality(&mut self, cnf_mapping: &HashMap<String, u32>) {
+    fn get_fgraph_to_cnf<T>(
+        &mut self,
+        method: ConversionMethod,
+    ) -> (CnfFormula<T>, HashMap<String, T>)
+    where
+        T: Ordinal + Clone,
+    {
+        let mut prop_formula = self.features_graph.to_prop_formula(method);
+        prop_formula.to_cnf_repr::<T>(true)
+    }
+
+    fn compute_centrality(&mut self, cnf_mapping: &HashMap<String, u32>) -> Centrality<u32> {
         let refiner_hm = self
             .artifacts_tree
             .refiner_hash_map(&self.features_graph, true);
-        let centrality =
-            Centrality::<u32>::new(&self.features_graph, &refiner_hm, cnf_mapping, true);
-        self.centrality.replace(centrality);
+
+        Centrality::<u32>::new(&self.features_graph, &refiner_hm, cnf_mapping, true)
     }
 
     /// Serialize the centrality measures of the Features Graph
-    fn serialized_centrality(&self, kind: &CentralityKind) {
+    fn serialized_centrality(&self, centrality: Centrality<u32>, kind: &CentralityKind) {
         match kind {
             CentralityKind::All => {
-                let measures = &self.centrality.as_ref().unwrap();
                 println!(
                     "{}",
-                    serde_json::to_string(measures).expect("Error: cannot serialize data")
+                    serde_json::to_string(&centrality).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Katz => {
-                let katz = self.centrality.as_ref().unwrap().katz();
+                let katz = centrality.katz();
                 println!(
                     "{}",
                     serde_json::to_string(&katz).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Closeness => {
-                let closeness = self.centrality.as_ref().unwrap().closeness();
+                let closeness = centrality.closeness();
                 println!(
                     "{}",
                     serde_json::to_string(&closeness).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Eigenvector => {
-                let eigenvector = self.centrality.as_ref().unwrap().eigenvector();
+                let eigenvector = centrality.eigenvector();
                 println!(
                     "{}",
                     serde_json::to_string(&eigenvector).expect("Error: cannot serialize data")
@@ -908,17 +919,6 @@ impl CollectVisitor {
             "{}",
             serde_json::to_string(&graphs).expect("Error: cannot serialize data")
         );
-    }
-
-    fn get_fgraph_to_cnf<T>(
-        &mut self,
-        method: ConversionMethod,
-    ) -> (CnfFormula<T>, HashMap<String, T>)
-    where
-        T: Ordinal + Clone,
-    {
-        let mut prop_formula = self.features_graph.to_prop_formula(method);
-        prop_formula.to_cnf_repr::<T>(true)
     }
 
     /// Add a dummy node in features graph, connected from the root (global feature)

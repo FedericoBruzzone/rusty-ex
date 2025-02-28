@@ -3,16 +3,16 @@
 mod utils;
 
 use pretty_assertions::assert_eq;
-use rusty_ex::configs::config_generator::{ConfigGenerator, ConfigGeneratorUtils};
+use rusty_ex::configs::config_solver::{ConfigSolver, ConfigSolverUtils};
 
 #[test]
 fn test_zero_with_zero_true() -> Result<(), String> {
     let cnf = vec![vec![(0, true)]];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let var = (0, true); // The literal that must be true
     let configs = generator.all_configs_given_a_var(vec![var]);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 1);
     assert_eq!(configs_str, "(0)\n");
@@ -23,11 +23,11 @@ fn test_zero_with_zero_true() -> Result<(), String> {
 #[test]
 fn test_zero_with_zero_false() -> Result<(), String> {
     let cnf = vec![vec![(0, true)]];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let var = (0, false); // The literal that must be true
     let configs = generator.all_configs_given_a_var(vec![var]);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 0);
     assert_eq!(configs_str, "");
@@ -42,11 +42,11 @@ fn complex_1() -> Result<(), String> {
         vec![(0, false), (1, true)],
         vec![(2, true), (3, false)],
     ];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let var = (1, true); // The literal that must be true
     let configs = generator.all_configs_given_a_var(vec![var]);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 5);
     assert_eq!(
@@ -64,11 +64,11 @@ fn complex_1() -> Result<(), String> {
 #[test]
 fn test_simple_real_case() -> Result<(), String> {
     let cnf = vec![vec![(0, true), (1, true)], vec![(0, true), (1, true)]];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let var = (0, true); // The literal that must be true
     let configs = generator.all_configs_given_a_var(vec![var]);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 2);
     assert_eq!(configs_str, "(0 & 1)\n(0 & !1)\n");
@@ -79,11 +79,11 @@ fn test_simple_real_case() -> Result<(), String> {
 #[test]
 fn test_multiple_var1() -> Result<(), String> {
     let cnf = vec![vec![(0, true), (1, true)], vec![(0, true), (1, true)]];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let vars = vec![(0, true), (1, true)]; // The literal that must be true
     let configs = generator.all_configs_given_a_var(vars);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 1);
     assert_eq!(configs_str, "(0 & 1)\n");
@@ -99,11 +99,11 @@ fn test_multiple_var2() -> Result<(), String> {
         vec![(0, false), (1, true)],
         vec![(2, true), (3, false)],
     ];
-    let mut generator = ConfigGenerator::default();
+    let mut generator = ConfigSolver::default();
     generator.add_cnf(cnf);
     let vars = vec![(0, true), (1, true)]; // The literal that must be true
     let configs = generator.all_configs_given_a_var(vars);
-    let configs_str = ConfigGeneratorUtils::to_string(&configs);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
 
     assert_eq!(configs.len(), 3);
     assert_eq!(
