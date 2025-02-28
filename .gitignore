@@ -25,11 +25,11 @@ Cargo.lock
 # End of https://www.toptal.com/developers/gitignore/api/rust
 
 ### Benchmark ###
-**/benchmarks/*
-!**/benchmarks/benchmark.py
-!**/benchmarks/format.py
-!**/benchmarks/data-analysis.ipynb
-!**/benchmarks/data
+# **/benchmarks/*
+**/benchmarks/data/analyzed-crates2.json
+**/benchmarks/data/analyzed-projects2.json
+**/benchmarks/venv/
+
 
 ### Test projects ###
 **/tests/rustdesk/

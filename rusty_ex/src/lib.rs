@@ -280,6 +280,8 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         let centrality = collector.compute_centrality(&mapping);
         let _configs = ConfigGenerator::new(cnf, &centrality.indices, 5).generate();
 
+        eprintln!("Configs: {:?}", _configs);
+
         self.process_cli_args(collector, krate, centrality);
 
         rustc_driver::Compilation::Stop
