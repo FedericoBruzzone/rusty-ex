@@ -15,6 +15,8 @@ extern crate rustc_span;
 
 use clap::Parser;
 use configs::centrality::{Centrality, CentralityKind};
+use configs::prop_formula::{ConversionMethod, Ordinal, ToPropFormula};
+use configs::CnfFormula;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -55,10 +57,6 @@ pub struct PrintAstArgs {
     /// Pass --print-crate to print the crate AST
     #[clap(long)]
     print_crate: bool,
-
-    /// Pass --print-centrality to print some centrality measures on Features Graph
-    #[clap(long)]
-    pretty_print_centrality: bool,
 
     /// Pass --serialized-centrality followed by the centrality measure to print the serialized centrality
     #[clap(long, value_enum)]
@@ -167,9 +165,6 @@ impl PrintAstCallbacks {
         if self.args.print_artifacts_tree {
             collector.artifacts_tree.print_dot();
         }
-        if self.args.pretty_print_centrality {
-            collector.pretty_print_centrality();
-        }
         if let Some(centrality) = &self.args.serialized_centrality {
             collector.serialized_centrality(centrality);
         }
@@ -276,12 +271,9 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
         collector.add_dummy_centrality_node_edges();
 
-        let refiner_hm = collector
-            .artifacts_tree
-            .refiner_hash_map(&collector.features_graph, true);
-        let centrality = Centrality::new(&collector.features_graph, true);
-        let refined = centrality.refine(refiner_hm);
-        collector.centrality.replace(refined);
+        // Calculate centrality measures
+        let (_cnf, mapping) = collector.get_fgraph_to_cnf::<u32>(ConversionMethod::Naive);
+        collector.compute_centrality(&mapping);
 
         self.process_cli_args(collector, krate);
 
@@ -328,7 +320,7 @@ pub struct CollectVisitor {
     weights_to_resolve: LinkedHashSet<TermIndex>,
 
     /// Centrality measures of the Features Graph
-    centrality: Option<Centrality>,
+    centrality: Option<Centrality<u32>>,
 }
 
 impl CollectVisitor {
@@ -861,6 +853,15 @@ impl CollectVisitor {
             });
     }
 
+    fn compute_centrality(&mut self, cnf_mapping: &HashMap<String, u32>) {
+        let refiner_hm = self
+            .artifacts_tree
+            .refiner_hash_map(&self.features_graph, true);
+        let centrality =
+            Centrality::<u32>::new(&self.features_graph, &refiner_hm, cnf_mapping, true);
+        self.centrality.replace(centrality);
+    }
+
     /// Serialize the centrality measures of the Features Graph
     fn serialized_centrality(&self, kind: &CentralityKind) {
         match kind {
@@ -895,14 +896,6 @@ impl CollectVisitor {
         }
     }
 
-    /// Print some centrality measures of the features graph
-    fn pretty_print_centrality(&self) {
-        self.centrality
-            .as_ref()
-            .unwrap()
-            .pretty_print(&self.features_graph)
-    }
-
     /// Print all extracted graphs serialized
     fn print_serialized_graphs(&self) {
         let graphs = SimpleSerialization {
@@ -915,6 +908,17 @@ impl CollectVisitor {
             "{}",
             serde_json::to_string(&graphs).expect("Error: cannot serialize data")
         );
+    }
+
+    fn get_fgraph_to_cnf<T>(
+        &mut self,
+        method: ConversionMethod,
+    ) -> (CnfFormula<T>, HashMap<String, T>)
+    where
+        T: Ordinal + Clone,
+    {
+        let mut prop_formula = self.features_graph.to_prop_formula(method);
+        prop_formula.to_cnf_repr::<T>(true)
     }
 
     /// Add a dummy node in features graph, connected from the root (global feature)
