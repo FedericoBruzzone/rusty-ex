@@ -31,6 +31,9 @@ Cargo.lock
 !**/benchmarks/data-analysis.ipynb
 !**/benchmarks/data
 
+### Test projects ###
+**/tests/rustdesk/
+
 ### Test workspaces ###
 temp
 more
