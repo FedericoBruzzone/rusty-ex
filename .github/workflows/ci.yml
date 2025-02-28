@@ -30,7 +30,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest] # windows-latest
-        toolchain: [nightly-2024-12-01, nightly]
+        toolchain: [nightly-2025-02-20, nightly]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
