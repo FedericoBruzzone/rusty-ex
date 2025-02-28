@@ -138,16 +138,11 @@ impl RustcPlugin for RustcEx {
 
     // In the driver, we use the Rustc API to start a compiler session
     // for the arguments given to us by rustc_plugin.
-    fn run(
-        self,
-        compiler_args: Vec<String>,
-        plugin_args: Self::Args,
-    ) -> rustc_interface::interface::Result<()> {
+    fn run(self, compiler_args: Vec<String>, plugin_args: Self::Args) {
         log::debug!("Running plugin with compiler args: {:?}", compiler_args);
         log::debug!("Running plugin with args: {:?}", plugin_args);
         let mut callbacks = PrintAstCallbacks { args: plugin_args };
-        let compiler = rustc_driver::RunCompiler::new(&compiler_args, &mut callbacks);
-        compiler.run()
+        rustc_driver::run_compiler(&compiler_args, &mut callbacks)
     }
 }
 
@@ -221,12 +216,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         // It will make the compiler silent and use the fallback bundle.
         // Errors will not be printed in the `stderr`.
         config.psess_created = Some(Box::new(|sess| {
-            let fallback_bundle = rustc_errors::fallback_fluent_bundle(
-                rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(),
-                false,
-            );
-
-            sess.dcx().make_silent(fallback_bundle, None, false);
+            sess.dcx().make_silent(None, false);
         }));
     }
 
@@ -247,58 +237,53 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
     fn after_expansion<'tcx>(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
-        queries: &'tcx rustc_interface::Queries<'tcx>,
+        tcx: rustc_middle::ty::TyCtxt<'tcx>,
     ) -> rustc_driver::Compilation {
-        queries
-            .global_ctxt()
-            .expect("Error: global context not found")
-            .enter(|tcx: rustc_middle::ty::TyCtxt| {
-                // extract AST
-                let resolver_and_krate = tcx.resolver_for_lowering().borrow();
-                let krate = &*resolver_and_krate.1;
+        // extract AST
+        let resolver_and_krate = tcx.resolver_for_lowering().borrow();
+        let krate = &*resolver_and_krate.1;
 
-                // visit AST
-                let collector = &mut CollectVisitor {
-                    node_id_incr: 1, // 0 is reserved for global scope
-                    stack: Vec::new(),
+        // visit AST
+        let collector = &mut CollectVisitor {
+            node_id_incr: 1, // 0 is reserved for global scope
+            stack: Vec::new(),
 
-                    terms_tree: TermsTree::new(),
-                    features_graph: FeaturesGraph::new(),
-                    artifacts_tree: ArtifactsTree::new(),
+            terms_tree: TermsTree::new(),
+            features_graph: FeaturesGraph::new(),
+            artifacts_tree: ArtifactsTree::new(),
 
-                    idents_weights: HashMap::new(),
-                    weights_to_resolve: LinkedHashSet::new(),
+            idents_weights: HashMap::new(),
+            weights_to_resolve: LinkedHashSet::new(),
 
-                    centrality: None,
-                };
+            centrality: None,
+        };
 
-                // initialize global scope (global feature and artifact)
-                collector.init_global_scope();
+        // initialize global scope (global feature and artifact)
+        collector.init_global_scope();
 
-                // visit AST and build Terms Tree (UIR)
-                collector.visit_crate(krate);
+        // visit AST and build Terms Tree (UIR)
+        collector.visit_crate(krate);
 
-                // build features and artifacts tree visiting Terms Tree
-                collector.build_feat_graph();
-                collector.build_arti_graph();
+        // build features and artifacts tree visiting Terms Tree
+        collector.build_feat_graph();
+        collector.build_arti_graph();
 
-                // calculate weights of Terms
-                collector.terms_tree.graph.reverse(); // reverse graph
-                collector.rec_weight_terms_tree(TermIndex::new(GLOBAL_NODE_INDEX));
-                collector.resolve_weights_in_wait();
-                collector.terms_tree.graph.reverse(); // restore graph
+        // calculate weights of Terms
+        collector.terms_tree.graph.reverse(); // reverse graph
+        collector.rec_weight_terms_tree(TermIndex::new(GLOBAL_NODE_INDEX));
+        collector.resolve_weights_in_wait();
+        collector.terms_tree.graph.reverse(); // restore graph
 
-                collector.add_dummy_centrality_node_edges();
+        collector.add_dummy_centrality_node_edges();
 
-                let refiner_hm = collector
-                    .artifacts_tree
-                    .refiner_hash_map(&collector.features_graph, true);
-                let centrality = Centrality::new(&collector.features_graph, true);
-                let refined = centrality.refine(refiner_hm);
-                collector.centrality.replace(refined);
+        let refiner_hm = collector
+            .artifacts_tree
+            .refiner_hash_map(&collector.features_graph, true);
+        let centrality = Centrality::new(&collector.features_graph, true);
+        let refined = centrality.refine(refiner_hm);
+        collector.centrality.replace(refined);
 
-                self.process_cli_args(collector, krate);
-            });
+        self.process_cli_args(collector, krate);
 
         rustc_driver::Compilation::Stop
     }
@@ -1103,6 +1088,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Binary(..)
             | ExprKind::Unary(..)
             | ExprKind::Cast(..)
+            | ExprKind::UnsafeBinderCast(..)
             | ExprKind::Type(..)
             | ExprKind::Let(..)
             | ExprKind::If(..)

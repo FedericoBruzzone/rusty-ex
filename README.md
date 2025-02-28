@@ -94,8 +94,8 @@ Since each artifact can depend on at most one other artifact and because of the 
 Setup the nightly toolchain:
 
 ```bash
-rustup toolchain install nightly-2024-12-01
-rustup component add --toolchain nightly-2024-12-01 rust-src rustc-dev llvm-tools-preview rust-analyzer clippy
+rustup toolchain install nightly-2025-02-20
+rustup component add --toolchain nightly-2025-02-20 rust-src rustc-dev llvm-tools-preview rust-analyzer clippy
 ```
 
 ### Install the cargo plugin
