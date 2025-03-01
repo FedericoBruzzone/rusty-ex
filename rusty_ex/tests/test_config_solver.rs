@@ -115,3 +115,26 @@ fn test_multiple_var2() -> Result<(), String> {
 
     Ok(())
 }
+
+#[test]
+fn test_particular_case() -> Result<(), String> {
+    use rusty_ex::configs::prop_formula::PropFormula::*;
+
+    let mut prop_formula = And(vec![
+        Or(vec![Var(1), Var(2)]),
+        And(vec![Var(0), Not(utils::bx!(Var(1)))]),
+    ]);
+
+    let (cnf, _): (rusty_ex::configs::CnfFormula<u32>, _) = prop_formula.to_cnf_repr(false);
+
+    let mut generator = ConfigSolver::default();
+    generator.add_cnf(cnf);
+    let vars = vec![(0, true), (1, true)]; // The literal that must be true
+    let configs = generator.all_configs_given_a_var(vars);
+    let configs_str = ConfigSolverUtils::to_string(&configs);
+
+    assert_eq!(configs.len(), 1);
+    assert_eq!(configs_str, "(0 & 1 & 2)\n");
+
+    Ok(())
+}
