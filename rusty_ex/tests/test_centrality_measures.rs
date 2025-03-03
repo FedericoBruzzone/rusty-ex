@@ -45,10 +45,10 @@ macro_rules! assert_greatest_index {
     };
 }
 
-fn get_centrality_measures(file: &str) -> Result<Centrality, String> {
+fn get_centrality_measures(file: &str) -> Result<Centrality<u32>, String> {
     let snippet = &std::fs::read_to_string(format!("{CENTRALITY_FOLDER}/{file}")).unwrap();
     let (output, _) = run_with_cargo_bin_and_snippet(snippet, &["--serialized-centrality", "all"])?;
-    let deserialized_centrality: Centrality = serde_json::from_str(&output).unwrap();
+    let deserialized_centrality: Centrality<u32> = serde_json::from_str(&output).unwrap();
     Ok(deserialized_centrality)
 }
 

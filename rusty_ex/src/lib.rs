@@ -15,6 +15,9 @@ extern crate rustc_span;
 
 use clap::Parser;
 use configs::centrality::{Centrality, CentralityKind};
+use configs::config_generator::ConfigGenerator;
+use configs::prop_formula::{ConversionMethod, Ordinal, ToPropFormula};
+use configs::CnfFormula;
 use instrument::{CrateFilter, RustcPlugin, RustcPluginArgs, Utf8Path};
 use linked_hash_set::LinkedHashSet;
 use rustc_ast::{ast::*, visit::*};
@@ -55,10 +58,6 @@ pub struct PrintAstArgs {
     /// Pass --print-crate to print the crate AST
     #[clap(long)]
     print_crate: bool,
-
-    /// Pass --print-centrality to print some centrality measures on Features Graph
-    #[clap(long)]
-    pretty_print_centrality: bool,
 
     /// Pass --serialized-centrality followed by the centrality measure to print the serialized centrality
     #[clap(long, value_enum)]
@@ -138,16 +137,11 @@ impl RustcPlugin for RustcEx {
 
     // In the driver, we use the Rustc API to start a compiler session
     // for the arguments given to us by rustc_plugin.
-    fn run(
-        self,
-        compiler_args: Vec<String>,
-        plugin_args: Self::Args,
-    ) -> rustc_interface::interface::Result<()> {
+    fn run(self, compiler_args: Vec<String>, plugin_args: Self::Args) {
         log::debug!("Running plugin with compiler args: {:?}", compiler_args);
         log::debug!("Running plugin with args: {:?}", plugin_args);
         let mut callbacks = PrintAstCallbacks { args: plugin_args };
-        let compiler = rustc_driver::RunCompiler::new(&compiler_args, &mut callbacks);
-        compiler.run()
+        rustc_driver::run_compiler(&compiler_args, &mut callbacks)
     }
 }
 
@@ -156,7 +150,12 @@ struct PrintAstCallbacks {
 }
 
 impl PrintAstCallbacks {
-    fn process_cli_args(&self, collector: &CollectVisitor, krate: &Crate) {
+    fn process_cli_args(
+        &self,
+        collector: &CollectVisitor,
+        krate: &Crate,
+        centrality: Centrality<u32>,
+    ) {
         if self.args.print_crate {
             println!("{:#?}", krate);
         }
@@ -172,11 +171,8 @@ impl PrintAstCallbacks {
         if self.args.print_artifacts_tree {
             collector.artifacts_tree.print_dot();
         }
-        if self.args.pretty_print_centrality {
-            collector.pretty_print_centrality();
-        }
-        if let Some(centrality) = &self.args.serialized_centrality {
-            collector.serialized_centrality(centrality);
+        if let Some(centrality_kind) = &self.args.serialized_centrality {
+            collector.serialized_centrality(centrality, centrality_kind);
         }
         if self.args.print_serialized_graphs {
             collector.print_serialized_graphs();
@@ -221,12 +217,7 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
         // It will make the compiler silent and use the fallback bundle.
         // Errors will not be printed in the `stderr`.
         config.psess_created = Some(Box::new(|sess| {
-            let fallback_bundle = rustc_errors::fallback_fluent_bundle(
-                rustc_driver::DEFAULT_LOCALE_RESOURCES.to_vec(),
-                false,
-            );
-
-            sess.dcx().make_silent(fallback_bundle, None, false);
+            sess.dcx().make_silent(None, false);
         }));
     }
 
@@ -244,61 +235,54 @@ impl rustc_driver::Callbacks for PrintAstCallbacks {
 
     /// Called after expansion. Return value instructs the compiler whether to
     /// continue the compilation afterwards (defaults to `Compilation::Continue`)
-    fn after_expansion<'tcx>(
+    fn after_expansion(
         &mut self,
         _compiler: &rustc_interface::interface::Compiler,
-        queries: &'tcx rustc_interface::Queries<'tcx>,
+        tcx: rustc_middle::ty::TyCtxt<'_>,
     ) -> rustc_driver::Compilation {
-        queries
-            .global_ctxt()
-            .expect("Error: global context not found")
-            .enter(|tcx: rustc_middle::ty::TyCtxt| {
-                // extract AST
-                let resolver_and_krate = tcx.resolver_for_lowering().borrow();
-                let krate = &*resolver_and_krate.1;
+        // extract AST
+        let resolver_and_krate = tcx.resolver_for_lowering().borrow();
+        let krate = &*resolver_and_krate.1;
 
-                // visit AST
-                let collector = &mut CollectVisitor {
-                    node_id_incr: 1, // 0 is reserved for global scope
-                    stack: Vec::new(),
+        // visit AST
+        let collector = &mut CollectVisitor {
+            node_id_incr: 1, // 0 is reserved for global scope
+            stack: Vec::new(),
 
-                    terms_tree: TermsTree::new(),
-                    features_graph: FeaturesGraph::new(),
-                    artifacts_tree: ArtifactsTree::new(),
+            terms_tree: TermsTree::new(),
+            features_graph: FeaturesGraph::new(),
+            artifacts_tree: ArtifactsTree::new(),
 
-                    idents_weights: HashMap::new(),
-                    weights_to_resolve: LinkedHashSet::new(),
+            idents_weights: HashMap::new(),
+            weights_to_resolve: LinkedHashSet::new(),
+        };
 
-                    centrality: None,
-                };
+        // initialize global scope (global feature and artifact)
+        collector.init_global_scope();
 
-                // initialize global scope (global feature and artifact)
-                collector.init_global_scope();
+        // visit AST and build Terms Tree (UIR)
+        collector.visit_crate(krate);
 
-                // visit AST and build Terms Tree (UIR)
-                collector.visit_crate(krate);
+        // build features and artifacts tree visiting Terms Tree
+        collector.build_feat_graph();
+        collector.build_arti_graph();
 
-                // build features and artifacts tree visiting Terms Tree
-                collector.build_feat_graph();
-                collector.build_arti_graph();
+        // calculate weights of Terms
+        collector.terms_tree.graph.reverse(); // reverse graph
+        collector.rec_weight_terms_tree(TermIndex::new(GLOBAL_NODE_INDEX));
+        collector.resolve_weights_in_wait();
+        collector.terms_tree.graph.reverse(); // restore graph
 
-                // calculate weights of Terms
-                collector.terms_tree.graph.reverse(); // reverse graph
-                collector.rec_weight_terms_tree(TermIndex::new(GLOBAL_NODE_INDEX));
-                collector.resolve_weights_in_wait();
-                collector.terms_tree.graph.reverse(); // restore graph
+        collector.add_dummy_centrality_node_edges();
 
-                collector.add_dummy_centrality_node_edges();
+        // Calculate centrality measures
+        let (cnf, mapping) = collector.get_fgraph_to_cnf::<u32>(ConversionMethod::Naive);
+        let centrality = collector.compute_centrality(&mapping);
+        let _configs = ConfigGenerator::new(cnf, &centrality.indices, 5).generate();
 
-                let refiner_hm = collector
-                    .artifacts_tree
-                    .refiner_hash_map(&collector.features_graph, true);
-                let centrality = Centrality::new(&collector.features_graph, true);
-                let refined = centrality.refine(refiner_hm);
-                collector.centrality.replace(refined);
+        eprintln!("Configs: {:?}", _configs);
 
-                self.process_cli_args(collector, krate);
-            });
+        self.process_cli_args(collector, krate, centrality);
 
         rustc_driver::Compilation::Stop
     }
@@ -341,9 +325,6 @@ pub struct CollectVisitor {
     /// Terms that are waiting for something to be resolved.
     /// This needs to be a set, but with insertion order preserved (a "unique" queue)
     weights_to_resolve: LinkedHashSet<TermIndex>,
-
-    /// Centrality measures of the Features Graph
-    centrality: Option<Centrality>,
 }
 
 impl CollectVisitor {
@@ -876,46 +857,56 @@ impl CollectVisitor {
             });
     }
 
+    fn get_fgraph_to_cnf<T>(
+        &mut self,
+        method: ConversionMethod,
+    ) -> (CnfFormula<T>, HashMap<String, T>)
+    where
+        T: Ordinal + Clone,
+    {
+        let mut prop_formula = self.features_graph.to_prop_formula(method);
+        prop_formula.to_cnf_repr::<T>(true)
+    }
+
+    fn compute_centrality(&mut self, cnf_mapping: &HashMap<String, u32>) -> Centrality<u32> {
+        let refiner_hm = self
+            .artifacts_tree
+            .refiner_hash_map(&self.features_graph, true);
+
+        Centrality::<u32>::new(&self.features_graph, &refiner_hm, cnf_mapping, true)
+    }
+
     /// Serialize the centrality measures of the Features Graph
-    fn serialized_centrality(&self, kind: &CentralityKind) {
+    fn serialized_centrality(&self, centrality: Centrality<u32>, kind: &CentralityKind) {
         match kind {
             CentralityKind::All => {
-                let measures = &self.centrality.as_ref().unwrap();
                 println!(
                     "{}",
-                    serde_json::to_string(measures).expect("Error: cannot serialize data")
+                    serde_json::to_string(&centrality).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Katz => {
-                let katz = self.centrality.as_ref().unwrap().katz();
+                let katz = centrality.katz();
                 println!(
                     "{}",
                     serde_json::to_string(&katz).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Closeness => {
-                let closeness = self.centrality.as_ref().unwrap().closeness();
+                let closeness = centrality.closeness();
                 println!(
                     "{}",
                     serde_json::to_string(&closeness).expect("Error: cannot serialize data")
                 );
             }
             CentralityKind::Eigenvector => {
-                let eigenvector = self.centrality.as_ref().unwrap().eigenvector();
+                let eigenvector = centrality.eigenvector();
                 println!(
                     "{}",
                     serde_json::to_string(&eigenvector).expect("Error: cannot serialize data")
                 );
             }
         }
-    }
-
-    /// Print some centrality measures of the features graph
-    fn pretty_print_centrality(&self) {
-        self.centrality
-            .as_ref()
-            .unwrap()
-            .pretty_print(&self.features_graph)
     }
 
     /// Print all extracted graphs serialized
@@ -1103,6 +1094,7 @@ impl<'ast> Visitor<'ast> for CollectVisitor {
             | ExprKind::Binary(..)
             | ExprKind::Unary(..)
             | ExprKind::Cast(..)
+            | ExprKind::UnsafeBinderCast(..)
             | ExprKind::Type(..)
             | ExprKind::Let(..)
             | ExprKind::If(..)

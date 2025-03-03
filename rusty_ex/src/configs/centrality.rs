@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,14 @@ use crate::{
     types::{FeatureIndex, FeaturesGraph},
     GLOBAL_DUMMY_INDEX, GLOBAL_NODE_INDEX,
 };
+
+/// The method to be selected for the centrality computation.
+/// It is meant to be used user-side.
+pub enum CentralityMethod {
+    Katz,
+    Closeness,
+    Eigenvector,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum CentralityKind {
@@ -18,9 +26,12 @@ pub enum CentralityKind {
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
-pub struct Centrality {
+pub struct Centrality<T>
+where
+    T: Clone,
+{
     pub measures: CentralityMeasures,
-    pub feat_graph_indices: Vec<FeatureIndex>,
+    pub indices: Vec<T>,
 }
 
 #[derive(Default, Serialize, Deserialize, Debug)]
@@ -30,7 +41,10 @@ pub struct CentralityMeasures {
     pub eigenvector: Option<Vec<f64>>,
 }
 
-impl Centrality {
+impl<T> Centrality<T>
+where
+    T: Clone,
+{
     /// Create a new Centrality struct with the centrality measures computed for the
     /// FeaturesGraph. If remove_dummy is true, the dummy node is removed from the
     /// centrality measures.
@@ -39,7 +53,12 @@ impl Centrality {
     /// If `remove_dummy_and_global` is false, you have to be sure when calling
     /// `refine` that the dummy node and the global node are not present in the
     /// refiner hashmap.
-    pub fn new(feat_graph: &FeaturesGraph, remove_dummy_and_global: bool) -> Self {
+    pub fn new(
+        feat_graph: &FeaturesGraph,
+        refiner_hm: &HashMap<FeatureIndex, f64>,
+        cnf_mapping: &HashMap<String, T>,
+        remove_dummy_and_global: bool,
+    ) -> Self {
         let node_indices = feat_graph.graph.node_indices();
         let feat_graph_indices = if remove_dummy_and_global {
             node_indices
@@ -53,28 +72,53 @@ impl Centrality {
         };
 
         let measures = CentralityMeasures {
-            katz: Centrality::compute_katz(feat_graph),
-            closeness: Centrality::compute_closeness(feat_graph),
-            eigenvector: Centrality::compute_eigenvector(feat_graph),
+            katz: Centrality::<FeatureIndex>::compute_katz(feat_graph),
+            closeness: Centrality::<FeatureIndex>::compute_closeness(feat_graph),
+            eigenvector: Centrality::<FeatureIndex>::compute_eigenvector(feat_graph),
         };
 
+        let refined_centrality = Centrality::<FeatureIndex>::refine_with_art_map(
+            &measures,
+            &feat_graph_indices,
+            refiner_hm.clone(),
+        );
+        Centrality::align_indices_with_cnf_map(refined_centrality, feat_graph, cnf_mapping)
+    }
+
+    fn align_indices_with_cnf_map(
+        centrality: Centrality<FeatureIndex>,
+        feat_graph: &FeaturesGraph,
+        mapping: &HashMap<String, T>,
+    ) -> Centrality<T> {
+        let indices = centrality
+            .indices
+            .iter()
+            .map(|index| {
+                let feature_name = feat_graph.graph[*index].feature.0.name.clone();
+                mapping.get(&feature_name).unwrap().clone()
+            })
+            .collect();
+
         Centrality {
-            measures,
-            feat_graph_indices,
+            measures: centrality.measures,
+            indices,
         }
     }
 
-    pub fn refine(&self, refiner_hm: HashMap<FeatureIndex, f64>) -> Self {
+    fn refine_with_art_map(
+        calc_measures: &CentralityMeasures,
+        feat_graph_indices: &[FeatureIndex],
+        refiner_hm: HashMap<FeatureIndex, f64>,
+    ) -> Centrality<FeatureIndex> {
         let mut measures = CentralityMeasures::default();
 
         // They are ordered in the same way as the feat_graph_indices.
-        let refined_values: Vec<&f64> = self
-            .feat_graph_indices
+        let refined_values: Vec<&f64> = feat_graph_indices
             .iter()
             .map(|feature_index| refiner_hm.get(feature_index).unwrap())
             .collect();
 
-        if let Some(katz) = &self.measures.katz {
+        if let Some(katz) = &calc_measures.katz {
             measures.katz = Some(
                 katz.iter()
                     .zip(refined_values.iter())
@@ -83,8 +127,7 @@ impl Centrality {
             );
         }
 
-        measures.closeness = self
-            .measures
+        measures.closeness = calc_measures
             .closeness
             .iter()
             .zip(refined_values.iter())
@@ -95,7 +138,7 @@ impl Centrality {
             })
             .collect();
 
-        if let Some(eigenvector) = &self.measures.eigenvector {
+        if let Some(eigenvector) = &calc_measures.eigenvector {
             measures.eigenvector = Some(
                 eigenvector
                     .iter()
@@ -107,7 +150,7 @@ impl Centrality {
 
         Centrality {
             measures,
-            feat_graph_indices: self.feat_graph_indices.clone(),
+            indices: feat_graph_indices.to_vec(),
         }
     }
 
@@ -171,89 +214,6 @@ impl Centrality {
             Err(e) => {
                 // TODO: Probabily we should return handle this error gracefully
                 panic!("Error computing eigenvector centrality: {:?}", e);
-            }
-        }
-    }
-
-    // NOTE: To avoid to keep a reference to the FeaturesGraph, we pass it as an argument
-    // to the pretty_print method instead of storing it in the struct. It means that the
-    // feature graph passed to the pretty_print method should be the same used to createù
-    // the Centrality struct.
-    pub fn pretty_print(&self, feat_graph: &FeaturesGraph) {
-        let katz_zip = match self.measures.katz.as_ref() {
-            Some(katz) => Ok(katz.iter().zip(self.feat_graph_indices.iter())),
-            None => Err("Katz centrality not computed"),
-        };
-        let closeness_zip = self
-            .measures
-            .closeness
-            .iter()
-            .zip(self.feat_graph_indices.iter());
-        let eigenvector_zip = match self.measures.eigenvector.as_ref() {
-            Some(eigenvector) => Ok(eigenvector.iter().zip(self.feat_graph_indices.iter())),
-            None => Err("Eigenvector centrality not computed"),
-        };
-
-        println!("Centrality measures:");
-        println!("Katz centrality:");
-        match katz_zip {
-            Ok(katz) => {
-                for (katz, node) in katz {
-                    let feature_node = feat_graph.graph.node_weight(*node).unwrap();
-                    println!(
-                        "Node: {:?}, Feature: ({:?}, {:?}), centrality: {:.4}",
-                        node.index(),
-                        feature_node.feature.0.name,
-                        feature_node.feature.0.not,
-                        katz
-                    );
-                }
-            }
-            Err(e) => {
-                println!("{}", e);
-            }
-        }
-
-        println!("Closeness centrality:");
-        for (closeness, node) in closeness_zip {
-            let feature_node = feat_graph.graph.node_weight(*node).unwrap();
-            match closeness {
-                Some(closeness) => {
-                    println!(
-                        "Node: {:?}, Feature: ({:?}, {:?}), centrality: {:.4}",
-                        node.index(),
-                        feature_node.feature.0.name,
-                        feature_node.feature.0.not,
-                        closeness
-                    );
-                }
-                None => {
-                    println!(
-                        "Node: {:?}, Feature: ({:?}, {:?}), centrality: Not connected",
-                        node.index(),
-                        feature_node.feature.0.name,
-                        feature_node.feature.0.not
-                    );
-                }
-            }
-        }
-
-        println!("Eigenvector centrality:");
-        match eigenvector_zip {
-            Ok(eigenvector) => {
-                for (eigenvector, node) in eigenvector {
-                    let feature_node = feat_graph.graph.node_weight(*node).unwrap();
-                    println!(
-                        "Node: {:?}, Feature: ({:?}, {:?}), centrality: {:.4}",
-                        node.index(),
-                        feature_node.feature.0.name,
-                        feature_node.feature.0.not,
-                        eigenvector
-                    );
-                }
-            }
-            Err(e) => {
-                println!("{}", e);
             }
         }
     }

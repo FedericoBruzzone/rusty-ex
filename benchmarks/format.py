@@ -1,3 +1,6 @@
+# Create the latex table for the aggregated projects.
+# The latest row (the total) can be created by calling the total.py script.
+
 import json
 
 # format a single project composed of multiple crates as a LaTeX table of multiple rows

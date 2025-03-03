@@ -6,6 +6,8 @@ use crate::utils::bx;
 
 use super::CnfFormula;
 
+/// The method to be used for the conversion.
+/// It is meant to be used user-side.
 pub enum ConversionMethod {
     Naive,
 }

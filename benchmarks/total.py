@@ -1,3 +1,6 @@
+# Create the last row of the latex table for the aggregated projects.
+# This is the total of each column.
+
 import json
 
 def read_json_file(file_path):

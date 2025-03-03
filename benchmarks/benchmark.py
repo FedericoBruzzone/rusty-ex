@@ -109,6 +109,7 @@ def analyze(repo_name, reset_cargo=False):
         "defined_features": len(cargo_toml.get("features", {})),
     }
 
+
     if reset_cargo:
         try:
             os.rename("Cargo.toml", "Cargo.toml.bak")
@@ -122,6 +123,10 @@ def analyze(repo_name, reset_cargo=False):
     start_time = time.time()
 
     try:
+        # Set rustup toolchain
+        subprocess.run(["rustup", "default", "nightly-2025-02-20"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Set LD_LIBRARY_PATH
+        os.environ["LD_LIBRARY_PATH"] = f"{os.popen('rustc --print sysroot').read().strip()}/lib"
         process = subprocess.Popen(["cargo-rusty-ex", "--print-metadata"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=os.setsid)
         max_mem = 0
         while not process.poll() and (time.time() - start_time) < 600: # 10 minutes timeout
@@ -247,53 +252,53 @@ def main():
         except Exception as e:
             eprintt(f"Error: {e}")
 
-    with open("data/analyzed-crates.json", "a") as f:
+    with open("data/analyzed-crates2.json", "a") as f:
         json.dump(crates, f, indent=4)
 
-    with open("data/analyzed-projects.json", "a") as f:
+    with open("data/analyzed-projects2.json", "a") as f:
         json.dump(projects, f, indent=4)
 
 TO_ANALYZE = [
-    "https://github.com/sharkdp/bat",
-    "https://github.com/GitoxideLabs/gitoxide",
-    "https://github.com/FuelLabs/fuels-rs",
-    "https://github.com/tauri-apps/tauri",
-    "https://github.com/alacritty/alacritty",
-    "https://github.com/zed-industries/zed",
-    "https://github.com/BurntSushi/ripgrep",
-    "https://github.com/meilisearch/meilisearch",
+    # "https://github.com/sharkdp/bat",
+    # "https://github.com/GitoxideLabs/gitoxide",
+    # "https://github.com/FuelLabs/fuels-rs",
+    # "https://github.com/tauri-apps/tauri",
+    # "https://github.com/alacritty/alacritty",
+    # "https://github.com/zed-industries/zed",
+    # "https://github.com/BurntSushi/ripgrep",
+    # "https://github.com/meilisearch/meilisearch",
     "https://github.com/rustdesk/rustdesk",
-    "https://github.com/typst/typst",
-    "https://github.com/helix-editor/helix",
-    "https://github.com/charliermarsh/ruff",
-    "https://github.com/lapce/lapce",
-    "https://github.com/nushell/nushell",
-    "https://github.com/pola-rs/polars",
-    "https://github.com/swc-project/swc",
-    "https://github.com/influxdata/influxdb",
-    "https://github.com/TabbyML/tabby",
-    "https://github.com/servo/servo",
-    "https://github.com/wasmerio/wasmer",
-    "https://github.com/diem/diem",
-    "https://github.com/EmbarkStudios/texture-synthesis",
-    "https://github.com/EmbarkStudios/kajiya",
-    "https://github.com/EmbarkStudios/rust-gpu",
-    "https://github.com/paritytech/substrate",
-    "https://github.com/quickwit-oss/tantivy",
-    "https://github.com/hyperium/tonic",
-    "https://github.com/n0-computer/sendme",
-    "https://github.com/moghtech/komodo",
-    "https://github.com/cloudflare/quiche",
-    "https://github.com/rolldown/rolldown",
-    "https://github.com/n0-computer/iroh",
-    "https://github.com/succinctlabs/sp1",
-    "https://github.com/unionlabs/union",
-    "https://github.com/juspay/hyperswitch",
-    "https://github.com/emilk/egui",
-    "https://github.com/Nukesor/pueue",
-    "https://github.com/denoland/deno",
-    "https://github.com/FuelLabs/sway",
-    "https://github.com/FuelLabs/fuel-core",
+    # "https://github.com/typst/typst",
+    # "https://github.com/helix-editor/helix",
+    # "https://github.com/charliermarsh/ruff",
+    # "https://github.com/lapce/lapce",
+    # "https://github.com/nushell/nushell",
+    # "https://github.com/pola-rs/polars",
+    # "https://github.com/swc-project/swc",
+    # "https://github.com/influxdata/influxdb",
+    # "https://github.com/TabbyML/tabby",
+    # "https://github.com/servo/servo",
+    # "https://github.com/wasmerio/wasmer",
+    # "https://github.com/diem/diem",
+    # "https://github.com/EmbarkStudios/texture-synthesis",
+    # "https://github.com/EmbarkStudios/kajiya",
+    # "https://github.com/EmbarkStudios/rust-gpu",
+    # "https://github.com/paritytech/substrate",
+    # "https://github.com/quickwit-oss/tantivy",
+    # "https://github.com/hyperium/tonic",
+    # "https://github.com/n0-computer/sendme",
+    # "https://github.com/moghtech/komodo",
+    # "https://github.com/cloudflare/quiche",
+    # "https://github.com/rolldown/rolldown",
+    # "https://github.com/n0-computer/iroh",
+    # "https://github.com/succinctlabs/sp1",
+    # "https://github.com/unionlabs/union",
+    # "https://github.com/juspay/hyperswitch",
+    # "https://github.com/emilk/egui",
+    # "https://github.com/Nukesor/pueue",
+    # "https://github.com/denoland/deno",
+    # "https://github.com/FuelLabs/sway",
+    # "https://github.com/FuelLabs/fuel-core",
 ]
 
 if __name__ == "__main__":
